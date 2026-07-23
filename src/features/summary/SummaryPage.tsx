@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ChevronLeft } from 'lucide-react'
+import { ChevronDown, ChevronLeft } from 'lucide-react'
 import { useStore } from '@/app/store'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -68,6 +68,7 @@ export function SummaryPage() {
   const services = getServices(id)
   const quoteGroups = getQuoteGroups(id)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const [groupExpanded, setGroupExpanded] = useState<Record<string, boolean>>({})
 
   const holds = useMemo(() => collectHolds(quoteGroups), [quoteGroups])
   const lifecycle = useMemo(
@@ -143,6 +144,11 @@ export function SummaryPage() {
     return sv.expanded
   }
 
+  function isGroupExpanded(groupId: string) {
+    if (groupId in groupExpanded) return groupExpanded[groupId]
+    return true
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-[#F4F4F5]">
       <div className="flex h-14 shrink-0 items-center justify-between gap-4 border-b bg-white px-6">
@@ -205,10 +211,27 @@ export function SummaryPage() {
               {quoteGroups.length > 0 ? (
                 quoteGroups.map((g) => {
                   const icon = ICON_META[g.icon] || ICON_META.lodge
+                  const openGroup = isGroupExpanded(g.id)
                   return (
                     <div key={g.id} className="overflow-hidden rounded-[10px] border border-neutral-100">
-                      <div className="flex items-center justify-between gap-2.5 border-b border-neutral-100 bg-neutral-50 px-3.5 py-2.5">
+                      <button
+                        type="button"
+                        className={cn(
+                          'flex w-full items-center justify-between gap-2.5 bg-neutral-50 px-3.5 py-2.5 text-left',
+                          openGroup && 'border-b border-neutral-100',
+                        )}
+                        aria-expanded={openGroup}
+                        onClick={() =>
+                          setGroupExpanded((prev) => ({ ...prev, [g.id]: !openGroup }))
+                        }
+                      >
                         <div className="flex min-w-0 items-center gap-2">
+                          <ChevronDown
+                            className={cn(
+                              'size-3.5 shrink-0 text-muted-foreground transition-transform',
+                              !openGroup && '-rotate-90',
+                            )}
+                          />
                           <span
                             className="flex size-[26px] shrink-0 items-center justify-center rounded-[7px] text-xs font-bold"
                             style={{ background: icon.bg, color: icon.fg }}
@@ -221,81 +244,105 @@ export function SummaryPage() {
                           </div>
                         </div>
                         <span className="shrink-0 text-[13px] font-bold">{formatUsd(groupSubtotal(g))}</span>
-                      </div>
-                      <div className="flex flex-col">
-                        {g.services.map((sv) => {
-                          const chip = statusChipStyle(sv.statusLabel)
-                          const open = isExpanded(sv)
-                          return (
-                            <div key={sv.id} className="border-b border-neutral-50 last:border-b-0">
-                              <button
-                                type="button"
-                                className="flex w-full items-center justify-between gap-2.5 px-3.5 py-2.5 text-left"
-                                onClick={() =>
-                                  setExpanded((prev) => ({ ...prev, [sv.id]: !open }))
-                                }
-                              >
-                                <div className="min-w-0">
-                                  <div className="text-[13px] font-semibold">
-                                    {sv.title}
-                                    {sv.sub ? ` ${sv.sub}` : ''}
-                                    {sv.isNew ? (
-                                      <Badge variant="info" className="ml-2 align-middle">
-                                        New
-                                      </Badge>
-                                    ) : null}
+                      </button>
+                      {openGroup ? (
+                        <div className="flex flex-col">
+                          {g.services.map((sv) => {
+                            const chip = statusChipStyle(sv.statusLabel)
+                            const open = isExpanded(sv)
+                            return (
+                              <div key={sv.id} className="border-b border-neutral-50 last:border-b-0">
+                                <button
+                                  type="button"
+                                  className="flex w-full items-center justify-between gap-2.5 px-3.5 py-2.5 text-left"
+                                  onClick={() =>
+                                    setExpanded((prev) => ({ ...prev, [sv.id]: !open }))
+                                  }
+                                >
+                                  <div className="min-w-0">
+                                    <div className="text-[13px] font-semibold">
+                                      {sv.title}
+                                      {sv.sub ? ` ${sv.sub}` : ''}
+                                      {sv.isNew ? (
+                                        <Badge variant="info" className="ml-2 align-middle">
+                                          New
+                                        </Badge>
+                                      ) : null}
+                                    </div>
+                                    <div className="text-[11.5px] text-muted-foreground">
+                                      {sv.dates || '—'} · {sv.alloc || '—'}
+                                    </div>
                                   </div>
-                                  <div className="text-[11.5px] text-muted-foreground">
-                                    {sv.dates || '—'} · {sv.alloc || '—'}
+                                  <div className="flex shrink-0 items-center gap-2.5">
+                                    <span
+                                      className="inline-flex h-[22px] items-center rounded-full px-2.5 text-[11.5px] font-semibold"
+                                      style={{ background: chip.bg, color: chip.fg }}
+                                    >
+                                      {sv.statusLabel}
+                                    </span>
+                                    <span className="min-w-[74px] text-right text-[12.5px] font-semibold">
+                                      {sv.subtotal}
+                                    </span>
                                   </div>
-                                </div>
-                                <div className="flex shrink-0 items-center gap-2.5">
-                                  <span
-                                    className="inline-flex h-[22px] items-center rounded-full px-2.5 text-[11.5px] font-semibold"
-                                    style={{ background: chip.bg, color: chip.fg }}
-                                  >
-                                    {sv.statusLabel}
-                                  </span>
-                                  <span className="min-w-[74px] text-right text-[12.5px] font-semibold">
-                                    {sv.subtotal}
-                                  </span>
-                                </div>
-                              </button>
-                              {open && sv.extras?.length ? (
-                                <div className="space-y-1 bg-neutral-50/70 px-3.5 pb-2.5">
-                                  {sv.extras.map((ex, i) => (
-                                    <ExtraRow key={`${sv.id}-ex-${i}`} extra={ex} />
-                                  ))}
-                                </div>
-                              ) : null}
-                            </div>
-                          )
-                        })}
-                      </div>
+                                </button>
+                                {open && sv.extras?.length ? (
+                                  <div className="space-y-1 bg-neutral-50/70 px-3.5 pb-2.5">
+                                    {sv.extras.map((ex, i) => (
+                                      <ExtraRow key={`${sv.id}-ex-${i}`} extra={ex} />
+                                    ))}
+                                  </div>
+                                ) : null}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      ) : null}
                     </div>
                   )
                 })
               ) : services.length > 0 ? (
                 services.map((svc) => {
                   const meta = TAB_META[svc.tab]
+                  const openGroup = isGroupExpanded(svc.id)
                   return (
-                    <div key={svc.id} className="flex items-start gap-3 rounded-lg border bg-neutral-50 p-3">
-                      <span
-                        className="flex size-8 shrink-0 items-center justify-center rounded-md text-xs font-bold"
-                        style={{ background: meta.bg, color: meta.fg }}
+                    <div key={svc.id} className="overflow-hidden rounded-lg border bg-neutral-50">
+                      <button
+                        type="button"
+                        className="flex w-full items-start gap-3 p-3 text-left"
+                        aria-expanded={openGroup}
+                        onClick={() =>
+                          setGroupExpanded((prev) => ({ ...prev, [svc.id]: !openGroup }))
+                        }
                       >
-                        {meta.initial}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <div className="font-semibold">{svc.title}</div>
-                            <div className="text-xs text-muted-foreground">{svc.subtitle}</div>
-                            <div className="mt-1 text-xs font-medium text-neutral-600">{svc.meta}</div>
+                        <ChevronDown
+                          className={cn(
+                            'mt-1 size-3.5 shrink-0 text-muted-foreground transition-transform',
+                            !openGroup && '-rotate-90',
+                          )}
+                        />
+                        <span
+                          className="flex size-8 shrink-0 items-center justify-center rounded-md text-xs font-bold"
+                          style={{ background: meta.bg, color: meta.fg }}
+                        >
+                          {meta.initial}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <div className="font-semibold">{svc.title}</div>
+                              {openGroup ? (
+                                <>
+                                  <div className="text-xs text-muted-foreground">{svc.subtitle}</div>
+                                  <div className="mt-1 text-xs font-medium text-neutral-600">
+                                    {svc.meta}
+                                  </div>
+                                </>
+                              ) : null}
+                            </div>
+                            <div className="text-sm font-bold">{svc.priceLabel}</div>
                           </div>
-                          <div className="text-sm font-bold">{svc.priceLabel}</div>
                         </div>
-                      </div>
+                      </button>
                     </div>
                   )
                 })
