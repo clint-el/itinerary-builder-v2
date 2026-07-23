@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
   ensureSeeded,
+  getGuestDetails,
   getQuoteGroups,
   getServices,
   listItineraries,
@@ -21,6 +22,17 @@ describe('storage', () => {
     const list = listItineraries()
     expect(list.length).toBeGreaterThanOrEqual(18)
     expect(list.some((it) => it.reference === 'CPS5678-1-1')).toBe(true)
+    expect(list.find((it) => it.id === 'CPS5679')?.leadFirst).toBeTruthy()
+  })
+
+  it('seeds full guest, quote, and service details for every seed itinerary', () => {
+    const list = listItineraries()
+    for (const it of list.filter((x) => x.id.startsWith('CPS56'))) {
+      expect(getGuestDetails(it.id).length).toBeGreaterThan(0)
+      expect(getQuoteGroups(it.id).length).toBeGreaterThan(0)
+      expect(getServices(it.id).length).toBeGreaterThan(0)
+      expect(getGuestDetails(it.id).some((g) => g.lead)).toBe(true)
+    }
   })
 
   it('persists itinerary upserts', () => {

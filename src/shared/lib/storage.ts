@@ -1,5 +1,12 @@
-import { SEED_ITINERARIES, SEED_QUOTE_GROUPS } from './catalogs'
+import { SEED_ITINERARIES } from './catalogs'
 import { quoteGroupsTotal, rootCpsNumber } from './helpers'
+import {
+  SEED_ITINERARIES_FULL,
+  buildSeedGuestsMap,
+  buildSeedQuoteMap,
+  buildSeedServicesMap,
+  withSeedTotalsFromQuotes,
+} from './seedDetails'
 import type { AddedService, GuestDetail, Itinerary, QuoteGroup } from './types'
 
 const VERSION_KEY = 'sol-demo-version'
@@ -7,7 +14,7 @@ const ITINERARIES_KEY = 'sol-demo-itineraries'
 const SERVICES_KEY = 'sol-demo-services'
 const QUOTE_KEY = 'sol-demo-quote-groups'
 const GUESTS_KEY = 'sol-demo-guests'
-const CURRENT_VERSION = '3'
+const CURRENT_VERSION = '4'
 
 type ServicesMap = Record<string, AddedService[]>
 type QuoteMap = Record<string, QuoteGroup[]>
@@ -27,34 +34,71 @@ function writeJson(key: string, value: unknown) {
   localStorage.setItem(key, JSON.stringify(value))
 }
 
+function seedPayload() {
+  const quotes = buildSeedQuoteMap()
+  const itineraries = withSeedTotalsFromQuotes(SEED_ITINERARIES_FULL, quotes)
+  return {
+    itineraries,
+    services: buildSeedServicesMap(),
+    quotes,
+    guests: buildSeedGuestsMap(),
+  }
+}
+
+function mergeUserCreated(existing: Itinerary[] | null, seeded: Itinerary[]): Itinerary[] {
+  const userCreated =
+    existing?.filter((it) => !SEED_ITINERARIES.some((s) => s.id === it.id)) ?? []
+  const merged = [...seeded]
+  for (const u of userCreated) {
+    if (!merged.some((m) => m.id === u.id)) merged.push(u)
+  }
+  return merged
+}
+
 export function ensureSeeded() {
   const version = localStorage.getItem(VERSION_KEY)
+  const payload = seedPayload()
+
   if (version !== CURRENT_VERSION) {
     const existing = readJson<Itinerary[] | null>(ITINERARIES_KEY, null)
-    const userCreated =
-      existing?.filter((it) => !SEED_ITINERARIES.some((s) => s.id === it.id)) ?? []
-    const merged = [...SEED_ITINERARIES]
-    for (const u of userCreated) {
-      if (!merged.some((m) => m.id === u.id)) merged.push(u)
+    writeJson(ITINERARIES_KEY, mergeUserCreated(existing, payload.itineraries))
+    // On version bumps, refresh seed detail maps but keep user-created itinerary detail keys.
+    const existingServices = readJson<ServicesMap>(SERVICES_KEY, {})
+    const existingQuotes = readJson<QuoteMap>(QUOTE_KEY, {})
+    const existingGuests = readJson<GuestsMap>(GUESTS_KEY, {})
+    const seedIds = new Set(SEED_ITINERARIES.map((s) => s.id))
+
+    const nextServices: ServicesMap = { ...payload.services }
+    const nextQuotes: QuoteMap = { ...payload.quotes }
+    const nextGuests: GuestsMap = { ...payload.guests }
+    for (const [id, value] of Object.entries(existingServices)) {
+      if (!seedIds.has(id)) nextServices[id] = value
     }
-    writeJson(ITINERARIES_KEY, merged)
-    if (!localStorage.getItem(SERVICES_KEY)) writeJson(SERVICES_KEY, {})
-    if (!localStorage.getItem(QUOTE_KEY)) writeJson(QUOTE_KEY, { CPS5679: structuredClone(SEED_QUOTE_GROUPS) })
-    if (!localStorage.getItem(GUESTS_KEY)) writeJson(GUESTS_KEY, {})
+    for (const [id, value] of Object.entries(existingQuotes)) {
+      if (!seedIds.has(id)) nextQuotes[id] = value
+    }
+    for (const [id, value] of Object.entries(existingGuests)) {
+      if (!seedIds.has(id)) nextGuests[id] = value
+    }
+
+    writeJson(SERVICES_KEY, nextServices)
+    writeJson(QUOTE_KEY, nextQuotes)
+    writeJson(GUESTS_KEY, nextGuests)
     localStorage.setItem(VERSION_KEY, CURRENT_VERSION)
     return
   }
+
   if (!readJson<Itinerary[] | null>(ITINERARIES_KEY, null)?.length) {
-    writeJson(ITINERARIES_KEY, SEED_ITINERARIES)
+    writeJson(ITINERARIES_KEY, payload.itineraries)
   }
-  if (localStorage.getItem(SERVICES_KEY) == null) writeJson(SERVICES_KEY, {})
-  if (localStorage.getItem(QUOTE_KEY) == null) writeJson(QUOTE_KEY, { CPS5679: structuredClone(SEED_QUOTE_GROUPS) })
-  if (localStorage.getItem(GUESTS_KEY) == null) writeJson(GUESTS_KEY, {})
+  if (localStorage.getItem(SERVICES_KEY) == null) writeJson(SERVICES_KEY, payload.services)
+  if (localStorage.getItem(QUOTE_KEY) == null) writeJson(QUOTE_KEY, payload.quotes)
+  if (localStorage.getItem(GUESTS_KEY) == null) writeJson(GUESTS_KEY, payload.guests)
 }
 
 export function listItineraries(): Itinerary[] {
   ensureSeeded()
-  return readJson<Itinerary[]>(ITINERARIES_KEY, SEED_ITINERARIES)
+  return readJson<Itinerary[]>(ITINERARIES_KEY, SEED_ITINERARIES_FULL)
 }
 
 export function getItinerary(id: string): Itinerary | undefined {
@@ -111,12 +155,7 @@ export function setServices(itineraryId: string, services: AddedService[]) {
 
 export function getQuoteGroups(itineraryId: string): QuoteGroup[] {
   ensureSeeded()
-  const map = readJson<QuoteMap>(QUOTE_KEY, {})
-  if (map[itineraryId]) return map[itineraryId]
-  if (itineraryId === 'CPS5679' || itineraryId === 'CPS5680') {
-    return structuredClone(SEED_QUOTE_GROUPS)
-  }
-  return []
+  return readJson<QuoteMap>(QUOTE_KEY, {})[itineraryId] ?? []
 }
 
 export function setQuoteGroups(itineraryId: string, groups: QuoteGroup[]) {
