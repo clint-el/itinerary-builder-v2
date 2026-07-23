@@ -292,6 +292,7 @@ function serviceCard(
   const t = TAB_META[tab]
   const marginPct = 23
   const margin = Math.round(price * (marginPct / 100) * 100) / 100
+  const net = Math.round((price - margin) * 100) / 100
   return {
     id: `${it.id}-s${seq}`,
     tab,
@@ -301,6 +302,10 @@ function serviceCard(
     details,
     price,
     priceLabel: money(price),
+    net,
+    rack: price,
+    netLabel: money(net),
+    rackLabel: money(price),
     margin,
     marginPct,
     marginColor: '#0B7A48',
@@ -359,6 +364,7 @@ export function buildSeedServices(it: Itinerary): AddedService[] {
             type: 'Double',
             basis: 'fb',
             rate: Math.round(stayPrice / nights / 2),
+            qty: 1,
             guestIds: guestIds.slice(0, Math.min(2, guestIds.length)),
             start: it.travelDateFrom,
             end: it.travelDateTo,
@@ -368,6 +374,7 @@ export function buildSeedServices(it: Itinerary): AddedService[] {
             type: guestIds.length > 2 ? 'Twin' : 'Double',
             basis: 'fb',
             rate: Math.round(stayPrice / nights / 2),
+            qty: 1,
             guestIds: guestIds.slice(2),
             start: it.travelDateFrom,
             end: it.travelDateTo,

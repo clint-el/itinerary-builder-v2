@@ -5,6 +5,19 @@ function parseMoney(raw?: string) {
   return Number(String(raw || '0').replace(/[^0-9.-]/g, '')) || 0
 }
 
+/** Convert alloc strings like "1A, 3C" into prototype-style "1/3/0". */
+function allocSlash(raw?: string) {
+  const s = String(raw || '')
+  if (!s || s === '—') return '—'
+  if (s.includes('/')) return s
+  const a = Number(s.match(/(\d+)\s*A/i)?.[1] || 0)
+  const c = Number(s.match(/(\d+)\s*C/i)?.[1] || 0)
+  const y = Number(s.match(/(\d+)\s*Y/i)?.[1] || 0)
+  const i = Number(s.match(/(\d+)\s*In/i)?.[1] || 0)
+  if (!a && !c && !y && !i) return s
+  return `${a}/${c + y}/${i}`
+}
+
 interface PriceModalProps {
   open: boolean
   onClose: () => void
@@ -36,7 +49,7 @@ export function PriceModal({ open, onClose, groups, marginPct = 0 }: PriceModalP
         service: sv.sub ? `${sv.title} ${sv.sub}` : sv.title,
         qty: sv.qty || '1',
         nights: sv.nights || '—',
-        alloc: sv.alloc || '—',
+        alloc: allocSlash(sv.alloc),
         discount: discountExtra?.amount || '—',
         subtotal: sv.subtotal,
         discountNeg: !!discountExtra,
@@ -49,7 +62,7 @@ export function PriceModal({ open, onClose, groups, marginPct = 0 }: PriceModalP
           service: ex.label,
           qty: ex.qty || '1',
           nights: '—',
-          alloc: ex.alloc || sv.alloc || '—',
+          alloc: allocSlash(ex.alloc || sv.alloc),
           discount: '—',
           subtotal: ex.amount || '$0.00',
         })

@@ -138,7 +138,7 @@ export const LIFECYCLE_TRANSITIONS: Record<ItineraryStatus, LifecycleTransition[
 }
 
 export const TAB_META: Record<ServiceTab, { label: string; fg: string; bg: string; initial: string }> = {
-  accommodation: { label: 'Accommodation', fg: '#059669', bg: '#D1FAE5', initial: 'S' },
+  accommodation: { label: 'Accommodation', fg: '#059669', bg: '#D1FAE5', initial: 'A' },
   transportation: { label: 'Transportation', fg: '#D97706', bg: '#FEF3C7', initial: 'T' },
   flight: { label: 'Flight', fg: '#2563EB', bg: '#DBEAFE', initial: 'F' },
   activity: { label: 'Activity', fg: '#DB2777', bg: '#FCE7F3', initial: 'A' },

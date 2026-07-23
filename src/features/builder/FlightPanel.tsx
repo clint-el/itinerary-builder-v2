@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { EXTRAS_CATALOG, PROMOTIONS } from '@/shared/lib/catalogs'
 import { rackOf } from '@/shared/lib/helpers'
-import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -17,7 +16,7 @@ import { cn, formatUsd } from '@/shared/lib/utils'
 import { DatePickerGridInput } from '@/shared/ui/date-picker'
 import { LocationDropdown } from './LocationDropdown'
 import { SupplierPicker } from './SupplierPicker'
-import { FLIGHT_SERVICES, asCustomExtras, asExtraIds, extraObjects } from './builderUtils'
+import { FLIGHT_SERVICES, asCustomExtras, asExtraIds, extraObjects, flightAutoQty } from './builderUtils'
 
 type FlightTab = 'policy' | 'extras' | 'promotions'
 const PAX_BANDS: { key: 'adult' | 'youth' | 'child' | 'infant'; label: string }[] = [
@@ -39,8 +38,9 @@ export function FlightPanel({
   const pax = (draft.pax || { adult: 0, youth: 0, child: 0, infant: 0 }) as Record<string, number>
   const rates = (draft.rates || {}) as Record<string, number>
   const totalPax = PAX_BANDS.reduce((s, b) => s + (pax[b.key] || 0), 0)
-  const totalCapacity = (Number(draft.capacity) || 1) * (Number(draft.qty) || 1)
-  const eligible = totalPax > 0 && totalPax <= totalCapacity
+  const capacity = Math.max(1, Number(draft.capacity) || 1)
+  const autoQty = flightAutoQty(draft)
+  const totalCapacity = capacity * autoQty
   const extras = extraObjects(draft)
   const extraIds = asExtraIds(draft)
   const customExtras = asCustomExtras(draft)
@@ -69,54 +69,28 @@ export function FlightPanel({
     </button>
   )
 
-  let eligibilityText = 'Set passenger counts below'
-  let eligibilityBg = '#F3F4F6'
-  let eligibilityBorder = '#E5E7EB'
-  let eligibilityColor = '#525252'
-  if (totalPax > 0) {
-    if (eligible) {
-      eligibilityText = `${totalPax} PAX — eligible within ${totalCapacity} seat capacity`
-      eligibilityBg = '#D1FAE5'
-      eligibilityBorder = '#A7F3D0'
-      eligibilityColor = '#059669'
-    } else {
-      eligibilityText = `${totalPax} PAX exceeds ${totalCapacity} seats — increase quantity`
-      eligibilityBg = '#FEE2E2'
-      eligibilityBorder = '#FECACA'
-      eligibilityColor = '#DC2626'
-    }
-  }
+  const qtyNote =
+    totalPax === 0
+      ? 'Add passengers to auto-calculate charters'
+      : `${totalPax} PAX ÷ ${capacity} seats = ${autoQty} ${autoQty === 1 ? 'charter' : 'charters'}`
+
+  let eligibilityText =
+    totalPax === 0
+      ? 'Set passenger counts below'
+      : `${totalPax} PAX auto-assigned across ${autoQty} ${autoQty === 1 ? 'charter' : 'charters'} · ${totalCapacity} seats total`
+  let eligibilityBg = totalPax === 0 ? '#F3F4F6' : '#D1FAE5'
+  let eligibilityBorder = totalPax === 0 ? '#E5E7EB' : '#A7F3D0'
+  let eligibilityColor = totalPax === 0 ? '#525252' : '#059669'
 
   return (
     <div className="space-y-4">
-      <section className="rounded-xl border bg-white p-4">
+      <section className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-4 shadow-sm">
         <div className="mb-3">
-          <h3 className="text-[13px] font-bold uppercase tracking-wide text-[#475569]">
-            Flight details
+          <h3 className="text-[12px] font-bold uppercase tracking-wide text-[#334155]">
+            Supplier & flight details
           </h3>
           <p className="text-[11.5px] text-[#94A3B8]">Pick location, supplier and flight service</p>
         </div>
-        <div className="mb-3 flex gap-2">
-          <button
-            type="button"
-            className={modeBtn(!isReturn)}
-            onClick={() => patch({ flightMode: 'oneway' })}
-          >
-            One-way
-          </button>
-          <button
-            type="button"
-            className={modeBtn(isReturn)}
-            onClick={() => patch({ flightMode: 'return' })}
-          >
-            Return
-          </button>
-        </div>
-        <p className="mb-3 text-[12px] text-[#737373]">
-          {isReturn
-            ? 'Return trip — set outbound and return dates'
-            : 'One-way — set the departure date'}
-        </p>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="grid gap-1.5">
             <Label>Location</Label>
@@ -143,14 +117,45 @@ export function FlightPanel({
                 <SelectValue placeholder="Select…" />
               </SelectTrigger>
               <SelectContent>
-              {FLIGHT_SERVICES.map((s) => (
-                <SelectItem key={s} value={s}>{s}</SelectItem>
-              ))}
+                {FLIGHT_SERVICES.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {s}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
-          <div className="grid gap-1.5">
-            <Label>Depart</Label>
+          <div className="grid gap-1.5 sm:col-span-2">
+            <Label>Trip type</Label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className={modeBtn(!isReturn)}
+                onClick={() => patch({ flightMode: 'oneway' })}
+              >
+                One-way
+              </button>
+              <button
+                type="button"
+                className={modeBtn(isReturn)}
+                onClick={() => patch({ flightMode: 'return' })}
+              >
+                Return
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-4 shadow-sm">
+        <div className="mb-3">
+          <h3 className="text-[12px] font-bold uppercase tracking-wide text-[#334155]">
+            Travel dates
+          </h3>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <div className="grid w-[170px] gap-1.5">
+            <Label>Departure date</Label>
             <DatePickerGridInput
               value={String(draft.departDate || '')}
               onChange={(value) => patch({ departDate: value })}
@@ -158,8 +163,8 @@ export function FlightPanel({
             />
           </div>
           {isReturn ? (
-            <div className="grid gap-1.5">
-              <Label>Return</Label>
+            <div className="grid w-[170px] gap-1.5">
+              <Label>Return date</Label>
               <DatePickerGridInput
                 value={String(draft.returnDate || '')}
                 onChange={(value) => patch({ returnDate: value })}
@@ -167,44 +172,49 @@ export function FlightPanel({
                 className="bg-white"
               />
             </div>
-          ) : (
-            <div />
-          )}
-          <div className="flex flex-col gap-1.5 self-start">
+          ) : null}
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-4 shadow-sm">
+        <div className="mb-3">
+          <h3 className="text-[12px] font-bold uppercase tracking-wide text-[#334155]">
+            Charter & capacity
+          </h3>
+          <p className="text-[11.5px] text-[#94A3B8]">
+            Charters auto-calculated from passenger count
+          </p>
+        </div>
+        <div className="mb-3 grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-1.5">
             <Label>Capacity / aircraft</Label>
             <Input
               type="number"
-              value={Number(draft.capacity) || 1}
-              onChange={(e) => patch({ capacity: Number(e.target.value) || 1 })}
+              min={1}
+              value={capacity}
+              onChange={(e) => patch({ capacity: Math.max(1, Number(e.target.value) || 1) })}
+              className="bg-white"
             />
           </div>
-          <div className="flex flex-col gap-1.5 self-start">
-            <Label>Quantity</Label>
-            <div className="flex h-9 items-center gap-1 rounded-md border px-1">
-              <button
-                type="button"
-                className="px-2"
-                onClick={() => patch({ qty: Math.max(1, (Number(draft.qty) || 1) - 1) })}
-              >
-                −
-              </button>
-              <span className="flex-1 text-center text-sm font-semibold">{Number(draft.qty) || 1}</span>
-              <button
-                type="button"
-                className="px-2"
-                onClick={() => patch({ qty: (Number(draft.qty) || 1) + 1 })}
-              >
-                +
-              </button>
+          <div className="grid gap-1.5">
+            <Label>
+              Charters required <span className="font-medium text-[#A1A1A1]">(auto)</span>
+            </Label>
+            <div className="flex items-center gap-2.5">
+              <span className="inline-flex h-8 min-w-9 items-center justify-center rounded-lg bg-[#EFF6FF] px-2.5 text-[15px] font-bold text-[#1D4ED8] shadow-[inset_0_0_0_1px_#BFDBFE]">
+                ×{autoQty}
+              </span>
+              <span className="text-[11.5px] text-[#94A3B8]">{qtyNote}</span>
             </div>
-            <p className="text-[11px] text-[#A1A1A1]">
-              Suggested qty: {Math.max(1, Math.ceil(totalPax / (Number(draft.capacity) || 1)))}
-            </p>
           </div>
         </div>
         <div
-          className="mt-3 rounded-lg border px-3 py-2 text-[12.5px] font-semibold"
-          style={{ background: eligibilityBg, borderColor: eligibilityBorder, color: eligibilityColor }}
+          className="rounded-lg px-3 py-2.5 text-[13px] font-bold"
+          style={{
+            background: eligibilityBg,
+            boxShadow: `inset 0 0 0 1px ${eligibilityBorder}`,
+            color: eligibilityColor,
+          }}
         >
           {eligibilityText}
         </div>
@@ -249,41 +259,85 @@ export function FlightPanel({
       </div>
 
       {rightTab === 'policy' ? (
-        <textarea
-          readOnly
-          rows={4}
-          className="w-full resize-none rounded-lg border bg-[#FAFAFB] p-2.5 text-[13px] text-[#525252]"
-          value="Baggage allowance 15kg soft bags only. Infant under 2 years sits on lap. Charter seats are allocated on a first-come basis."
-        />
+        <div>
+          <div className="mb-2 text-[14px] font-semibold text-[#171717]">Policy Information</div>
+          <div className="flex flex-col gap-1.5 rounded-lg bg-[#EFF6FF] p-3 shadow-[inset_0_0_0_1px_#BFDBFE]">
+            <p className="flex gap-2 text-[12.5px] leading-relaxed text-[#171717]">
+              <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-[#2563EB]" />
+              <span>
+                <b>Inducement fees</b> apply below the operator&apos;s minimum load factor.
+              </span>
+            </p>
+            <p className="flex gap-2 text-[12.5px] leading-relaxed text-[#171717]">
+              <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-[#2563EB]" />
+              <span>
+                <b>Seat requirements:</b> infants under 2 may travel on an adult&apos;s lap; all
+                other PAX need a full seat.
+              </span>
+            </p>
+            <p className="flex gap-2 text-[12.5px] leading-relaxed text-[#171717]">
+              <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-[#2563EB]" />
+              <span>
+                <b>Baggage:</b> soft bags only — 15kg checked + 5kg hand baggage per PAX.
+              </span>
+            </p>
+          </div>
+        </div>
       ) : null}
 
       {rightTab === 'extras' ? (
         <div className="space-y-3">
-          {extras.map((ex) => (
-            <div
-              key={ex.id}
-              className="flex items-center justify-between rounded-lg border px-3 py-2"
+          <div className="flex items-center justify-between">
+            <span className="text-[13px] font-bold">Extras</span>
+            <button
+              type="button"
+              className="text-[12px] font-medium text-[#0369A1]"
+              onClick={() => {
+                const n = Number(draft.customExtraSeq) || 1
+                patch({
+                  customExtras: [
+                    ...customExtras,
+                    { id: `custom-f${n}`, title: 'Custom extra', price: 0, custom: true },
+                  ],
+                  customExtraSeq: n + 1,
+                })
+              }}
             >
-              <span className="text-[13px] font-semibold">{ex.title}</span>
-              <div className="flex items-center gap-2">
-                <span className="text-[13px] font-semibold">{formatUsd(ex.price)}</span>
-                {!ex.mandatory ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (ex.custom) {
-                        patch({ customExtras: customExtras.filter((x) => x.id !== ex.id) })
-                      } else {
-                        patch({ extras: extraIds.filter((id) => id !== ex.id) })
-                      }
-                    }}
-                  >
-                    <Trash2 className="size-3.5 text-[#931115]" />
-                  </button>
-                ) : null}
+              Add Custom Extra
+            </button>
+          </div>
+          {extras.map((ex) => (
+            <div key={ex.id} className="overflow-hidden rounded-lg border">
+              {ex.mandatory ? (
+                <div className="bg-[#E5E7EB] py-0.5 text-center text-[10px] font-bold text-[#525252]">
+                  Mandatory
+                </div>
+              ) : null}
+              <div className="flex items-center justify-between px-2.5 py-2">
+                <span className="text-[13px] font-bold">{ex.title}</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[13px] font-semibold">{formatUsd(ex.price)}</span>
+                  {!ex.mandatory ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (ex.custom) {
+                          patch({ customExtras: customExtras.filter((x) => x.id !== ex.id) })
+                        } else {
+                          patch({ extras: extraIds.filter((id) => id !== ex.id) })
+                        }
+                      }}
+                    >
+                      <Trash2 className="size-3.5 text-[#931115]" />
+                    </button>
+                  ) : null}
+                </div>
               </div>
             </div>
           ))}
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-[#A1A1A1]">
+            Catalog
+          </p>
           {EXTRAS_CATALOG.filter((c) => !extraIds.includes(c.id)).map((c) => (
             <button
               key={c.id}
@@ -292,25 +346,12 @@ export function FlightPanel({
               className="flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left hover:bg-[#F9FAFB]"
             >
               <span className="text-[13px] font-semibold">{c.title}</span>
-              <span className="text-[12.5px] font-semibold text-[#525252]">{formatUsd(c.price)}</span>
+              <span className="flex items-center gap-2 text-[12.5px] font-semibold text-[#525252]">
+                {formatUsd(c.price)}
+                <Plus className="size-3.5 text-[#931115]" />
+              </span>
             </button>
           ))}
-          <Button
-            variant="outline"
-            onClick={() => {
-              const n = Number(draft.customExtraSeq) || 1
-              patch({
-                customExtras: [
-                  ...customExtras,
-                  { id: `custom-f${n}`, title: 'Custom extra', price: 0, custom: true },
-                ],
-                customExtraSeq: n + 1,
-              })
-            }}
-          >
-            <Plus className="size-4" />
-            Custom extra
-          </Button>
         </div>
       ) : null}
 
@@ -331,9 +372,9 @@ export function FlightPanel({
               >
                 <span
                   className="mt-1 flex size-4 items-center justify-center rounded-full border"
-                  style={{ borderColor: sel ? '#931115' : '#D4D4D4' }}
+                  style={{ borderColor: sel ? '#2B7FFF' : '#D4D4D4' }}
                 >
-                  {sel ? <span className="size-2 rounded-full bg-[#931115]" /> : null}
+                  {sel ? <span className="size-2 rounded-full bg-[#2B7FFF]" /> : null}
                 </span>
                 <span>
                   <span className="block text-[13.5px] font-semibold">{p.title}</span>

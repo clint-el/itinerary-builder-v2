@@ -124,6 +124,19 @@ export function extraObjects(draft: Record<string, unknown>) {
     .concat(custom) as { id: string; title: string; price: number; mandatory?: boolean; custom?: boolean }[]
 }
 
+export function roomQty(room: Room) {
+  return Math.max(1, Number(room.qty) || 1)
+}
+
+export function flightAutoQty(draft: Record<string, unknown>) {
+  const pax = (draft.pax || { adult: 0, youth: 0, child: 0, infant: 0 }) as Record<string, number>
+  const totalPax =
+    (pax.adult || 0) + (pax.youth || 0) + (pax.child || 0) + (pax.infant || 0)
+  const capacity = Math.max(1, Number(draft.capacity) || 1)
+  if (totalPax <= 0) return 1
+  return Math.max(1, Math.ceil(totalPax / capacity))
+}
+
 export function roomPriceBreakdown(
   room: Room,
   defaultStart: string,
@@ -153,7 +166,7 @@ export function roomPriceBreakdown(
   })
   const netTotal = priceRows.reduce((sum, x) => sum + x.net, 0)
   const rackTotal = priceRows.reduce((sum, x) => sum + x.rack, 0)
-  return { priceRows, netTotal, rackTotal, rStart, rEnd, rNights }
+  return { priceRows, netTotal, rackTotal, rStart, rEnd, rNights, roomCount: roomQty(room) }
 }
 
 export function computeDraftTotals(
@@ -165,7 +178,6 @@ export function computeDraftTotals(
   if (tab === 'accommodation') {
     const extras = extraObjects(draft)
     const extrasNet = extras.reduce((sum, e) => sum + e.price, 0)
-    // When price override is active, use the editable pricing rows instead of ACC_RATE.
     if (draft.priceOverride && pricingRows && pricingRows.length > 0) {
       const roomNet = pricingRows.reduce((sum, r) => sum + (r.net || 0), 0)
       const roomRack = pricingRows.reduce((sum, r) => sum + (r.rack || 0), 0)
@@ -194,15 +206,22 @@ export function computeDraftTotals(
     const rates = (draft.rates || {}) as Record<string, number>
     const extras = extraObjects(draft)
     const extrasNet = extras.reduce((sum, e) => sum + e.price, 0)
+    const qty = flightAutoQty(draft)
     const base =
       (['adult', 'youth', 'child', 'infant'] as const).reduce(
         (sum, k) => sum + (pax[k] || 0) * (rates[k] || 0),
         0,
-      ) * (Number(draft.qty) || 1)
+      ) * qty
     return { net: base + extrasNet, rack: rackOf(base) + rackOf(extrasNet) }
   }
   if (tab === 'activity') {
     const activities = asActivities(draft)
+    const net = activities.reduce((sum, a) => sum + a.rate * a.guestIds.length, 0)
+    return { net, rack: activities.reduce((sum, a) => sum + rackOf(a.rate * a.guestIds.length), 0) }
+  }
+  // Other: prefer line items (activities) when present; otherwise qty × unit price.
+  const activities = asActivities(draft)
+  if (activities.length > 0) {
     const net = activities.reduce((sum, a) => sum + a.rate * a.guestIds.length, 0)
     return { net, rack: activities.reduce((sum, a) => sum + rackOf(a.rate * a.guestIds.length), 0) }
   }
@@ -230,10 +249,12 @@ export function buildAddedService(
   const transUsed = usedGuestIds(vehicles)
   const pax = (draft.pax || { adult: 0, youth: 0, child: 0, infant: 0 }) as Record<string, number>
   const totalPax = (pax.adult || 0) + (pax.youth || 0) + (pax.child || 0) + (pax.infant || 0)
-  const totalCapacity = (Number(draft.capacity) || 1) * (Number(draft.qty) || 1)
+  const autoQty = flightAutoQty(draft)
+  const totalCapacity = (Number(draft.capacity) || 1) * autoQty
   const eligible = totalPax > 0 && totalPax <= totalCapacity
   const accNightsN = nights(String(draft.start || ''), String(draft.end || ''))
   const basisKey = String(draft.basis || 'bb') as keyof typeof BASIS
+  const roomCount = rooms.reduce((sum, r) => sum + roomQty(r), 0)
 
   let title = String(draft.supplier || meta.label)
   let subtitle = meta.label
@@ -242,11 +263,11 @@ export function buildAddedService(
 
   if (tab === 'accommodation') {
     title = String(draft.supplier || 'Accommodation')
-    subtitle = `${rooms.length} room(s) · ${BASIS[basisKey] || basisKey}`
+    subtitle = `${roomCount || rooms.length} room(s) · ${BASIS[basisKey] || basisKey}`
     dateMeta = `${accNightsN} night(s)`
     details = [
       { label: 'Location', value: String(draft.location || '—') },
-      { label: 'Rooms', value: String(rooms.length) },
+      { label: 'Rooms', value: String(roomCount || rooms.length) },
       { label: 'Basis', value: BASIS[basisKey] || basisKey },
       { label: 'Dates', value: `${draft.start || 'TBD'} – ${draft.end || 'TBD'}` },
       { label: 'Guests', value: `${accUsed.length} pax` },
@@ -272,29 +293,37 @@ export function buildAddedService(
     ]
   } else if (tab === 'flight') {
     title = String(draft.supplier || 'Flight')
-    subtitle = `${totalPax} passenger(s) · qty ${draft.qty}`
+    subtitle = `${totalPax} passenger(s) · qty ${autoQty}`
     dateMeta = eligible ? 'Eligible' : 'Check capacity'
     details = [
       { label: 'Passengers', value: String(totalPax) },
-      { label: 'Qty', value: String(draft.qty) },
+      { label: 'Qty', value: String(autoQty) },
       { label: 'Capacity', value: String(draft.capacity) },
     ]
   } else if (tab === 'activity') {
     title = String(draft.supplier || 'Activity')
     subtitle = `${activities.length} activity(ies)`
-    const days = (Array.isArray(draft.days) ? draft.days : []) as string[]
-    dateMeta = days.join(', ') || 'No days set'
+    dateMeta = String(draft.startDate || activities[0]?.start || 'Set date')
     details = [
       { label: 'Activities', value: String(activities.length) },
-      { label: 'Days', value: days.join(', ') || '—' },
+      { label: 'Date', value: String(draft.startDate || activities[0]?.start || '—') },
     ]
   } else {
-    title = String(draft.description || 'Other line item')
-    subtitle = `Qty ${draft.qty}`
-    dateMeta = 'Other'
+    title = String(draft.supplier || draft.description || 'Other line item')
+    subtitle =
+      activities.length > 0
+        ? `${activities.length} item(s)`
+        : `Qty ${draft.qty || 1}`
+    dateMeta = String(draft.startDate || 'Other')
     details = [
-      { label: 'Description', value: String(draft.description || '—') },
-      { label: 'Qty', value: String(draft.qty) },
+      {
+        label: 'Description',
+        value: String(draft.description || activities[0]?.name || '—'),
+      },
+      {
+        label: activities.length > 0 ? 'Items' : 'Qty',
+        value: String(activities.length > 0 ? activities.length : draft.qty || 1),
+      },
     ]
   }
 
@@ -307,6 +336,10 @@ export function buildAddedService(
     details,
     price: clientPays,
     priceLabel: formatUsd(clientPays),
+    net: draftNet,
+    rack: draftRack,
+    netLabel: formatUsd(draftNet),
+    rackLabel: formatUsd(draftRack),
     margin: cardMargin,
     marginPct,
     marginColor: cardMargin >= 0 ? '#0B7A48' : '#B91C1C',
@@ -314,6 +347,9 @@ export function buildAddedService(
     bg: meta.bg,
     initial: meta.initial,
     expanded: true,
-    draft: structuredClone(draft),
+    draft: structuredClone({
+      ...draft,
+      ...(tab === 'flight' ? { qty: autoQty } : {}),
+    }),
   }
 }

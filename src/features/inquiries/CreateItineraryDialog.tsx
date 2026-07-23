@@ -28,6 +28,7 @@ import { DateRangePickerInput } from '@/shared/ui/date-picker'
 interface Props {
   open: boolean
   onOpenChange: (open: boolean) => void
+  seedTitle?: string
 }
 
 function Counter({
@@ -71,7 +72,7 @@ function Counter({
   )
 }
 
-export function CreateItineraryDialog({ open, onOpenChange }: Props) {
+export function CreateItineraryDialog({ open, onOpenChange, seedTitle = '' }: Props) {
   const { createItinerary, itineraries } = useStore()
   const navigate = useNavigate()
 
@@ -118,7 +119,7 @@ export function CreateItineraryDialog({ open, onOpenChange }: Props) {
     setAgencyOpen(false)
     setAgencySearch('')
     setExpandedAgency(null)
-    setTitle('')
+    setTitle(seedTitle || '')
     setLeadFirst('')
     setLeadLast('')
     setDestinations([])
@@ -133,7 +134,7 @@ export function CreateItineraryDialog({ open, onOpenChange }: Props) {
     setInfantsNonRes(0)
     setChildAges([])
     setErrors([])
-  }, [open])
+  }, [open, seedTitle])
 
   useEffect(() => {
     setChildAges((prev) => {

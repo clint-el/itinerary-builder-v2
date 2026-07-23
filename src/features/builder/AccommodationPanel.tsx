@@ -34,7 +34,9 @@ import {
   extraObjects,
   findGuest,
   guestChipStyle,
+  nights,
   roomPriceBreakdown,
+  roomQty,
   usedGuestIds,
 } from './builderUtils'
 import type { CatalogItem } from '@/shared/lib/types'
@@ -115,10 +117,10 @@ export function AccommodationPanel({
 
   return (
     <div className="space-y-4">
-      <section className="rounded-xl border bg-white p-4">
+      <section className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-4 shadow-sm">
         <div className="mb-3">
-          <h3 className="text-[13px] font-bold uppercase tracking-wide text-[#475569]">
-            Supplier & location
+          <h3 className="text-[12px] font-bold uppercase tracking-wide text-[#334155]">
+            Supplier & stay dates
           </h3>
           <p className="text-[11.5px] text-[#94A3B8]">
             Sets the supplier for this service and the default room dates
@@ -126,7 +128,7 @@ export function AccommodationPanel({
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="grid gap-1.5">
-            <Label>Location</Label>
+            <Label>1. Location</Label>
             <LocationDropdown
               value={String(draft.location || '')}
               onChange={(name) => patch({ location: name, supplier: '', service: '' })}
@@ -134,7 +136,7 @@ export function AccommodationPanel({
             />
           </div>
           <div className="grid gap-1.5">
-            <Label>Supplier</Label>
+            <Label>2. Supplier</Label>
             <SupplierPicker
               tab="accommodation"
               value={String(draft.supplier || '')}
@@ -142,7 +144,7 @@ export function AccommodationPanel({
             />
           </div>
           <div className="grid gap-1.5">
-            <Label>Check-in</Label>
+            <Label>Start Date</Label>
             <DatePickerGridInput
               value={start}
               onChange={(value) => patch({ start: value })}
@@ -150,7 +152,7 @@ export function AccommodationPanel({
             />
           </div>
           <div className="grid gap-1.5">
-            <Label>Check-out</Label>
+            <Label>End Date</Label>
             <DatePickerGridInput
               value={end}
               onChange={(value) => patch({ end: value })}
@@ -158,17 +160,26 @@ export function AccommodationPanel({
               className="bg-white"
             />
           </div>
+          <div className="grid gap-1.5">
+            <Label>Nights</Label>
+            <div className="flex h-9 items-center rounded-md border border-[#E5E7EB] bg-white px-3 text-[13px] font-semibold text-[#171717]">
+              {nights(start, end)}
+            </div>
+          </div>
         </div>
         <p className="mt-2 text-[12px] text-[#737373]">
           Applies to all rooms by default — set different dates per room below if some guests stay
           longer or shorter.
         </p>
         {overrideCount > 0 ? (
-          <p className="mt-1 text-[12px] font-semibold text-[#D97706]">
-            {overrideCount} {overrideCount === 1 ? 'room has' : 'rooms have'} custom stay dates
-          </p>
+          <span className="mt-2 inline-flex h-[18px] items-center rounded bg-[#FEF3C7] px-1.5 text-[9px] font-bold text-[#92400E]">
+            CUSTOM dates · {overrideCount}
+          </span>
         ) : null}
-        <div className="mt-3 grid gap-1.5">
+      </section>
+
+      <section className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-4 shadow-sm">
+        <div className="mb-3 grid gap-1.5">
           <Label>Basis</Label>
           <Select
             value={basis}
@@ -180,22 +191,27 @@ export function AccommodationPanel({
               <SelectValue placeholder="Select basis" />
             </SelectTrigger>
             <SelectContent>
-            {BASIS_OPTIONS.map((b) => (
-              <SelectItem key={b.id} value={b.id}>
-                {b.label}
-              </SelectItem>
-            ))}
+              {BASIS_OPTIONS.map((b) => (
+                <SelectItem key={b.id} value={b.id}>
+                  {b.label}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
-          <div className="mt-1 grid gap-2 sm:grid-cols-2">
-            <div className="rounded-lg border bg-[#F0FDF4] p-2.5 text-[12px] text-[#166534]">
-              <div className="mb-0.5 font-bold">Included</div>
-              {details?.included}
-            </div>
-            <div className="rounded-lg border bg-[#FEF2F2] p-2.5 text-[12px] text-[#991B1B]">
-              <div className="mb-0.5 font-bold">Excluded</div>
-              {details?.excluded}
-            </div>
+        </div>
+        <div className="space-y-3">
+          <div>
+            <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-[#A1A1A1]">
+              Included
+            </p>
+            <p className="text-[12.5px] leading-relaxed text-[#171717]">{details?.included}</p>
+          </div>
+          <div className="border-t border-[#E2E8F0]" />
+          <div>
+            <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-[#A1A1A1]">
+              Excluded
+            </p>
+            <p className="text-[12.5px] leading-relaxed text-[#525252]">{details?.excluded}</p>
           </div>
         </div>
       </section>
@@ -205,11 +221,28 @@ export function AccommodationPanel({
         {tabBtn('extras', 'Extras', extras.length)}
         {tabBtn('promotions', 'Promotions')}
         {tabBtn('supplier', 'Supplier')}
-        {tabBtn('notes', 'Notes')}
+        {tabBtn('notes', 'Supplier Notes')}
       </div>
 
       {accTab === 'guests' ? (
         <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-[13.5px] font-bold text-[#171717]">Rooms & Guests</span>
+            <span
+              className="text-[12px] font-semibold"
+              style={{ color: unassigned.length ? '#D97706' : '#16A34A' }}
+            >
+              {unassigned.length ? `${unassigned.length} guests to place` : 'Everyone has a room'}
+            </span>
+          </div>
+
+          <div className="rounded-lg bg-[#E0F2FE] p-2.5">
+            <p className="mb-1 text-[12px] font-semibold text-[#0369A1]">Guest Classification</p>
+            <p className="text-[11px] leading-relaxed text-[#0369A1]">
+              Adult: 18+ · Youth: 12–17 · Child: 3–11 · Infant: 0–2 years
+            </p>
+          </div>
+
           <div
             className="rounded-lg border p-3"
             style={{ background: unassigned.length ? '#FFFBEB' : '#F9FAFB' }}
@@ -222,12 +255,6 @@ export function AccommodationPanel({
           >
             <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-[#A1A1A1]">
               Unassigned guests {unassigned.length ? `(${unassigned.length})` : ''}
-            </p>
-            <p
-              className="mb-2 text-[12px] font-semibold"
-              style={{ color: unassigned.length ? '#D97706' : '#16A34A' }}
-            >
-              {unassigned.length ? `${unassigned.length} guests to place` : 'Everyone has a room'}
             </p>
             {unassigned.length > 0 ? (
               <div className="flex flex-wrap gap-2">
@@ -262,7 +289,8 @@ export function AccommodationPanel({
           ) : null}
 
           {rooms.map((room, i) => {
-            const cap = ROOM_CAP[room.type] || 2
+            const qty = roomQty(room)
+            const cap = (ROOM_CAP[room.type] || 2) * qty
             const over = room.guestIds.length > cap
             const br = roomPriceBreakdown(room, start, end, guests)
             const datesDiffer =
@@ -270,7 +298,7 @@ export function AccommodationPanel({
             return (
               <div
                 key={room.id}
-                className="rounded-xl border bg-[#F9FAFB] p-3"
+                className="overflow-hidden rounded-lg border border-[#E5E7EB] bg-white"
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={(e) => {
                   e.preventDefault()
@@ -278,7 +306,7 @@ export function AccommodationPanel({
                   if (gid) moveGuestToRoom(gid, room.id)
                 }}
               >
-                <div className="mb-2 flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 border-b border-[#E5E7EB] bg-[#F9FAFB] px-2.5 py-1.5">
                   <span className="flex size-5 items-center justify-center rounded border bg-white text-[11px] font-bold">
                     {i + 1}
                   </span>
@@ -292,18 +320,49 @@ export function AccommodationPanel({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                    {Object.keys(ROOM_CAP).map((t) => (
-                      <SelectItem key={t} value={t}>{t}</SelectItem>
-                    ))}
+                      {Object.keys(ROOM_CAP).map((t) => (
+                        <SelectItem key={t} value={t}>
+                          {t}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <span
-                    className="text-[12px] font-semibold"
+                    className="whitespace-nowrap text-[12px] font-semibold"
                     style={{ color: over ? '#DC2626' : '#16A34A' }}
                   >
                     {room.guestIds.length} / {cap} guests
                   </span>
                   <div className="flex-1" />
+                  <div className="flex items-center" title="Number of rooms of this type">
+                    <button
+                      type="button"
+                      disabled={qty <= 1}
+                      onClick={() =>
+                        setRooms(
+                          rooms.map((x) =>
+                            x.id === room.id ? { ...x, qty: Math.max(1, qty - 1) } : x,
+                          ),
+                        )
+                      }
+                      className="flex size-6 items-center justify-center rounded-l-md border border-[#E5E7EB] bg-white text-[#525252] disabled:opacity-40"
+                    >
+                      −
+                    </button>
+                    <span className="flex h-6 min-w-6 items-center justify-center border-y border-[#E5E7EB] bg-white text-[12px] font-bold">
+                      ×{qty}
+                    </span>
+                    <button
+                      type="button"
+                      title="Add another room of this type"
+                      onClick={() =>
+                        setRooms(rooms.map((x) => (x.id === room.id ? { ...x, qty: qty + 1 } : x)))
+                      }
+                      className="flex size-6 items-center justify-center rounded-r-md border border-[#E5E7EB] bg-white text-[#931115]"
+                    >
+                      +
+                    </button>
+                  </div>
                   <button
                     type="button"
                     onClick={() => setRooms(rooms.filter((x) => x.id !== room.id))}
@@ -312,7 +371,10 @@ export function AccommodationPanel({
                     <Trash2 className="size-3.5" />
                   </button>
                 </div>
-                <div className="mb-2 flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 border-b border-[#F1F1F3] px-2.5 py-1.5">
+                  <span className="text-[11px] font-bold uppercase tracking-wide text-[#A1A1A1]">
+                    Stay
+                  </span>
                   <DatePickerGridInput
                     className="h-7 flex-1 bg-white text-xs"
                     value={br.rStart}
@@ -322,6 +384,7 @@ export function AccommodationPanel({
                       )
                     }
                   />
+                  <span className="text-[11px] font-semibold text-[#A1A1A1]">→</span>
                   <DatePickerGridInput
                     className="h-7 flex-1 bg-white text-xs"
                     value={br.rEnd}
@@ -330,70 +393,86 @@ export function AccommodationPanel({
                     }
                     referenceValue={br.rStart}
                   />
-                  <span className="text-[11px] font-semibold text-[#525252]">
+                  <span className="whitespace-nowrap text-[11px] font-semibold text-[#525252]">
                     {br.rNights} {br.rNights === 1 ? 'night' : 'nights'}
                   </span>
                   {datesDiffer ? (
-                    <button
-                      type="button"
-                      className="text-[11px] font-semibold text-[#2563EB]"
-                      onClick={() =>
-                        setRooms(rooms.map((x) => (x.id === room.id ? { ...x, start: '', end: '' } : x)))
-                      }
-                    >
-                      Reset
-                    </button>
+                    <>
+                      <span className="inline-flex h-[18px] items-center rounded bg-[#FEF3C7] px-1.5 text-[9px] font-bold text-[#92400E]">
+                        CUSTOM
+                      </span>
+                      <button
+                        type="button"
+                        title="Reset to default stay dates"
+                        className="text-[11px] font-semibold text-[#2563EB]"
+                        onClick={() =>
+                          setRooms(
+                            rooms.map((x) =>
+                              x.id === room.id ? { ...x, start: '', end: '' } : x,
+                            ),
+                          )
+                        }
+                      >
+                        Reset
+                      </button>
+                    </>
                   ) : null}
                 </div>
-                <div className="mb-2 flex min-h-10 flex-wrap gap-1.5 rounded-md border border-dashed bg-white p-2">
+                <div className="min-h-10 p-2.5">
                   {room.guestIds.length === 0 ? (
-                    <span className="text-[12px] text-[#A1A1A1]">Drop guests here</span>
+                    <span className="text-[12px] text-[#A1A1A1]">
+                      Empty — drag a guest here to assign.
+                    </span>
                   ) : (
-                    room.guestIds.map((gid) => {
-                      const g = findGuest(gid, guests)
-                      if (!g) return null
-                      const cs = guestChipStyle(g)
-                      return (
-                        <GuestChip
-                          key={gid}
-                          name={g.name}
-                          meta={cs.meta}
-                          lead={cs.lead}
-                          resLabel={cs.resLabel}
-                          resBg={cs.resBg}
-                          resFg={cs.resFg}
-                          bg={cs.bg}
-                          bd={cs.bd}
-                          draggable
-                          onDragStart={(e) => e.dataTransfer.setData('text/plain', String(gid))}
-                          onRemove={() =>
-                            setRooms(
-                              rooms.map((x) =>
-                                x.id === room.id
-                                  ? { ...x, guestIds: x.guestIds.filter((id) => id !== gid) }
-                                  : x,
-                              ),
-                            )
-                          }
-                        />
-                      )
-                    })
+                    <div className="flex flex-wrap gap-2">
+                      {room.guestIds.map((gid) => {
+                        const g = findGuest(gid, guests)
+                        if (!g) return null
+                        const cs = guestChipStyle(g)
+                        return (
+                          <GuestChip
+                            key={gid}
+                            name={g.name}
+                            meta={cs.meta}
+                            lead={cs.lead}
+                            resLabel={cs.resLabel}
+                            resBg={cs.resBg}
+                            resFg={cs.resFg}
+                            bg={cs.bg}
+                            bd={cs.bd}
+                            draggable
+                            onDragStart={(e) => e.dataTransfer.setData('text/plain', String(gid))}
+                            onRemove={() =>
+                              setRooms(
+                                rooms.map((x) =>
+                                  x.id === room.id
+                                    ? { ...x, guestIds: x.guestIds.filter((id) => id !== gid) }
+                                    : x,
+                                ),
+                              )
+                            }
+                          />
+                        )
+                      })}
+                    </div>
                   )}
                 </div>
                 {br.priceRows.length > 0 ? (
-                  <div className="space-y-1 text-[12px]">
+                  <div className="border-t border-[#F1F1F3] text-[12.5px]">
                     {br.priceRows.map((pr) => (
-                      <div key={pr.label} className="flex justify-between text-[#525252]">
-                        <span>
-                          {pr.qty}× {pr.label}
-                        </span>
-                        <span>
-                          {formatUsd(pr.net)} / {formatUsd(pr.rack)}
-                        </span>
+                      <div
+                        key={pr.label}
+                        className="grid grid-cols-[40px_1fr_80px_70px_70px] items-center px-2.5 py-1.5 text-[#171717]"
+                      >
+                        <span className="font-semibold">{pr.qty}</span>
+                        <span>{pr.label}</span>
+                        <span className="text-[#A1A1A1]">Night</span>
+                        <span className="text-right font-semibold">{formatUsd(pr.net)}</span>
+                        <span className="text-right font-semibold">{formatUsd(pr.rack)}</span>
                       </div>
                     ))}
-                    <div className="flex justify-between border-t pt-1 font-semibold text-[#171717]">
-                      <span>Room total</span>
+                    <div className="grid grid-cols-[1fr_auto] border-t border-[#F1F1F3] bg-[#F9FAFB] px-2.5 py-1.5 font-bold text-[#171717]">
+                      <span>Room total (Net / Rack)</span>
                       <span>
                         {formatUsd(br.netTotal)} / {formatUsd(br.rackTotal)}
                       </span>
@@ -406,6 +485,7 @@ export function AccommodationPanel({
 
           <Button
             variant="outline"
+            className="h-9 w-full border-dashed border-[#C9CCD3] text-[#931115]"
             onClick={() =>
               setRooms([
                 ...rooms,
@@ -414,6 +494,7 @@ export function AccommodationPanel({
                   type: 'Twin',
                   basis: String(draft.basis || 'bb'),
                   rate: 150,
+                  qty: 1,
                   guestIds: [],
                 },
               ])
@@ -422,6 +503,16 @@ export function AccommodationPanel({
             <Plus className="size-4" />
             Add room
           </Button>
+
+          <div>
+            <p className="mb-1.5 text-[12.5px] font-semibold text-[#A1A1A1]">Assignment Rules</p>
+            <textarea
+              rows={2}
+              readOnly
+              value="Up to 3 adults per room. Up to 2 children may share with adults."
+              className="w-full resize-none rounded-lg border border-[#E5E7EB] bg-white px-2.5 py-2 text-[12.5px] text-[#A1A1A1] outline-none"
+            />
+          </div>
         </div>
       ) : null}
 

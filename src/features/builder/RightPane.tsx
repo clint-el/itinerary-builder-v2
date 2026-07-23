@@ -1,5 +1,5 @@
 import { useRef, useState, type ReactNode } from 'react'
-import { ChevronDown, Pencil, Search, Trash2 } from 'lucide-react'
+import { ChevronDown, Pencil, Search, X } from 'lucide-react'
 import { CATALOG, TAB_META } from '@/shared/lib/catalogs'
 import { Button } from '@/components/ui/button'
 import {
@@ -107,169 +107,171 @@ export function RightPane({
           ) : null}
         </div>
 
-        <div className="border-b px-4 py-2.5">
-          <div className="text-sm font-bold">Added services</div>
-          <div className="text-xs text-muted-foreground">{services.length} item(s)</div>
-        </div>
+        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3 px-4">
+          <div className="mb-2.5 text-[11px] font-bold uppercase tracking-[0.3px] text-[#A1A1A1]">
+            Added services ({services.length})
+          </div>
 
-        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
           {services.length === 0 ? (
-            <div className="rounded-lg border border-dashed p-6 text-center text-sm text-[#A1A1A1]">
-              No services yet. Configure a service and add it to the itinerary.
+            <div className="px-2 py-6 text-center text-[12.5px] text-[#A1A1A1]">
+              No services added yet. Configure one on the left and click “Add to itinerary”.
             </div>
           ) : (
-            services.map((svc) => (
-              <div
-                key={svc.id}
-                draggable
-                onDragStart={(e) => {
-                  e.dataTransfer.setData('text/plain', svc.id)
-                  dragIdRef.current = svc.id
-                  setDragId(svc.id)
-                }}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => {
-                  e.preventDefault()
-                  const fromId = dragIdRef.current || dragId
-                  if (!fromId || fromId === svc.id) return
-                  const list = services.slice()
-                  const fromIdx = list.findIndex((x) => x.id === fromId)
-                  const toIdx = list.findIndex((x) => x.id === svc.id)
-                  if (fromIdx === -1 || toIdx === -1) return
-                  const [moved] = list.splice(fromIdx, 1)
-                  list.splice(toIdx, 0, moved)
-                  setServices(list)
-                  persist(list)
-                  dragIdRef.current = null
-                  setDragId(null)
-                  setReorderOpen(true)
-                }}
-                className="relative cursor-grab rounded-xl border bg-[#F9FAFB] active:cursor-grabbing"
-              >
-                <div className="absolute right-2 top-2 z-10 flex">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 bg-[#F9FAFB]"
-                    title="Edit service"
-                    aria-label={`Edit ${svc.title}`}
-                    onClick={() => onEdit(svc)}
-                  >
-                    <Pencil className="size-3" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 bg-[#F9FAFB]"
-                    title="Delete service"
-                    aria-label={`Delete ${svc.title}`}
-                    onClick={() => {
-                      const next = services.filter((s) => s.id !== svc.id)
-                      setServices(next)
-                      persist(next)
+            <>
+              {services.map((svc) => {
+                const netLabel = svc.netLabel || formatUsd(svc.net || 0)
+                const rackLabel = svc.rackLabel || formatUsd(svc.rack || 0)
+                return (
+                  <div
+                    key={svc.id}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData('text/plain', svc.id)
+                      dragIdRef.current = svc.id
+                      setDragId(svc.id)
                     }}
-                  >
-                    <Trash2 className="size-3 text-destructive" />
-                  </Button>
-                </div>
-                <div className="flex items-start gap-2 p-3 pr-[58px]">
-                  <button
-                    type="button"
-                    aria-label={svc.expanded ? `Collapse ${svc.title}` : `Expand ${svc.title}`}
-                    aria-expanded={svc.expanded}
-                    onClick={() => {
-                      const next = services.map((s) =>
-                        s.id === svc.id ? { ...s, expanded: !s.expanded } : s,
-                      )
-                      setServices(next)
-                      persist(next)
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault()
+                      const fromId = dragIdRef.current || dragId
+                      if (!fromId || fromId === svc.id) return
+                      const list = services.slice()
+                      const fromIdx = list.findIndex((x) => x.id === fromId)
+                      const toIdx = list.findIndex((x) => x.id === svc.id)
+                      if (fromIdx === -1 || toIdx === -1) return
+                      const [moved] = list.splice(fromIdx, 1)
+                      list.splice(toIdx, 0, moved)
+                      setServices(list)
+                      persist(list)
+                      dragIdRef.current = null
+                      setDragId(null)
+                      setReorderOpen(true)
                     }}
-                    className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded hover:bg-neutral-200"
+                    className="cursor-grab rounded-lg border border-[#E5E7EB] bg-white p-2.5 active:cursor-grabbing"
                   >
-                    <ChevronDown
-                      className={cn(
-                        'size-4 text-muted-foreground transition-transform',
-                        !svc.expanded && '-rotate-90',
-                      )}
-                    />
-                  </button>
-                  <span
-                    className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md text-xs font-bold"
-                    style={{ background: svc.bg, color: svc.fg }}
-                  >
-                    {svc.initial}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <button
-                      type="button"
-                      aria-expanded={svc.expanded}
-                      onClick={() => {
-                        const next = services.map((s) =>
-                          s.id === svc.id ? { ...s, expanded: !s.expanded } : s,
-                        )
-                        setServices(next)
-                        persist(next)
-                      }}
-                      className="block w-full min-w-0 text-left"
-                    >
-                      <div className="truncate text-sm font-bold">{svc.title}</div>
-                      {svc.expanded ? (
-                        <>
-                          <div className="truncate text-xs text-muted-foreground">{svc.subtitle}</div>
-                          <div className="mt-1 text-xs font-medium text-neutral-600">{svc.meta}</div>
-                        </>
-                      ) : null}
-                    </button>
-                    {svc.expanded && svc.details?.length ? (
-                      <dl className="mt-2 space-y-1 text-xs text-muted-foreground">
-                        {svc.details.map((d) => (
-                          <div key={d.label} className="flex gap-1">
-                            <dt className="font-semibold text-[#525252]">{d.label}:</dt>
-                            <dd>{d.value}</dd>
-                          </div>
-                        ))}
-                      </dl>
-                    ) : null}
-                    <div className="mt-2">
-                      <div>
-                        <div className="text-sm font-bold">{svc.priceLabel}</div>
-                        <div
-                          className="text-[11.5px] font-semibold"
-                          style={{ color: svc.marginColor }}
-                        >
-                          {formatUsd(svc.margin)} · {svc.marginPct}%
+                    <div className="flex items-start gap-2">
+                      <span
+                        className="flex size-6 shrink-0 items-center justify-center rounded-md text-[10px] font-bold"
+                        style={{ background: svc.bg, color: svc.fg }}
+                      >
+                        {svc.initial}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[13px] font-bold text-[#171717]">
+                          {svc.title}
+                        </div>
+                        <div className="mt-px truncate text-[11.5px] text-[#A1A1A1]">
+                          {svc.subtitle}
                         </div>
                       </div>
+                      <button
+                        type="button"
+                        title="Edit this service"
+                        aria-label={`Edit ${svc.title}`}
+                        onClick={() => onEdit(svc)}
+                        className="flex size-5 shrink-0 items-center justify-center text-[#2563EB]"
+                      >
+                        <Pencil className="size-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        title="Toggle details"
+                        aria-label={svc.expanded ? `Collapse ${svc.title}` : `Expand ${svc.title}`}
+                        aria-expanded={svc.expanded}
+                        onClick={() => {
+                          const next = services.map((s) =>
+                            s.id === svc.id ? { ...s, expanded: !s.expanded } : s,
+                          )
+                          setServices(next)
+                          persist(next)
+                        }}
+                        className="flex size-5 shrink-0 items-center justify-center text-[#A1A1A1]"
+                      >
+                        <ChevronDown
+                          className={cn(
+                            'size-3.5 transition-transform',
+                            !svc.expanded && '-rotate-90',
+                          )}
+                        />
+                      </button>
+                      <button
+                        type="button"
+                        title="Remove service"
+                        aria-label={`Remove ${svc.title}`}
+                        onClick={() => {
+                          const next = services.filter((s) => s.id !== svc.id)
+                          setServices(next)
+                          persist(next)
+                        }}
+                        className="flex size-5 shrink-0 items-center justify-center text-[#A1A1A1]"
+                      >
+                        <X className="size-3.5" />
+                      </button>
                     </div>
-                  </div>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
 
-        <div className="border-t px-4 py-3">
-          <div className="flex items-center justify-between text-sm">
-            <span className="font-semibold text-muted-foreground">Grand total</span>
-            <span className="font-bold">
-              {formatUsd(services.reduce((sum, s) => sum + (s.price || 0), 0))}
-            </span>
-          </div>
+                    <div className="mt-2 flex items-center justify-between">
+                      <span className="text-[11.5px] text-[#525252]">{svc.meta}</span>
+                      <span className="text-[13px] font-bold text-[#171717]">{svc.priceLabel}</span>
+                    </div>
+                    <div className="mt-0.5 flex items-center justify-between">
+                      <span className="text-[11px] text-[#A1A1A1]">Cost (Nett) / Sell (Rack)</span>
+                      <span className="text-[11.5px] font-semibold text-[#171717]">
+                        {netLabel} / {rackLabel}
+                      </span>
+                    </div>
+                    <div className="mt-0.5 flex items-center justify-between">
+                      <span className="text-[11px] text-[#A1A1A1]">Margin</span>
+                      <span
+                        className="text-[11.5px] font-semibold"
+                        style={{ color: svc.marginColor }}
+                      >
+                        {formatUsd(svc.margin)} · {svc.marginPct}%
+                      </span>
+                    </div>
+
+                    {svc.expanded && svc.details?.length ? (
+                      <div className="mt-2.5 space-y-1 border-t border-[#F1F1F3] pt-2.5">
+                        {svc.details.map((d) => (
+                          <div
+                            key={d.label}
+                            className="flex items-center justify-between text-[11.5px]"
+                          >
+                            <span className="text-[#A1A1A1]">{d.label}</span>
+                            <span className="font-semibold text-[#171717]">{d.value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                )
+              })}
+
+              <div className="mt-3 flex items-center justify-between border-t border-[#E5E7EB] pt-3">
+                <span className="text-[13px] font-semibold text-[#171717]">Itinerary total</span>
+                <span className="text-[15px] font-bold text-[#171717]">
+                  {formatUsd(services.reduce((sum, s) => sum + (s.price || 0), 0))}
+                </span>
+              </div>
+            </>
+          )}
         </div>
       </aside>
 
       <Dialog open={reorderOpen} onOpenChange={setReorderOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Services reordered</DialogTitle>
+            <DialogTitle>Update date ranges?</DialogTitle>
             <DialogDescription>
-              Service order was updated. Date cascading across services is not applied in this demo —
-              adjust stay dates manually if the new sequence requires it.
+              You changed the order of services. Services are normally arranged chronologically —
+              would you like to update the date ranges to match the new order?
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
+            <Button variant="outline" onClick={() => setReorderOpen(false)}>
+              Not now
+            </Button>
             <Button className="bg-[#931115] hover:bg-[#7a0e12]" onClick={() => setReorderOpen(false)}>
-              Got it
+              Update dates
             </Button>
           </DialogFooter>
         </DialogContent>

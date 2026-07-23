@@ -4,7 +4,6 @@ import {
   ChevronRight,
   Copy,
   Eye,
-  FileText,
   Filter,
   MoreHorizontal,
   Plus,
@@ -62,7 +61,7 @@ function countActiveFilters(f: ListFilters): number {
 }
 
 export function InquiriesPage() {
-  const { itineraries, splitItinerary, copyItinerary } = useStore()
+  const { itineraries, splitItinerary } = useStore()
   const navigate = useNavigate()
 
   const [tab, setTab] = useState<ListTab>('table')
@@ -75,6 +74,7 @@ export function InquiriesPage() {
     ...SEED_COLLAPSED_REFS,
   }))
   const [createOpen, setCreateOpen] = useState(false)
+  const [createSeedTitle, setCreateSeedTitle] = useState('')
   const [splitFor, setSplitFor] = useState<string | null>(null)
 
   const agencies = useMemo(
@@ -200,8 +200,9 @@ export function InquiriesPage() {
   }
 
   function handleCopy(id: string) {
-    const copy = copyItinerary(id)
-    if (copy) navigate(`/build/${copy.id}`)
+    const src = itineraries.find((it) => it.id === id)
+    setCreateSeedTitle(src?.title ? `${src.title} (copy)` : '')
+    setCreateOpen(true)
   }
 
   const SortHead = ({
@@ -415,7 +416,10 @@ export function InquiriesPage() {
                       it.travelDateTo,
                       isTerminalStatus(it.status),
                     )
-                    const isConfirmed = it.status === 'CONFIRMED' || it.status === 'TRAVEL_IN_PROGRESS'
+                    const isConfirmed =
+                      it.status === 'CONFIRMED' ||
+                      it.status === 'TRAVEL_IN_PROGRESS' ||
+                      it.status === 'COMPLETED'
                     const depthPad = 16 + row.depth * 18
 
                     return (
@@ -557,22 +561,14 @@ export function InquiriesPage() {
                                 <MoreHorizontal className="size-4" />
                               </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-[170px]">
-                              <DropdownMenuItem onClick={() => navigate(`/quote/${it.id}`)}>
-                                <FileText className="size-3.5" />
-                                Open quote
-                              </DropdownMenuItem>
+                            <DropdownMenuContent align="end" className="w-[180px]">
                               <DropdownMenuItem onClick={() => navigate(`/build/${it.id}`)}>
                                 <Eye className="size-3.5" />
-                                Open builder
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => navigate(`/summary/${it.id}`)}>
-                                <Eye className="size-3.5" />
-                                View summary
+                                View Detail
                               </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => handleCopy(it.id)}>
                                 <Copy className="size-3.5" />
-                                Copy
+                                Copy Itinerary
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -587,7 +583,14 @@ export function InquiriesPage() {
         </>
       )}
 
-      <CreateItineraryDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <CreateItineraryDialog
+        open={createOpen}
+        seedTitle={createSeedTitle}
+        onOpenChange={(open) => {
+          setCreateOpen(open)
+          if (!open) setCreateSeedTitle('')
+        }}
+      />
       <SplitItineraryDialog
         open={!!splitFor}
         parentRef={splitFor}

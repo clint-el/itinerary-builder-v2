@@ -8,12 +8,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import type { ServiceTab } from '@/shared/lib/types'
 import { formatUsd } from '@/shared/lib/utils'
 import type { AuditEntry, PricingRow } from './builderUtils'
-import { asActivities, asRooms, asVehicles, computeDraftTotals, roomPriceBreakdown } from './builderUtils'
+import {
+  asActivities,
+  asRooms,
+  asVehicles,
+  computeDraftTotals,
+  roomPriceBreakdown,
+} from './builderUtils'
 
 export function PricingSection({
   tab,
@@ -29,8 +33,9 @@ export function PricingSection({
   setOverrideReasonDraft,
   onSubmitOverride,
   auditLog,
-  onAdd,
   guests,
+  showAddButton = false,
+  onAdd,
 }: {
   tab: ServiceTab
   draft: Record<string, unknown>
@@ -45,8 +50,9 @@ export function PricingSection({
   setOverrideReasonDraft: (v: string) => void
   onSubmitOverride: () => void
   auditLog: AuditEntry[]
-  onAdd: () => void
   guests?: import('@/shared/lib/types').Guest[]
+  showAddButton?: boolean
+  onAdd?: () => void
 }) {
   const vehicles = asVehicles(draft)
   const activities = asActivities(draft)
@@ -63,7 +69,6 @@ export function PricingSection({
   )
   const discount = Number(draft.discount) || 0
   const systemPrice = liveSystemPrice(net, rack, discount)
-  const clientPrice = systemPrice.find((x) => x.label === 'Client price')?.value ?? formatUsd(0)
 
   const liveRows: {
     id?: string
@@ -93,7 +98,7 @@ export function PricingSection({
             rack: rackOf(rates[k] || 0),
             onNet: (n) => patch({ rates: { ...rates, [k]: n } }),
           }))
-        : tab === 'activity'
+        : tab === 'activity' || (tab === 'other' && activities.length > 0)
           ? activities.map((a) => ({
               type: a.name,
               charge: 'Per Person',
@@ -131,7 +136,6 @@ export function PricingSection({
                     setPricingRows(pricingRows.map((x) => (x.id === r.id ? { ...x, rack: n } : x))),
                 }))
               : (() => {
-                  // Aggregate live ACC_RATE breakdown across rooms for display.
                   const byLabel = new Map<string, { net: number; rack: number; qty: number }>()
                   for (const room of rooms) {
                     const br = roomPriceBreakdown(room, start, end, guests)
@@ -168,8 +172,8 @@ export function PricingSection({
       </div>
 
       {auditLog.length > 0 ? (
-        <div className="mb-3 rounded-lg border bg-[#F8FAFC] p-3">
-          <div className="mb-2 text-[12px] font-bold uppercase tracking-wide text-[#64748B]">
+        <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+          <div className="mb-2 text-[12px] font-bold uppercase tracking-wide text-amber-800">
             Price override audit trail
           </div>
           {auditLog.map((a, i) => (
@@ -184,11 +188,11 @@ export function PricingSection({
       ) : null}
 
       <div className="mb-3 overflow-hidden rounded-lg border">
-        <div className="grid grid-cols-[1.4fr_0.8fr_0.9fr_0.9fr] gap-2 border-b bg-[#F9FAFB] px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-[#737373]">
+        <div className="grid grid-cols-[1.4fr_0.8fr_0.9fr_0.9fr] gap-2 bg-[#4B4B4B] px-3 py-2.5 text-[11px] font-bold uppercase tracking-wide text-white">
           <span>Type</span>
           <span>Charge</span>
-          <span className="text-right">Net</span>
-          <span className="text-right">Rack</span>
+          <span className="text-right">$,NET</span>
+          <span className="text-right">$, RACK</span>
         </div>
         {liveRows.map((r, i) => (
           <div
@@ -228,26 +232,29 @@ export function PricingSection({
         ))}
       </div>
 
-      <div className="mb-3 grid gap-1.5">
-        <Label>Discount ($)</Label>
-        <Input
-          type="number"
-          value={discount}
-          onChange={(e) => patch({ discount: Number(e.target.value) || 0 })}
-        />
-      </div>
-
-      <div className="mb-4 overflow-hidden rounded-lg border">
+      <div className="overflow-hidden rounded-[10px] border">
+        <div className="bg-[#4B4B4B] px-4 py-2.5 text-[12px] font-bold tracking-wide text-white">
+          SYSTEM PRICE
+        </div>
         {systemPrice.map((sp, i) => (
           <div
             key={sp.label}
-            className="flex items-center justify-between border-b px-3 py-2 last:border-0"
+            className="flex items-center justify-between border-t border-[#F1F1F3] px-4 py-3"
             style={{ background: i % 2 === 1 ? '#F9FAFB' : '#FFFFFF' }}
           >
-            <span className="text-[13px] text-[#525252]">{sp.label}</span>
             <span
+              className="text-[#171717]"
               style={{
-                fontSize: sp.strong ? 17 : 15,
+                fontSize: sp.strong ? 17 : 14,
+                fontWeight: sp.strong ? 800 : 600,
+              }}
+            >
+              {sp.label}
+            </span>
+            <span
+              className="text-[#171717]"
+              style={{
+                fontSize: sp.strong ? 17 : 14,
                 fontWeight: sp.strong ? 800 : 600,
               }}
             >
@@ -257,17 +264,13 @@ export function PricingSection({
         ))}
       </div>
 
-      <div className="flex items-center justify-between border-t pt-3">
-        <div>
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-[#737373]">
-            Client price
-          </div>
-          <div className="text-lg font-bold">{clientPrice}</div>
+      {showAddButton && onAdd ? (
+        <div className="mt-4 flex justify-end border-t pt-3">
+          <Button className="bg-[#931115] hover:bg-[#7a0e12]" onClick={onAdd}>
+            Add to itinerary
+          </Button>
         </div>
-        <Button className="bg-[#931115] hover:bg-[#7a0e12]" onClick={onAdd}>
-          Add to itinerary
-        </Button>
-      </div>
+      ) : null}
 
       <Dialog open={overrideModalOpen} onOpenChange={setOverrideModalOpen}>
         <DialogContent>

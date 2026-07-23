@@ -22,7 +22,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Separator } from '@/components/ui/separator'
-import { PROMOTIONS, TAB_META, defaultDraft } from '@/shared/lib/catalogs'
+import { PROMOTIONS, TAB_META, defaultDraft, liveSystemPrice } from '@/shared/lib/catalogs'
 import { partyGuests } from '@/shared/lib/helpers'
 import type { AddedService, ServiceTab } from '@/shared/lib/types'
 import { cn } from '@/shared/lib/utils'
@@ -37,6 +37,7 @@ import {
   RAIL,
   asRooms,
   buildAddedService,
+  computeDraftTotals,
   roomPriceBreakdown,
   type AuditEntry,
   type PricingRow,
@@ -185,6 +186,20 @@ export function BuilderPage() {
   }
 
   const promo = PROMOTIONS.find((p) => p.id === draft.promotion)
+  const draftTotals = computeDraftTotals(
+    activeTab,
+    { ...draft, priceOverride: pricingOverride },
+    pricingOverride ? pricingRows : undefined,
+    guests,
+  )
+  const footerRows = liveSystemPrice(
+    draftTotals.net,
+    draftTotals.rack,
+    Number(draft.discount) || 0,
+  )
+  const footerNet = footerRows.find((x) => x.label === 'Net')?.value || '$0.00'
+  const footerClient =
+    footerRows.find((x) => x.label === 'Client price' || x.label === 'Sell')?.value || '$0.00'
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-[#F9FAFB]">
@@ -256,14 +271,14 @@ export function BuilderPage() {
           })}
         </div>
 
-        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="flex min-w-0 flex-[1.7] flex-col overflow-hidden">
           <div className="min-h-0 flex-1 overflow-y-auto p-5">
             <div className="mb-4 flex items-center gap-2.5">
               <span
                 className="flex size-8 items-center justify-center rounded-[9px] text-[13px] font-bold"
                 style={{ background: tabMeta.bg, color: tabMeta.fg }}
               >
-                {tabMeta.initial}
+                {tabMeta.label.charAt(0)}
               </span>
               <h2 className="text-[17px] font-bold">{tabMeta.label} configuration</h2>
             </div>
@@ -293,7 +308,6 @@ export function BuilderPage() {
                     setPricingOverride(false)
                     patchDraft({ priceOverride: false })
                   } else {
-                    // Seed editable rows from current accommodation breakdown when possible.
                     if (activeTab === 'accommodation') {
                       const rooms = asRooms(draft)
                       const byLabel = new Map<string, { net: number; rack: number }>()
@@ -351,9 +365,40 @@ export function BuilderPage() {
                   setPriceAuditLog((prev) => [...prev, entry])
                 }}
                 auditLog={priceAuditLog}
-                onAdd={addToItinerary}
               />
             </div>
+          </div>
+
+          <div className="flex shrink-0 items-center justify-between gap-4 border-t border-[#E5E7EB] bg-white px-6 py-3">
+            <div className="flex items-center gap-5 rounded-md bg-[#F3F4F6] px-4 py-2">
+              <div>
+                <p className="mb-0.5 text-[11px] font-semibold uppercase tracking-[0.3px] text-[#A1A1A1]">
+                  Supplier Net
+                </p>
+                <span className="text-[15px] font-bold text-[#171717]">{footerNet}</span>
+              </div>
+              <div>
+                <p className="mb-0.5 text-[11px] font-semibold uppercase tracking-[0.3px] text-[#A1A1A1]">
+                  Client Pays
+                </p>
+                <span className="text-[15px] font-bold text-[#171717]">{footerClient}</span>
+              </div>
+              <div>
+                <p className="mb-0.5 text-[11px] font-semibold uppercase tracking-[0.3px] text-[#A1A1A1]">
+                  Discount
+                </p>
+                <input
+                  type="number"
+                  min={0}
+                  value={Number(draft.discount) || 0}
+                  onChange={(e) => patchDraft({ discount: Number(e.target.value) || 0 })}
+                  className="h-[22px] w-[70px] rounded-[5px] border border-[#E5E7EB] px-1.5 text-[13px] font-semibold text-[#171717]"
+                />
+              </div>
+            </div>
+            <Button className="h-[38px] bg-[#931115] px-5 hover:bg-[#7a0e12]" onClick={addToItinerary}>
+              Add to itinerary
+            </Button>
           </div>
         </div>
 
@@ -382,7 +427,7 @@ export function BuilderPage() {
       <Dialog open={promoPromptOpen} onOpenChange={setPromoPromptOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Apply promotion?</DialogTitle>
+            <DialogTitle>Ongoing promotion applied</DialogTitle>
             <DialogDescription>
               {promo ? (
                 <>
@@ -395,7 +440,7 @@ export function BuilderPage() {
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPromoPromptOpen(false)}>
-              Cancel
+              Review promotion
             </Button>
             <Button
               className="bg-[#931115] hover:bg-[#7a0e12]"

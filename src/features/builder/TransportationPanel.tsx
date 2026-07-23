@@ -68,7 +68,7 @@ export function TransportationPanel({
             Transfer
           </button>
           <button type="button" className={modeBtn(isHire)} onClick={() => patch({ transMode: 'hire' })}>
-            Hire
+            Car hire
           </button>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
@@ -170,7 +170,9 @@ export function TransportationPanel({
 
       <section className="rounded-xl border bg-white p-4">
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-[13px] font-bold uppercase tracking-wide text-[#475569]">Vehicles</h3>
+          <h3 className="text-[13px] font-bold uppercase tracking-wide text-[#475569]">
+            Vehicles & PAX
+          </h3>
           <div className="flex gap-2">
             <Button size="sm" variant="outline" onClick={autoAssign}>
               <RefreshCw className="size-3.5" />

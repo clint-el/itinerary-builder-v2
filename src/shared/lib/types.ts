@@ -82,6 +82,7 @@ export interface Room {
   type: string
   basis: string
   rate: number
+  qty?: number
   guestIds: number[]
   start?: string
   end?: string
@@ -134,6 +135,10 @@ export interface AddedService {
   details: { label: string; value: string }[]
   price: number
   priceLabel: string
+  net: number
+  rack: number
+  netLabel: string
+  rackLabel: string
   margin: number
   marginPct: number
   marginColor: string

@@ -135,24 +135,30 @@ export function QuotePage() {
 
   const statusMeta = STATUS_META[itinerary.status] ?? STATUS_META.DRAFT
   const nights = nightsBetween(itinerary.travelDateFrom, itinerary.travelDateTo)
+  const ages =
+    itinerary.childAges && itinerary.childAges.length
+      ? ` / ${itinerary.childAges.join(',')}`
+      : ''
   const guestsLabel =
     itinerary.guestsLabel ||
-    [
-      itinerary.adults ? `${itinerary.adults}A` : '',
-      itinerary.children ? `${itinerary.children}C` : '',
-      itinerary.infants ? `${itinerary.infants}In` : '',
-    ]
-      .filter(Boolean)
-      .join(', ') ||
-    '—'
+    (() => {
+      const parts = [
+        itinerary.adults ? `${itinerary.adults}A` : '',
+        itinerary.children ? `${itinerary.children}C` : '',
+        itinerary.infants ? `${itinerary.infants}In` : '',
+      ].filter(Boolean)
+      if (!parts.length) return '—'
+      const total =
+        (itinerary.adults || 0) + (itinerary.children || 0) + (itinerary.infants || 0)
+      return `${total} Guests (${parts.join(', ')}${ages})`
+    })()
   const destLabel =
     (itinerary.destinations && itinerary.destinations.length
       ? itinerary.destinations.join(', ')
       : itinerary.destination) || '—'
   const lead =
     [itinerary.leadFirst, itinerary.leadLast].filter(Boolean).join(' ') || 'Lead traveler TBC'
-  const agencyLabel = itinerary.agency || '—'
-  const agentLabel = itinerary.agent || agencyLabel
+  const agentLabel = itinerary.agent || itinerary.agency || '—'
 
   function toggleService(groupId: string, serviceId: string) {
     persist(
@@ -256,14 +262,6 @@ export function QuotePage() {
             </Link>
             <Chevron />
             <span className="text-[#171717]">{itinerary.reference}</span>
-            <Chevron />
-            <Link to={`/build/${itinerary.id}`} className="text-[#2563EB] no-underline">
-              Builder
-            </Link>
-            <Chevron />
-            <Link to={`/summary/${itinerary.id}`} className="text-[#2563EB] no-underline">
-              Summary
-            </Link>
           </div>
           <div className="flex flex-1 items-center gap-0.5 rounded-t-xl bg-[#E5E7EB] p-0.5">
             {tabs.map((t) => (
@@ -306,7 +304,7 @@ export function QuotePage() {
                 <div className="flex min-w-0 flex-1 items-center gap-8 overflow-hidden">
                   <Meta label="Title" value={itinerary.title} />
                   <Meta label="Lead Traveler" value={lead} />
-                  <Meta label="Agency" value={agencyLabel} muted={!itinerary.agency} />
+                  <Meta label="Sales Support" value="N/A" muted />
                   <Meta label="Safari Planner" value={itinerary.safariPlanner || '—'} />
                   <Meta label="Agent" value={agentLabel} />
                   <Meta label="OPS" value="Not assigned" muted />
@@ -566,7 +564,7 @@ function ServiceBlock({
           {sv.statusLabel ? (
             <span className="inline-flex flex-col">
               <span
-                className="inline-flex h-[22px] w-fit items-center rounded-md px-2 text-[11.5px] font-bold"
+                className="inline-flex h-[22px] w-fit items-center rounded-full px-2.5 text-[11.5px] font-bold"
                 style={{ background: sv.statusBg, color: sv.statusColor }}
               >
                 {sv.statusLabel}
@@ -619,7 +617,7 @@ function ExtraRow({ extra: ex }: { extra: QuoteExtra }) {
         {ex.statusLabel ? (
           <span className="inline-flex flex-col">
             <span
-              className="inline-flex h-[22px] w-fit items-center rounded-md px-2 text-[11.5px] font-bold"
+              className="inline-flex h-[22px] w-fit items-center rounded-full px-2.5 text-[11.5px] font-bold"
               style={{ background: ex.statusBg, color: ex.statusColor }}
             >
               {ex.statusLabel}
