@@ -1,5 +1,5 @@
 import { useRef, useState, type ReactNode } from 'react'
-import { ChevronDown, Search, Trash2 } from 'lucide-react'
+import { ChevronDown, Pencil, Search, Trash2 } from 'lucide-react'
 import { CATALOG, TAB_META } from '@/shared/lib/catalogs'
 import { Button } from '@/components/ui/button'
 import {
@@ -144,11 +144,39 @@ export function RightPane({
                   setDragId(null)
                   setReorderOpen(true)
                 }}
-                className="cursor-grab rounded-xl border bg-[#F9FAFB] active:cursor-grabbing"
+                className="relative cursor-grab rounded-xl border bg-[#F9FAFB] active:cursor-grabbing"
               >
-                <div className="flex items-start gap-2 p-3">
+                <div className="absolute right-2 top-2 z-10 flex">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 bg-[#F9FAFB]"
+                    title="Edit service"
+                    aria-label={`Edit ${svc.title}`}
+                    onClick={() => onEdit(svc)}
+                  >
+                    <Pencil className="size-3" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 bg-[#F9FAFB]"
+                    title="Delete service"
+                    aria-label={`Delete ${svc.title}`}
+                    onClick={() => {
+                      const next = services.filter((s) => s.id !== svc.id)
+                      setServices(next)
+                      persist(next)
+                    }}
+                  >
+                    <Trash2 className="size-3 text-destructive" />
+                  </Button>
+                </div>
+                <div className="flex items-start gap-2 p-3 pr-[58px]">
                   <button
                     type="button"
+                    aria-label={svc.expanded ? `Collapse ${svc.title}` : `Expand ${svc.title}`}
+                    aria-expanded={svc.expanded}
                     onClick={() => {
                       const next = services.map((s) =>
                         s.id === svc.id ? { ...s, expanded: !s.expanded } : s,
@@ -156,7 +184,7 @@ export function RightPane({
                       setServices(next)
                       persist(next)
                     }}
-                    className="mt-0.5"
+                    className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded hover:bg-neutral-200"
                   >
                     <ChevronDown
                       className={cn(
@@ -172,9 +200,26 @@ export function RightPane({
                     {svc.initial}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-bold">{svc.title}</div>
-                    <div className="truncate text-xs text-muted-foreground">{svc.subtitle}</div>
-                    <div className="mt-1 text-xs font-medium text-neutral-600">{svc.meta}</div>
+                    <button
+                      type="button"
+                      aria-expanded={svc.expanded}
+                      onClick={() => {
+                        const next = services.map((s) =>
+                          s.id === svc.id ? { ...s, expanded: !s.expanded } : s,
+                        )
+                        setServices(next)
+                        persist(next)
+                      }}
+                      className="block w-full min-w-0 text-left"
+                    >
+                      <div className="truncate text-sm font-bold">{svc.title}</div>
+                      {svc.expanded ? (
+                        <>
+                          <div className="truncate text-xs text-muted-foreground">{svc.subtitle}</div>
+                          <div className="mt-1 text-xs font-medium text-neutral-600">{svc.meta}</div>
+                        </>
+                      ) : null}
+                    </button>
                     {svc.expanded && svc.details?.length ? (
                       <dl className="mt-2 space-y-1 text-xs text-muted-foreground">
                         {svc.details.map((d) => (
@@ -185,7 +230,7 @@ export function RightPane({
                         ))}
                       </dl>
                     ) : null}
-                    <div className="mt-2 flex items-center justify-between gap-2">
+                    <div className="mt-2">
                       <div>
                         <div className="text-sm font-bold">{svc.priceLabel}</div>
                         <div
@@ -194,23 +239,6 @@ export function RightPane({
                         >
                           {formatUsd(svc.margin)} · {svc.marginPct}%
                         </div>
-                      </div>
-                      <div className="flex gap-1">
-                        <Button variant="ghost" size="sm" onClick={() => onEdit(svc)}>
-                          Edit
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => {
-                            const next = services.filter((s) => s.id !== svc.id)
-                            setServices(next)
-                            persist(next)
-                          }}
-                        >
-                          <Trash2 className="size-4 text-destructive" />
-                        </Button>
                       </div>
                     </div>
                   </div>

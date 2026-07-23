@@ -170,7 +170,7 @@ export function FlightPanel({
           ) : (
             <div />
           )}
-          <div className="grid gap-1.5">
+          <div className="flex flex-col gap-1.5 self-start">
             <Label>Capacity / aircraft</Label>
             <Input
               type="number"
@@ -178,7 +178,7 @@ export function FlightPanel({
               onChange={(e) => patch({ capacity: Number(e.target.value) || 1 })}
             />
           </div>
-          <div className="grid gap-1.5">
+          <div className="flex flex-col gap-1.5 self-start">
             <Label>Quantity</Label>
             <div className="flex h-9 items-center gap-1 rounded-md border px-1">
               <button
