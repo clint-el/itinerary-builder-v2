@@ -106,7 +106,7 @@ export function SummaryPage() {
     )
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-[#F4F4F5]">
+    <div className="flex min-h-screen flex-col bg-[#F4F4F5]">
       <div className="flex h-14 shrink-0 items-center gap-3.5 border-b bg-white px-6">
         <img src="/assets/sol-logo.svg" alt="SOL" className="h-auto w-[30px]" />
         <div className="flex min-w-0 items-center gap-1.5 text-[13px] font-semibold text-[#A1A1A1]">
@@ -120,7 +120,7 @@ export function SummaryPage() {
         </div>
       </div>
 
-      <div className="mx-auto flex min-h-0 w-full max-w-[1400px] flex-1 flex-col gap-4 overflow-y-auto px-6 py-6">
+      <div className="flex w-full flex-1 flex-col gap-4 px-6 py-6">
         <div className="rounded-[14px] border border-[#E5E7EB] bg-white px-6 py-5">
           <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
