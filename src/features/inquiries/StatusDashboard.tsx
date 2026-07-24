@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Card, CardContent } from '@/components/ui/card'
 import { STATUS_META } from '@/shared/lib/catalogs'
-import { dashboardData, type Zone } from '@/shared/lib/helpers'
+import { dashboardData, openPath, type Zone } from '@/shared/lib/helpers'
 import type { Itinerary } from '@/shared/lib/types'
 import { formatUsd } from '@/shared/lib/utils'
 
@@ -104,7 +104,7 @@ export function StatusDashboard({ itineraries }: Props) {
                       <button
                         type="button"
                         className="cursor-pointer whitespace-nowrap text-sm font-bold text-[#1D4ED8] underline"
-                        onClick={() => navigate(`/build/${item.it.id}`)}
+                        onClick={() => navigate(openPath(item.it))}
                       >
                         {item.it.reference}
                       </button>

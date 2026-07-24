@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
+  Check,
   ChevronRight,
   Copy,
   Eye,
@@ -26,14 +27,16 @@ import { SplitItineraryDialog } from '@/features/inquiries/SplitItineraryDialog'
 import { StatusDashboard } from '@/features/inquiries/StatusDashboard'
 import { PAYMENT_META, SEED_COLLAPSED_REFS, STATUS_META } from '@/shared/lib/catalogs'
 import {
+  _itinVM,
   buildItineraryRows,
   emptyFilters,
   filterItineraries,
-  holdMeta,
   inquiryRefLabel,
   isTerminalStatus,
   marginChip,
   marginPct,
+  openPath,
+  parentReference,
   sortItineraries,
   travelProximity,
 } from '@/shared/lib/helpers'
@@ -61,7 +64,7 @@ function countActiveFilters(f: ListFilters): number {
 }
 
 export function InquiriesPage() {
-  const { itineraries, splitItinerary } = useStore()
+  const { itineraries, splitItinerary, acceptOption } = useStore()
   const navigate = useNavigate()
 
   const [tab, setTab] = useState<ListTab>('table')
@@ -96,7 +99,23 @@ export function InquiriesPage() {
     () => filterItineraries(itineraries, query, filters),
     [itineraries, query, filters],
   )
-  const sorted = useMemo(() => sortItineraries(filtered, sortKey, sortDir), [filtered, sortKey, sortDir])
+  const itineraryVMs = useMemo(() => {
+    const childMap = new Map<string, typeof itineraries>()
+    for (const it of itineraries) {
+      const parent = parentReference(it.reference)
+      if (!parent) continue
+      childMap.set(parent, [...(childMap.get(parent) || []), it])
+    }
+    return new Map(itineraries.map((it) => [it.reference, _itinVM(it, childMap)]))
+  }, [itineraries])
+  const holdUrgencyByReference = useMemo(
+    () => new Map([...itineraryVMs].map(([ref, vm]) => [ref, vm.hold.daysLeft])),
+    [itineraryVMs],
+  )
+  const sorted = useMemo(
+    () => sortItineraries(filtered, sortKey, sortDir, holdUrgencyByReference),
+    [filtered, sortKey, sortDir, holdUrgencyByReference],
+  )
   const rows = useMemo(() => buildItineraryRows(sorted, collapsedRefs), [sorted, collapsedRefs])
 
   const activeFilterCount = countActiveFilters(filters)
@@ -408,7 +427,7 @@ export function InquiriesPage() {
 
                   {rows.map((row) => {
                     const it = row.itinerary
-                    const hold = holdMeta(it)
+                    const hold = itineraryVMs.get(it.reference)?.hold
                     const mp = marginPct(it)
                     const mc = mp != null ? marginChip(mp) : null
                     const prox = travelProximity(
@@ -425,7 +444,11 @@ export function InquiriesPage() {
                     return (
                       <div
                         key={it.id}
-                        className={cn(GRID, 'relative h-[52px] border-b border-[#F1F1F3] hover:bg-[#FAFAFA]')}
+                        className={cn(
+                          GRID,
+                          'relative h-[52px] border-b border-[#F1F1F3] hover:bg-[#FAFAFA]',
+                          row.isSuperseded && 'opacity-[0.62]',
+                        )}
                       >
                         {isConfirmed ? (
                           <span className="absolute left-0 top-0 h-full w-[3px] rounded-r-[3px] bg-[#22C55E]" />
@@ -471,13 +494,24 @@ export function InquiriesPage() {
                               <button
                                 type="button"
                                 className="min-w-0 truncate text-[13px] font-bold text-[#1D4ED8] underline"
-                                onClick={() => navigate(`/build/${it.id}`)}
+                                onClick={() => navigate(openPath(it))}
                               >
                                 {it.reference}
                               </button>
                               {row.isSubquote ? (
                                 <span className="inline-flex h-4 shrink-0 items-center rounded border border-[#FDE68A] bg-[#FEF3C7] px-1.5 text-[9px] font-bold uppercase tracking-[0.3px] text-[#92400E]">
                                   Sub-quote
+                                </span>
+                              ) : null}
+                              {row.isMaster ? (
+                                <span className="inline-flex h-4 shrink-0 items-center gap-0.5 rounded border border-[#86EFAC] bg-[#DCFCE7] px-1.5 text-[9px] font-bold uppercase tracking-[0.3px] text-[#166534]">
+                                  <Check className="size-2.5" strokeWidth={3} />
+                                  Master
+                                </span>
+                              ) : null}
+                              {row.isSuperseded ? (
+                                <span className="inline-flex h-4 shrink-0 items-center rounded border border-[#E2E8F0] bg-[#F1F5F9] px-1.5 text-[9px] font-bold uppercase tracking-[0.3px] text-[#94A3B8]">
+                                  Superseded
                                 </span>
                               ) : null}
                             </div>
@@ -517,12 +551,19 @@ export function InquiriesPage() {
                         </div>
 
                         <div className="flex items-center overflow-hidden border-r border-[#F1F1F3] px-1.5">
-                          {hold.hasHold ? (
-                            <span
-                              className="inline-flex h-[22px] items-center rounded-md px-2 text-[11.5px] font-bold"
-                              style={{ background: hold.bg, color: hold.fg }}
-                            >
-                              {hold.label}
+                          {hold?.hasHold ? (
+                            <span className="inline-flex items-center gap-1" title={hold.tooltip}>
+                              <span
+                                className="inline-flex h-[22px] items-center rounded-md px-2 text-[11.5px] font-bold"
+                                style={{ background: hold.bg, color: hold.fg }}
+                              >
+                                {hold.label}
+                              </span>
+                              {hold.count > 1 ? (
+                                <span className="shrink-0 text-[11px] font-bold text-[#737373]">
+                                  ×{hold.count}
+                                </span>
+                              ) : null}
                             </span>
                           ) : (
                             <span className="text-xs text-[#D4D4D8]">—</span>
@@ -562,7 +603,7 @@ export function InquiriesPage() {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-[180px]">
-                              <DropdownMenuItem onClick={() => navigate(`/build/${it.id}`)}>
+                              <DropdownMenuItem onClick={() => navigate(openPath(it))}>
                                 <Eye className="size-3.5" />
                                 View Detail
                               </DropdownMenuItem>
@@ -570,6 +611,15 @@ export function InquiriesPage() {
                                 <Copy className="size-3.5" />
                                 Copy Itinerary
                               </DropdownMenuItem>
+                              {row.canAccept ? (
+                                <DropdownMenuItem
+                                  className="text-[#166534] focus:text-[#166534]"
+                                  onClick={() => acceptOption(it.reference)}
+                                >
+                                  <Check className="size-3.5" />
+                                  Accept &amp; make master
+                                </DropdownMenuItem>
+                              ) : null}
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </div>

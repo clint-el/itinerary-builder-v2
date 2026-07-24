@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { SEED_ITINERARIES, SEED_QUOTE_GROUPS } from '@/shared/lib/catalogs'
 import {
+  _descendantsOf,
+  _holdMeta,
+  _itinVM,
+  _serviceHolds,
   buildItineraryRows,
   createSplitRecord,
   copyItinerary,
@@ -8,9 +12,11 @@ import {
   emptyFilters,
   filterItineraries,
   inquiryRefLabel,
+  isBuilderStatus,
   marginFromSell,
   marginPct,
   nextChildReference,
+  openPath,
   parentReference,
   partyGuests,
   quoteGroupsTotal,
@@ -19,6 +25,7 @@ import {
   sortItineraries,
   transitions,
 } from '@/shared/lib/helpers'
+import type { ItineraryStatus } from '@/shared/lib/types'
 
 describe('helpers', () => {
   it('computes parent reference and depth', () => {
@@ -39,6 +46,85 @@ describe('helpers', () => {
     expect(rows.some((r) => r.itinerary.reference === 'CPS5687' && r.collapsed)).toBe(true)
     expect(rows.some((r) => r.itinerary.reference === 'CPS5687-1')).toBe(false)
     expect(rows.some((r) => r.itinerary.reference === 'CPS5678-1-1' && r.isSubquote)).toBe(true)
+  })
+
+  it('routes Draft/Prepared to the Builder and everything else to Summary', () => {
+    const builderStatuses: ItineraryStatus[] = ['DRAFT', 'PREPARED']
+    const summaryStatuses: ItineraryStatus[] = [
+      'QUOTED',
+      'APPROVED',
+      'INVOICED',
+      'VOUCHERED',
+      'CONFIRMED',
+      'TRAVEL_IN_PROGRESS',
+      'COMPLETED',
+      'LOST',
+      'CANCELLED',
+      'SUPERSEDED',
+    ]
+
+    for (const status of builderStatuses) {
+      expect(isBuilderStatus(status)).toBe(true)
+      expect(openPath({ id: 'CPS1', status })).toBe('/build/CPS1')
+    }
+    for (const status of summaryStatuses) {
+      expect(isBuilderStatus(status)).toBe(false)
+      expect(openPath({ id: 'CPS1', status })).toBe('/summary/CPS1')
+    }
+  })
+
+  it('gives Lost/Cancelled/Superseded a reopen transition back to Draft', () => {
+    for (const status of ['LOST', 'CANCELLED', 'SUPERSEDED'] as const) {
+      expect(transitions(status).some((t) => t.to === 'DRAFT')).toBe(true)
+    }
+  })
+
+  it('generates deterministic service-level holds and aggregates the most urgent one', () => {
+    const eligible = SEED_ITINERARIES.slice(0, 6).map((it) => ({ ...it, status: 'DRAFT' as const }))
+    const generated = eligible.flatMap(_serviceHolds)
+    const meta = _holdMeta(eligible)
+
+    expect(_serviceHolds(eligible[0])).toEqual(_serviceHolds(eligible[0]))
+    expect(eligible.every((it) => _serviceHolds(it).length <= 3)).toBe(true)
+    expect(meta.count).toBe(generated.length)
+    if (meta.hasHold) {
+      expect(meta.daysLeft).toBe(Math.min(...generated.map((hold) => hold.daysLeft)))
+      expect(meta.tooltip).toMatch(/^\d+ service holds?, soonest /)
+    }
+  })
+
+  it('excludes finalized and inactive itineraries from hold aggregation', () => {
+    const inactive = ['CONFIRMED', 'SUPERSEDED', 'LOST', 'CANCELLED'] as const
+    const itineraries = inactive.map((status, index) => ({
+      ...SEED_ITINERARIES[index],
+      status,
+    }))
+
+    expect(_holdMeta(itineraries)).toEqual({
+      hasHold: false,
+      count: 0,
+      daysLeft: null,
+      tooltip: 'No active service holds',
+    })
+  })
+
+  it('aggregates holds over every descendant in an itinerary hierarchy', () => {
+    const childMap = new Map<string, typeof SEED_ITINERARIES>()
+    for (const itinerary of SEED_ITINERARIES) {
+      const parent = parentReference(itinerary.reference)
+      if (parent) childMap.set(parent, [...(childMap.get(parent) || []), itinerary])
+    }
+    const root = SEED_ITINERARIES.find((it) => it.reference === 'CPS5678')!
+    const descendants = _descendantsOf(root.reference, childMap)
+    const vm = _itinVM(root, childMap)
+
+    expect(descendants.map((it) => it.reference)).toEqual([
+      'CPS5678-1',
+      'CPS5678-1-1',
+      'CPS5678-1-2',
+      'CPS5678-2',
+    ])
+    expect(vm.hold).toEqual(_holdMeta([root, ...descendants]))
   })
 
   it('filters by query and status', () => {

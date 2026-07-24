@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from 'react'
 import {
+  acceptOption as acceptOptionHelper,
   copyItinerary as copyItineraryHelper,
   createSplitRecord,
 } from '@/shared/lib/helpers'
@@ -17,6 +18,7 @@ import {
   getServices as getServicesStorage,
   listItineraries,
   nextInquiryId,
+  replaceItineraries as replaceItinerariesStorage,
   setGuestDetails as setGuestDetailsStorage,
   setQuoteGroups as setQuoteGroupsStorage,
   setServices as setServicesStorage,
@@ -39,6 +41,7 @@ interface StoreContextValue {
   createItinerary: (input: CreateItineraryInput) => Itinerary
   copyItinerary: (id: string) => Itinerary | null
   splitItinerary: (parentRef: string, form: SplitForm) => Itinerary | null
+  acceptOption: (reference: string) => void
   updateStatus: (id: string, status: ItineraryStatus) => void
   removeItinerary: (id: string) => void
   getServices: (itineraryId: string) => AddedService[]
@@ -149,6 +152,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [bump],
   )
 
+  const acceptOption = useCallback(
+    (reference: string) => {
+      replaceItinerariesStorage(acceptOptionHelper(listItineraries(), reference))
+      bump()
+    },
+    [bump],
+  )
+
   const updateStatus = useCallback(
     (id: string, status: ItineraryStatus) => {
       const current = listItineraries().find((it) => it.id === id)
@@ -223,6 +234,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       createItinerary,
       copyItinerary,
       splitItinerary,
+      acceptOption,
       updateStatus,
       removeItinerary,
       getServices,
@@ -239,6 +251,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       createItinerary,
       copyItinerary,
       splitItinerary,
+      acceptOption,
       updateStatus,
       removeItinerary,
       getServices,

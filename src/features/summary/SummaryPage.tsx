@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { CalendarDays, ChevronLeft, List } from 'lucide-react'
 import { useStore } from '@/app/store'
 import { Button } from '@/components/ui/button'
-import { nightsBetween, transitions, isTerminalStatus } from '@/shared/lib/helpers'
+import { isBuilderStatus, isTerminalStatus, nightsBetween, transitions } from '@/shared/lib/helpers'
 import type { LifecycleTransition } from '@/shared/lib/types'
 import { cn, formatDay } from '@/shared/lib/utils'
 import { StatusChip } from '@/shared/ui/StatusChip'
@@ -96,6 +96,7 @@ export function SummaryPage() {
       if (reason == null || !reason.trim()) return
     }
     updateStatus(id, t.to)
+    if (isBuilderStatus(t.to)) navigate(`/build/${id}`)
   }
 
   const tabClass = (active: boolean) =>

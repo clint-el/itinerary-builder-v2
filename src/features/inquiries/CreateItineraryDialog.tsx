@@ -263,14 +263,18 @@ export function CreateItineraryDialog({ open, onOpenChange, seedTitle = '' }: Pr
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-5">
             <div className="grid gap-2">
               <Label htmlFor="inquiryRef">
-                Inquiry <span className="text-sol-brand">*</span>
+                Inquiry ( CRM ticket reference ) <span className="text-sol-brand">*</span>
               </Label>
               <Input
                 id="inquiryRef"
                 value={inquiryRef}
                 onChange={(e) => setInquiryRef(e.target.value)}
-                placeholder="e.g. CPS5688"
+                placeholder="e.g. HS-563528"
               />
+              <p className="text-xs font-medium text-neutral-400">
+                Sourced from the CRM ticket. This becomes the inquiry reference; options inherit it
+                (e.g. HS-563528-2).
+              </p>
             </div>
 
             <div className="grid gap-2">

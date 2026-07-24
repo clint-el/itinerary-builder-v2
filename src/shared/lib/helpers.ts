@@ -69,16 +69,79 @@ export function marginChip(mp: number) {
   }
 }
 
-export function holdMeta(it: Pick<Itinerary, 'reference' | 'status'>) {
-  let h = 0
+export interface ServiceHold {
+  serviceId: string
+  daysLeft: number
+}
+
+export type HoldMeta =
+  | { hasHold: false; count: 0; daysLeft: null; tooltip: string }
+  | {
+      hasHold: true
+      label: string
+      bg: string
+      fg: string
+      count: number
+      daysLeft: number
+      tooltip: string
+    }
+
+const HOLD_ELIGIBLE_STATUSES: ItineraryStatus[] = ['DRAFT', 'QUOTED', 'PREPARED']
+
+function stableHash(value: string): number {
+  let hash = 2166136261
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.charCodeAt(i)
+    hash = Math.imul(hash, 16777619)
+  }
+  return hash >>> 0
+}
+
+/** Deterministic demo representation of the service-specific holds on an itinerary. */
+export function _serviceHolds(it: Pick<Itinerary, 'reference'>): ServiceHold[] {
   const ref = String(it.reference || '')
-  for (let i = 0; i < ref.length; i++) h = (h * 31 + ref.charCodeAt(i)) % 97
-  const daysLeft = (h % 6) - 1
-  if (!['DRAFT', 'QUOTED', 'PREPARED'].includes(it.status)) return { hasHold: false as const }
-  if (daysLeft < 0) return { hasHold: true as const, label: 'Expired', bg: '#FEE2E2', fg: '#B91C1C' }
-  if (daysLeft === 0) return { hasHold: true as const, label: 'Today', bg: '#FEE2E2', fg: '#B91C1C' }
-  if (daysLeft <= 2) return { hasHold: true as const, label: `${daysLeft}d left`, bg: '#FEF3C7', fg: '#92400E' }
-  return { hasHold: true as const, label: `${daysLeft}d left`, bg: '#F1F5F9', fg: '#475569' }
+  const count = stableHash(`${ref}:hold-count`) % 4
+  return Array.from({ length: count }, (_, index) => ({
+    serviceId: `${ref}:service-${index + 1}`,
+    daysLeft: (stableHash(`${ref}:service-${index + 1}:hold`) % 11) - 2,
+  }))
+}
+
+function holdSummary(daysLeft: number): string {
+  if (daysLeft < 0) return 'expired'
+  if (daysLeft === 0) return 'today'
+  return `${daysLeft}d left`
+}
+
+/** Summarizes the most urgent service hold across all eligible itineraries. */
+export function _holdMeta(
+  itineraries: Pick<Itinerary, 'reference' | 'status'>[],
+): HoldMeta {
+  const holds = itineraries.flatMap((it) =>
+    HOLD_ELIGIBLE_STATUSES.includes(it.status) ? _serviceHolds(it) : [],
+  )
+  if (holds.length === 0) {
+    return { hasHold: false, count: 0, daysLeft: null, tooltip: 'No active service holds' }
+  }
+
+  const daysLeft = Math.min(...holds.map((hold) => hold.daysLeft))
+  const count = holds.length
+  const noun = count === 1 ? 'service hold' : 'service holds'
+  const tooltip = `${count} ${noun}, soonest ${holdSummary(daysLeft)}`
+
+  if (daysLeft < 0) {
+    return { hasHold: true, label: 'Expired', bg: '#FEE2E2', fg: '#B91C1C', count, daysLeft, tooltip }
+  }
+  if (daysLeft === 0) {
+    return { hasHold: true, label: 'Today', bg: '#FEE2E2', fg: '#B91C1C', count, daysLeft, tooltip }
+  }
+  if (daysLeft === 1) {
+    return { hasHold: true, label: '1d left', bg: '#FEE2E2', fg: '#B91C1C', count, daysLeft, tooltip }
+  }
+  if (daysLeft <= 3) {
+    return { hasHold: true, label: `${daysLeft}d left`, bg: '#FEF3C7', fg: '#92400E', count, daysLeft, tooltip }
+  }
+  return { hasHold: true, label: `${daysLeft}d left`, bg: '#F1F5F9', fg: '#475569', count, daysLeft, tooltip }
 }
 
 export function travelProximity(from: string, to: string | undefined, isTerminal: boolean) {
@@ -100,6 +163,18 @@ export function travelProximity(from: string, to: string | undefined, isTerminal
 
 export function isTerminalStatus(status: ItineraryStatus) {
   return ['COMPLETED', 'LOST', 'CANCELLED', 'SUPERSEDED'].includes(status)
+}
+
+const BUILDER_STATUSES: ItineraryStatus[] = ['DRAFT', 'PREPARED']
+
+/** Draft/Prepared edit in the Builder; everything else (Quoted-and-beyond, and Lost/Cancelled/Superseded) opens the read-first Summary. */
+export function isBuilderStatus(status: ItineraryStatus) {
+  return BUILDER_STATUSES.includes(status)
+}
+
+/** The route to open for an itinerary, based on its lifecycle status. */
+export function openPath(it: Pick<Itinerary, 'id' | 'status'>): string {
+  return isBuilderStatus(it.status) ? `/build/${it.id}` : `/summary/${it.id}`
 }
 
 export function transitions(status: ItineraryStatus) {
@@ -155,7 +230,12 @@ export function filterItineraries(list: Itinerary[], query: string, f: ListFilte
   })
 }
 
-export function sortItineraries(list: Itinerary[], key: SortKey, dir: 'asc' | 'desc'): Itinerary[] {
+export function sortItineraries(
+  list: Itinerary[],
+  key: SortKey,
+  dir: 'asc' | 'desc',
+  holdUrgencyByReference?: ReadonlyMap<string, number | null>,
+): Itinerary[] {
   if (!key) return list
   const mul = dir === 'asc' ? 1 : -1
   return [...list].sort((a, b) => {
@@ -186,8 +266,8 @@ export function sortItineraries(list: Itinerary[], key: SortKey, dir: 'asc' | 'd
       av = a.agency
       bv = b.agency
     } else if (key === 'hold') {
-      av = holdMeta(a).label || ''
-      bv = holdMeta(b).label || ''
+      av = holdUrgencyByReference?.get(a.reference) ?? _holdMeta([a]).daysLeft ?? Number.POSITIVE_INFINITY
+      bv = holdUrgencyByReference?.get(b.reference) ?? _holdMeta([b]).daysLeft ?? Number.POSITIVE_INFINITY
     }
     if (av < bv) return -1 * mul
     if (av > bv) return 1 * mul
@@ -202,6 +282,36 @@ export interface TreeRow {
   collapsed: boolean
   canSplit: boolean
   isSubquote: boolean
+  isMaster: boolean
+  isSuperseded: boolean
+  canAccept: boolean
+}
+
+export type ItineraryChildMap = ReadonlyMap<string, Itinerary[]>
+
+/** Returns every child, grandchild, and deeper descendant of a reference. */
+export function _descendantsOf(ref: string, childMap: ItineraryChildMap): Itinerary[] {
+  const descendants: Itinerary[] = []
+  const visit = (parentRef: string) => {
+    for (const child of childMap.get(parentRef) || []) {
+      descendants.push(child)
+      visit(child.reference)
+    }
+  }
+  visit(ref)
+  return descendants
+}
+
+/** Builds the list-specific metadata for an itinerary and its complete option tree. */
+export function _itinVM(it: Itinerary, childMap: ItineraryChildMap) {
+  return {
+    itinerary: it,
+    hold: _holdMeta([it, ..._descendantsOf(it.reference, childMap)]),
+  }
+}
+
+export function isConfirmedStatus(status: ItineraryStatus) {
+  return ['CONFIRMED', 'TRAVEL_IN_PROGRESS', 'COMPLETED'].includes(status)
 }
 
 export function buildItineraryRows(
@@ -221,6 +331,9 @@ export function buildItineraryRows(
     for (const it of kids) {
       const children = byParent.get(it.reference) || []
       const collapsed = !!collapsedRefs[it.reference]
+      const isChild = depth > 0
+      const confirmed = isConfirmedStatus(it.status)
+      const terminal = isTerminalStatus(it.status)
       rows.push({
         itinerary: it,
         depth,
@@ -228,6 +341,9 @@ export function buildItineraryRows(
         collapsed,
         canSplit: depth < 2,
         isSubquote: depth === 2,
+        isMaster: isChild && confirmed,
+        isSuperseded: it.status === 'SUPERSEDED',
+        canAccept: depth === 1 && !confirmed && !terminal,
       })
       if (!collapsed) walk(it.reference, depth + 1)
     }
@@ -292,6 +408,34 @@ export function copyItinerary(src: Itinerary, all: Itinerary[]): Itinerary {
     createdAt: new Date().toISOString().slice(0, 10),
     updatedAt: new Date().toISOString(),
   }
+}
+
+/**
+ * Confirm an option and supersede its sibling options. The accepted option
+ * becomes the master; siblings that aren't already in a terminal/confirmed
+ * state are marked SUPERSEDED. Returns a new list (unchanged if ref missing).
+ */
+export function acceptOption(itineraries: Itinerary[], ref: string): Itinerary[] {
+  const parentRef = parentReference(ref)
+  const now = new Date().toISOString()
+  const done: ItineraryStatus[] = [
+    'CONFIRMED',
+    'TRAVEL_IN_PROGRESS',
+    'COMPLETED',
+    'LOST',
+    'CANCELLED',
+  ]
+  return itineraries.map((it) => {
+    if (it.reference === ref) return { ...it, status: 'CONFIRMED', updatedAt: now }
+    if (
+      parentRef &&
+      parentReference(it.reference) === parentRef &&
+      !done.includes(it.status)
+    ) {
+      return { ...it, status: 'SUPERSEDED', updatedAt: now }
+    }
+    return it
+  })
 }
 
 export type Zone = 'red' | 'yellow' | 'green'
