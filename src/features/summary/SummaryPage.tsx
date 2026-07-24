@@ -324,7 +324,7 @@ function ServiceTable({
 }: {
   card: {
     gridCols: string
-    headers: { label: string; align: 'l' | 'c' }[]
+    headers: { label: string; align: 'l' | 'c' | 'r' }[]
     rows: { cells: string[] }[]
   }
 }) {
@@ -337,6 +337,7 @@ function ServiceTable({
             className={cn(
               'flex items-center border-y border-[#EDEFF2] bg-[#FBFBFC] px-3.5 py-2 text-[10.5px] font-bold uppercase tracking-wide text-[#94A3B8]',
               h.align === 'c' && 'justify-center text-center',
+              h.align === 'r' && 'justify-end text-right',
             )}
           >
             {h.label}
@@ -355,6 +356,7 @@ function ServiceTable({
               className={cn(
                 'flex min-w-0 items-center border-b border-[#F3F4F6] px-3.5 py-3 text-[13px] text-[#171717]',
                 card.headers[ci]?.align === 'c' && 'justify-center text-center',
+                card.headers[ci]?.align === 'r' && 'justify-end text-right text-[#737373]',
                 ci === 0 && 'text-[#737373]',
                 ci === 1 && 'font-semibold',
               )}

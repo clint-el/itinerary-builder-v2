@@ -97,7 +97,9 @@ const ORDER: SummaryServiceType[] = [
   'other',
 ]
 
-const COLS: Record<SummaryServiceType, [string, 'l' | 'c'][]> = {
+const MARGIN_COL: [string, 'r'] = ['Nett / Rack · Margin', 'r']
+
+const COLS: Record<SummaryServiceType, [string, 'l' | 'c' | 'r'][]> = {
   accommodation: [
     ['Date', 'l'],
     ['Supplier', 'l'],
@@ -106,6 +108,7 @@ const COLS: Record<SummaryServiceType, [string, 'l' | 'c'][]> = {
     ['No. of Rooms', 'c'],
     ['No. of Pax', 'c'],
     ['No. of Nights', 'c'],
+    MARGIN_COL,
   ],
   flight: [
     ['Date', 'l'],
@@ -113,6 +116,7 @@ const COLS: Record<SummaryServiceType, [string, 'l' | 'c'][]> = {
     ['Charter / Schedule', 'c'],
     ['Route', 'l'],
     ['No. of Pax', 'c'],
+    MARGIN_COL,
   ],
   transfer: [
     ['Date', 'l'],
@@ -122,12 +126,14 @@ const COLS: Record<SummaryServiceType, [string, 'l' | 'c'][]> = {
     ['Drop Off', 'l'],
     ['No. of Veh.', 'c'],
     ['No. of Pax', 'c'],
+    MARGIN_COL,
   ],
   activity: [
     ['Date', 'l'],
     ['Supplier', 'l'],
     ['Service', 'l'],
     ['No. of Pax', 'c'],
+    MARGIN_COL,
   ],
   other: [
     ['Date', 'l'],
@@ -135,16 +141,28 @@ const COLS: Record<SummaryServiceType, [string, 'l' | 'c'][]> = {
     ['Service', 'l'],
     ['No. of Pax', 'c'],
     ['No. of Days', 'c'],
+    MARGIN_COL,
   ],
 }
 
 const GRID: Record<SummaryServiceType, string> = {
-  accommodation: '86px minmax(160px,1.7fr) minmax(150px,1.5fr) 76px 104px 92px 104px',
-  flight: '86px minmax(160px,1.6fr) 150px minmax(120px,1.2fr) 92px',
+  accommodation: '86px minmax(160px,1.7fr) minmax(150px,1.5fr) 76px 104px 92px 104px minmax(160px,1.3fr)',
+  flight: '86px minmax(160px,1.6fr) 150px minmax(120px,1.2fr) 92px minmax(160px,1.3fr)',
   transfer:
-    '86px minmax(150px,1.5fr) minmax(90px,1fr) minmax(130px,1.3fr) minmax(130px,1.3fr) 92px 92px',
-  activity: '86px minmax(150px,1.5fr) minmax(220px,2.2fr) 92px',
-  other: '86px minmax(150px,1.5fr) minmax(220px,2.2fr) 92px 104px',
+    '86px minmax(150px,1.5fr) minmax(90px,1fr) minmax(130px,1.3fr) minmax(130px,1.3fr) 92px 92px minmax(160px,1.3fr)',
+  activity: '86px minmax(150px,1.5fr) minmax(220px,2.2fr) 92px minmax(160px,1.3fr)',
+  other: '86px minmax(150px,1.5fr) minmax(220px,2.2fr) 92px 104px minmax(160px,1.3fr)',
+}
+
+function wholeUsd(n: number) {
+  return `$${Math.round(n || 0).toLocaleString('en-US')}`
+}
+
+function marginRow(s: Pick<SummaryLine, 'net' | 'rack'>) {
+  const net = s.net || 0
+  const rack = s.rack || 0
+  const mg = rack > 0 ? Math.round(((rack - net) / rack) * 100) : 0
+  return `${wholeUsd(net)} / ${wholeUsd(rack)}  ·  ${mg}%`
 }
 
 function tabToSummaryType(tab: ServiceTab): SummaryServiceType {
@@ -180,6 +198,7 @@ function cellValues(type: SummaryServiceType, s: SummaryLine): string[] {
         String(s.rooms ?? '—'),
         String(s.pax ?? '—'),
         String(s.nights ?? '—'),
+        marginRow(s),
       ]
     case 'flight':
       return [
@@ -188,6 +207,7 @@ function cellValues(type: SummaryServiceType, s: SummaryLine): string[] {
         s.charter || '—',
         s.route || '—',
         String(s.pax ?? '—'),
+        marginRow(s),
       ]
     case 'transfer':
       return [
@@ -198,9 +218,10 @@ function cellValues(type: SummaryServiceType, s: SummaryLine): string[] {
         s.dropoff || '—',
         String(s.veh ?? '—'),
         String(s.pax ?? '—'),
+        marginRow(s),
       ]
     case 'activity':
-      return [fmtShortDate(s.date), s.supplier, s.service || '—', String(s.pax ?? '—')]
+      return [fmtShortDate(s.date), s.supplier, s.service || '—', String(s.pax ?? '—'), marginRow(s)]
     case 'other':
       return [
         fmtShortDate(s.date),
@@ -208,6 +229,7 @@ function cellValues(type: SummaryServiceType, s: SummaryLine): string[] {
         s.service || '—',
         String(s.pax ?? '—'),
         String(s.days ?? '—'),
+        marginRow(s),
       ]
   }
 }
@@ -383,7 +405,7 @@ export type SummaryCard = {
   tint: string
   countLabel: string
   gridCols: string
-  headers: { label: string; align: 'l' | 'c' }[]
+  headers: { label: string; align: 'l' | 'c' | 'r' }[]
   rows: { cells: string[] }[]
 }
 
