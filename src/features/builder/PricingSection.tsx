@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { liveSystemPrice } from '@/shared/lib/catalogs'
 import { rackOf } from '@/shared/lib/helpers'
 import { Button } from '@/components/ui/button'
@@ -158,6 +159,18 @@ export function PricingSection({
                     : [{ type: 'No rooms priced yet', charge: '—', net: 0, rack: 0 }]
                 })()
 
+  const originalRatesRef = useRef<Record<string, { net: number; rack: number }>>({})
+  const wasOverrideOn = useRef(false)
+  useEffect(() => {
+    if (overrideOn && !wasOverrideOn.current) {
+      const snapshot: Record<string, { net: number; rack: number }> = {}
+      for (const r of liveRows) snapshot[r.type] = { net: r.net, rack: r.rack }
+      originalRatesRef.current = snapshot
+    }
+    wasOverrideOn.current = overrideOn
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [overrideOn])
+
   return (
     <section className="rounded-xl border bg-white p-4">
       <div className="mb-3 flex items-center justify-between">
@@ -194,7 +207,9 @@ export function PricingSection({
           <span className="text-right">$,NET</span>
           <span className="text-right">$, RACK</span>
         </div>
-        {liveRows.map((r, i) => (
+        {liveRows.map((r, i) => {
+          const original = originalRatesRef.current[r.type]
+          return (
           <div
             key={`${r.type}-${i}`}
             className="grid grid-cols-[1.4fr_0.8fr_0.9fr_0.9fr] items-center gap-2 border-b px-3 py-2 last:border-0"
@@ -204,32 +219,47 @@ export function PricingSection({
             <span className="text-[12px] text-[#737373]">{r.charge}</span>
             <div className="text-right">
               {overrideOn && r.onNet ? (
-                <input
-                  type="number"
-                  min={0}
-                  value={r.net}
-                  onChange={(e) => r.onNet?.(Number(e.target.value) || 0)}
-                  className="ml-auto h-8 w-[84px] rounded-md border px-2 text-right text-[14px] font-semibold"
-                />
+                <>
+                  <input
+                    type="number"
+                    min={0}
+                    value={r.net}
+                    onChange={(e) => r.onNet?.(Number(e.target.value) || 0)}
+                    className="ml-auto h-8 w-[84px] rounded-md border px-2 text-right text-[14px] font-semibold"
+                  />
+                  {original && original.net !== r.net ? (
+                    <div className="mt-0.5 text-[10.5px] text-[#94A3B8]">
+                      was {formatUsd(original.net)}
+                    </div>
+                  ) : null}
+                </>
               ) : (
                 <span className="text-[15px] font-bold">{formatUsd(r.net)}</span>
               )}
             </div>
             <div className="text-right">
               {overrideOn && r.onRack ? (
-                <input
-                  type="number"
-                  min={0}
-                  value={r.rack}
-                  onChange={(e) => r.onRack?.(Number(e.target.value) || 0)}
-                  className="ml-auto h-8 w-[84px] rounded-md border px-2 text-right text-[14px] font-semibold"
-                />
+                <>
+                  <input
+                    type="number"
+                    min={0}
+                    value={r.rack}
+                    onChange={(e) => r.onRack?.(Number(e.target.value) || 0)}
+                    className="ml-auto h-8 w-[84px] rounded-md border px-2 text-right text-[14px] font-semibold"
+                  />
+                  {original && original.rack !== r.rack ? (
+                    <div className="mt-0.5 text-[10.5px] text-[#94A3B8]">
+                      was {formatUsd(original.rack)}
+                    </div>
+                  ) : null}
+                </>
               ) : (
                 <span className="text-[15px] font-bold">{formatUsd(r.rack)}</span>
               )}
             </div>
           </div>
-        ))}
+          )
+        })}
       </div>
 
       <div className="overflow-hidden rounded-[10px] border">

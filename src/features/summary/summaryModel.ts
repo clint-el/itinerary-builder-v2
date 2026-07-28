@@ -97,7 +97,7 @@ const ORDER: SummaryServiceType[] = [
   'other',
 ]
 
-const MARGIN_COL: [string, 'r'] = ['Nett / Rack · Margin', 'r']
+const MARGIN_COL: [string, 'r'] = ['Cost / Sell · Margin', 'r']
 
 const COLS: Record<SummaryServiceType, [string, 'l' | 'c' | 'r'][]> = {
   accommodation: [

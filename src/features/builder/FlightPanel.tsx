@@ -255,7 +255,7 @@ export function FlightPanel({
       <div className="flex gap-1 border-b">
         {tabBtn('policy', 'Policy')}
         {tabBtn('extras', 'Extras', extras.length)}
-        {tabBtn('promotions', 'Promotions')}
+        {tabBtn('promotions', 'Specials')}
       </div>
 
       {rightTab === 'policy' ? (

@@ -263,7 +263,7 @@ export const SYSTEM_PRICE = [
   { label: 'Net', value: '$2250' },
   { label: 'Sell', value: '--' },
   { label: 'Discount', value: '--' },
-  { label: 'Promotions', value: '--' },
+  { label: 'Specials', value: '--' },
   { label: 'Purchase price', value: '$2250' },
   { label: 'CPS margin 30%', value: '$675' },
   { label: 'TC commission', value: '$0' },
@@ -280,7 +280,7 @@ export function liveSystemPrice(net: number, rack: number, discount: number) {
     { label: 'Net', value: formatUsdStatic(net) },
     { label: 'Sell', value: formatUsdStatic(client) },
     { label: 'Discount', value: discount ? formatUsdStatic(discount) : '--' },
-    { label: 'Promotions', value: '--' },
+    { label: 'Specials', value: '--' },
     { label: 'Purchase price', value: formatUsdStatic(net) },
     {
       label: `CPS margin ${marginPct}%`,

@@ -427,20 +427,20 @@ export function BuilderPage() {
       <Dialog open={promoPromptOpen} onOpenChange={setPromoPromptOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Ongoing promotion applied</DialogTitle>
+            <DialogTitle>Ongoing special applied</DialogTitle>
             <DialogDescription>
               {promo ? (
                 <>
                   <span className="font-semibold text-foreground">{promo.title}</span> — {promo.desc}
                 </>
               ) : (
-                'An active promotion is selected for this accommodation.'
+                'An active special is selected for this accommodation.'
               )}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPromoPromptOpen(false)}>
-              Review promotion
+              Review special
             </Button>
             <Button
               className="bg-[#931115] hover:bg-[#7a0e12]"
@@ -449,7 +449,7 @@ export function BuilderPage() {
                 doAdd()
               }}
             >
-              Add with promotion
+              Add with special
             </Button>
           </DialogFooter>
         </DialogContent>
