@@ -231,7 +231,7 @@ export function PricingSection({
                   <input
                     type="number"
                     min={0}
-                    value={r.net}
+                    value={r.net || ''}
                     onChange={(e) => r.onNet?.(Number(e.target.value) || 0)}
                     className="ml-auto h-8 w-[84px] rounded-md border px-2 text-right text-[14px] font-semibold"
                   />
@@ -251,7 +251,7 @@ export function PricingSection({
                   <input
                     type="number"
                     min={0}
-                    value={r.rack}
+                    value={r.rack || ''}
                     onChange={(e) => r.onRack?.(Number(e.target.value) || 0)}
                     className="ml-auto h-8 w-[84px] rounded-md border px-2 text-right text-[14px] font-semibold"
                   />

@@ -391,7 +391,7 @@ export function BuilderPage() {
                 <input
                   type="number"
                   min={0}
-                  value={Number(draft.discount) || 0}
+                  value={Number(draft.discount) || ''}
                   onChange={(e) => patchDraft({ discount: Number(e.target.value) || 0 })}
                   className="h-[22px] w-[70px] rounded-[5px] border border-[#E5E7EB] px-1.5 text-[13px] font-semibold text-[#171717]"
                 />
