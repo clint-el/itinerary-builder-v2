@@ -38,7 +38,34 @@ export const RAIL: {
   { tab: 'other', label: 'Other', color: '#475569', iconBg: '#E2E8F0' },
 ]
 
+/** Hemingways transfer portfolio (cost pass-through — no markup/commission). */
 export const TRANS_SERVICES = [
+  // Nairobi airport / hotel
+  { title: 'JKIA to Hemingways Nairobi (3-pax)', price: 55, unit: 'per transfer' },
+  { title: 'Hemingways Nairobi to JKIA (3-pax)', price: 55, unit: 'per transfer' },
+  { title: 'JKIA to Hemingways Nairobi (5-pax)', price: 75, unit: 'per transfer' },
+  { title: 'Hemingways Nairobi to JKIA (5-pax)', price: 75, unit: 'per transfer' },
+  { title: 'Wilson to Hemingways Nairobi (3-pax)', price: 45, unit: 'per transfer' },
+  { title: 'Hemingways Nairobi to Wilson (3-pax)', price: 45, unit: 'per transfer' },
+  { title: 'Wilson to Hemingways Nairobi (5-pax)', price: 65, unit: 'per transfer' },
+  { title: 'Hemingways Nairobi to Wilson (5-pax)', price: 65, unit: 'per transfer' },
+  // Watamu coastal
+  { title: 'Malindi Airport to Hemingways Watamu', price: 80, unit: 'per transfer' },
+  { title: 'Hemingways Watamu to Malindi Airport', price: 80, unit: 'per transfer' },
+  { title: 'Moi International Airport to Hemingways Watamu', price: 180, unit: 'per transfer' },
+  { title: 'Hemingways Watamu to Moi International Airport', price: 180, unit: 'per transfer' },
+  { title: 'Vipingo Airstrip to Hemingways Watamu', price: 120, unit: 'per transfer' },
+  { title: 'Hemingways Watamu to Vipingo Airstrip', price: 120, unit: 'per transfer' },
+  { title: 'Hemingways Watamu to Medina Palms', price: 40, unit: 'per transfer' },
+  { title: 'Hemingways Watamu to Nderit House', price: 40, unit: 'per transfer' },
+  { title: 'Hemingways Watamu to Ishara Mara', price: 250, unit: 'per transfer' },
+  // Ol Seki / Laikipia–Mara inter-camp
+  { title: 'Ol Seki to Asilia Naboisho', price: 90, unit: 'per transfer' },
+  { title: 'Ol Seki to JW Marriott', price: 90, unit: 'per transfer' },
+  { title: "Ol Seki to Karen Blixen", price: 90, unit: 'per transfer' },
+  { title: "Ol Seki to Richard's River", price: 90, unit: 'per transfer' },
+  { title: 'Ol Seki to Mara Nyika', price: 90, unit: 'per transfer' },
+  // Legacy demo routes still used by seed itineraries
   { title: 'Nairobi One Way Transfer', price: 50, unit: 'per transfer' },
   { title: 'Nairobi Return Transfer', price: 110, unit: 'per transfer' },
   { title: 'Airport Pick-up Transfer', price: 55, unit: 'per transfer' },

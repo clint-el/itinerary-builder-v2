@@ -154,6 +154,7 @@ export const LOCATION_TREE = [
       { id: 'nairobi', name: 'Nairobi', kind: 'Region' },
       { id: 'central-kenya', name: 'Central Kenya', kind: 'Region' },
       { id: 'loisaba', name: 'Loisaba', kind: 'Region' },
+      { id: 'watamu', name: 'Watamu', kind: 'Region' },
       {
         id: 'southern-kenya',
         name: 'Southern Kenya',
@@ -181,7 +182,8 @@ export const LOCATION_TREE = [
 
 export const CATALOG: Record<ServiceTab, CatalogItem[]> = {
   accommodation: [
-    { name: 'Hemingways Nairobi', service: 'BB Double Deluxe Suite', location: 'Nairobi', group: 'Hemingways', headOffice: 'Nairobi, Kenya', starred: true },
+    { name: 'Hemingways Nairobi', service: 'BB Double Hemingway Suite', location: 'Nairobi', group: 'Hemingways', headOffice: 'Nairobi, Kenya', starred: true },
+    { name: 'Hemingways Watamu', service: 'BB Double Hemingway Suite', location: 'Watamu', group: 'Hemingways', headOffice: 'Nairobi, Kenya', starred: true },
     { name: 'Elewana Loisaba Tented Camp', service: 'GPKG Double Safari Tent', location: 'Loisaba', group: 'Elewana', headOffice: 'Nairobi, Kenya', starred: true },
     { name: 'Elewana Sand River Masai Mara', service: 'GPKG Family Tent', location: 'Masai Mara', group: 'Elewana', headOffice: 'Nairobi, Kenya', starred: true },
     { name: 'Elewana Serengeti Migration Camp', service: 'GPKG Double Safari Tent', location: 'Serengeti', group: 'Elewana', headOffice: 'Arusha, Tanzania', starred: true },
@@ -191,6 +193,7 @@ export const CATALOG: Record<ServiceTab, CatalogItem[]> = {
     { name: 'Ol Tukai Lodge', service: 'Garden View Room', location: 'Amboseli', group: 'AA Lodges', headOffice: 'Nairobi, Kenya', starred: false },
   ],
   transportation: [
+    { name: 'Hemingways Transfers', service: 'JKIA to Hemingways Nairobi (3-pax)', location: 'Nairobi', group: 'Hemingways', headOffice: 'Nairobi, Kenya', starred: true },
     { name: 'Cheli & Peacock Safaris Nairobi', service: 'Nairobi One Way Transfer', location: 'Nairobi', group: 'Cheli & Peacock', headOffice: 'Nairobi, Kenya', starred: true },
     { name: 'Bushtops Transfers', service: 'Airstrip transfer', location: 'Masai Mara', group: 'Bushtops', headOffice: 'Nairobi, Kenya', starred: false },
     { name: 'Mara Route Vehicles', service: 'Full-day game drive', location: 'Masai Mara', group: 'Mara Route', headOffice: 'Nairobi, Kenya', starred: false },
@@ -218,12 +221,41 @@ export const CATALOG: Record<ServiceTab, CatalogItem[]> = {
   ],
 }
 
+/** Hemingways extras portfolio — avg prices from live booking history. */
 export const EXTRAS_CATALOG = [
-  { id: 'conservancy', title: 'Conservancy Fee', price: 45, mandatory: true },
-  { id: 'laundry', title: 'Laundry Service', price: 15 },
-  { id: 'wifi', title: 'Premium Wi-Fi', price: 10 },
-  { id: 'transfer', title: 'Private Airstrip Transfer', price: 80 },
+  { id: 'garden-buffet-lunch', title: 'Garden Buffet Lunch Adult (N)', price: 28 },
+  { id: 'beverage-tz', title: 'Beverage TZ', price: 103 },
+  { id: 'dinner-voucher', title: 'Dinner Voucher Adult (N)', price: 43 },
+  { id: 'curio-shop', title: 'Curio Shop (TZ) USD', price: 231 },
+  { id: 'dinner', title: 'Dinner', price: 159 },
+  { id: 'drinks-supplement', title: 'Drinks Supplement TZ', price: 61 },
+  { id: 'lunch', title: 'Lunch', price: 286 },
+  { id: 'spa-treatments', title: 'SPA Treatments', price: 173 },
+  { id: 'drivers-lunch-box', title: "Drivers Lunch Box (TZ) USD", price: 5 },
+  { id: 'conservancy', title: 'Park/Conservancy Fees', price: 100, mandatory: true },
+  { id: 'flight-transfers', title: 'Flight Transfers (Arrive/Depart)', price: 0 },
+  { id: 'executive-room-supplement', title: "Supplement — Hemingway's Executive Room", price: 75 },
 ]
+
+/**
+ * Room-type capacities for the builder room dropdown.
+ * Includes Hemingways suite products (max pax) plus generic types used by other suppliers.
+ */
+export const ROOM_CAP: Record<string, number> = {
+  'BB Double Hemingway Suite': 2,
+  'BB Single Hemingway Suite': 1,
+  'GPKG Double Hemingway Suite': 3,
+  'GPKG Single Hemingway Suite': 3,
+  'GPKG Triple Hemingway Suite': 3,
+  'Hemingway Suite Double/Twin Day Room': 2,
+  Single: 1,
+  Twin: 2,
+  Double: 2,
+  Triple: 3,
+  Family: 4,
+  'BB Double Deluxe Suite': 2,
+  'BB Twin Deluxe Suite': 2,
+}
 
 export const BASIS = {
   fb: 'Full Board',
@@ -246,8 +278,6 @@ export const BASIS_DETAILS = {
 } as const
 
 export const BASIS_OPTIONS = Object.entries(BASIS).map(([id, label]) => ({ id, label }))
-
-export const ROOM_CAP: Record<string, number> = { Single: 1, Twin: 2, Double: 2, Triple: 3, Family: 4 }
 
 export const ACC_RATE = {
   adult: { resident: { net: 90, rack: 120 }, nonResident: { net: 140, rack: 180 } },

@@ -491,7 +491,7 @@ export function AccommodationPanel({
                 ...rooms,
                 {
                   id: `r${Date.now()}`,
-                  type: 'Twin',
+                  type: 'BB Double Hemingway Suite',
                   basis: String(draft.basis || 'bb'),
                   rate: 150,
                   qty: 1,
@@ -639,7 +639,7 @@ export function AccommodationPanel({
             readOnly
             rows={3}
             className="w-full resize-none rounded-lg border bg-[#FAFAFB] p-2.5 text-[13px] text-[#525252]"
-            value="Must include Conservancy Fee as an extra. Families (5 pax or more) with children aged 5-12 years receive FOC exclusive use of vehicle."
+            value="Must include Park/Conservancy Fees as an extra. Families (5 pax or more) with children aged 5-12 years receive FOC exclusive use of vehicle."
           />
           <textarea
             readOnly

@@ -226,7 +226,7 @@ export function AddServiceOverlay({
       setRooms([
         {
           id: uid('rm'),
-          type: 'Double',
+          type: 'BB Double Hemingway Suite',
           basis: 'fb',
           rate: 390,
           guestIds: party.slice(0, 2).map((g) => g.id),
@@ -242,7 +242,7 @@ export function AddServiceOverlay({
       ...prev,
       {
         id: uid('rm'),
-        type: 'Twin',
+        type: 'BB Double Hemingway Suite',
         basis: 'fb',
         rate: 390,
         guestIds: [],
