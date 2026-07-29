@@ -6,6 +6,7 @@ import {
   DESTINATIONS,
   EXTRAS_CATALOG,
   ROOM_CAP,
+  roomTypeOptions,
   VEHICLE_TYPES,
 } from '@/shared/lib/catalogs'
 import { nightsBetween, partyGuests } from '@/shared/lib/helpers'
@@ -226,7 +227,7 @@ export function AddServiceOverlay({
       setRooms([
         {
           id: uid('rm'),
-          type: 'BB Double Hemingway Suite',
+          type: 'Double Suite',
           basis: 'fb',
           rate: 390,
           guestIds: party.slice(0, 2).map((g) => g.id),
@@ -242,7 +243,7 @@ export function AddServiceOverlay({
       ...prev,
       {
         id: uid('rm'),
-        type: 'BB Double Hemingway Suite',
+        type: 'Double Suite',
         basis: 'fb',
         rate: 390,
         guestIds: [],
@@ -706,9 +707,9 @@ export function AddServiceOverlay({
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                            {Object.keys(ROOM_CAP).map((t) => (
-                              <SelectItem key={t} value={t}>
-                                {t}
+                            {roomTypeOptions(room.type).map((t) => (
+                              <SelectItem key={t.name} value={t.name}>
+                                {t.name}
                               </SelectItem>
                             ))}
                             </SelectContent>

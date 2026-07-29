@@ -14,7 +14,7 @@ const ITINERARIES_KEY = 'sol-demo-itineraries'
 const SERVICES_KEY = 'sol-demo-services'
 const QUOTE_KEY = 'sol-demo-quote-groups'
 const GUESTS_KEY = 'sol-demo-guests'
-const CURRENT_VERSION = '12'
+const CURRENT_VERSION = '14'
 
 type ServicesMap = Record<string, AddedService[]>
 type QuoteMap = Record<string, QuoteGroup[]>

@@ -6,6 +6,7 @@ import {
   EXTRAS_CATALOG,
   PROMOTIONS,
   ROOM_CAP,
+  roomTypeOptions,
 } from '@/shared/lib/catalogs'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -92,6 +93,23 @@ export function AccommodationPanel({
 
   function unassignGuest(gid: number) {
     setRooms(rooms.map((x) => ({ ...x, guestIds: x.guestIds.filter((id) => id !== gid) })))
+  }
+
+  function addGuestToRoom(roomId: string, gid: number) {
+    if (!gid) return
+    moveGuestToRoom(gid, roomId)
+  }
+
+  function addAllRemainingToRoom(roomId: string) {
+    if (!unassigned.length) return
+    const ids = unassigned.map((g) => g.id)
+    setRooms(
+      rooms.map((x) =>
+        x.id === roomId
+          ? { ...x, guestIds: [...x.guestIds, ...ids.filter((id) => !x.guestIds.includes(id))] }
+          : x,
+      ),
+    )
   }
 
   const tabBtn = (key: AccTab, label: string, badge?: number) => (
@@ -317,12 +335,12 @@ export function AccommodationPanel({
                     }
                   >
                     <SelectTrigger className="h-7 w-auto bg-white text-[12.5px] font-semibold">
-                      <SelectValue />
+                      <SelectValue placeholder="Select room type" />
                     </SelectTrigger>
                     <SelectContent>
-                      {Object.keys(ROOM_CAP).map((t) => (
-                        <SelectItem key={t} value={t}>
-                          {t}
+                      {roomTypeOptions(room.type).map((t) => (
+                        <SelectItem key={t.name} value={t.name}>
+                          {t.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -421,7 +439,7 @@ export function AccommodationPanel({
                 <div className="min-h-10 p-2.5">
                   {room.guestIds.length === 0 ? (
                     <span className="text-[12px] text-[#A1A1A1]">
-                      Empty — drag a guest here to assign.
+                      Empty — pick a guest below or drag one here.
                     </span>
                   ) : (
                     <div className="flex flex-wrap gap-2">
@@ -456,6 +474,33 @@ export function AccommodationPanel({
                       })}
                     </div>
                   )}
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <Select
+                      value={undefined}
+                      onValueChange={(value) => addGuestToRoom(room.id, Number(value))}
+                      disabled={unassigned.length === 0}
+                    >
+                      <SelectTrigger className="h-8 w-auto min-w-[180px] bg-white text-[12.5px]">
+                        <SelectValue placeholder="+ Add guest to this room" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {unassigned.map((g) => (
+                          <SelectItem key={g.id} value={String(g.id)}>
+                            {g.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {unassigned.length > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => addAllRemainingToRoom(room.id)}
+                        className="text-[12.5px] font-semibold text-[#931115]"
+                      >
+                        Add all remaining
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
                 {br.priceRows.length > 0 ? (
                   <div className="border-t border-[#F1F1F3] text-[12.5px]">
@@ -491,7 +536,7 @@ export function AccommodationPanel({
                 ...rooms,
                 {
                   id: `r${Date.now()}`,
-                  type: 'BB Double Hemingway Suite',
+                  type: 'Double Suite',
                   basis: String(draft.basis || 'bb'),
                   rate: 150,
                   qty: 1,

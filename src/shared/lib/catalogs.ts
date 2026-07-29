@@ -182,8 +182,8 @@ export const LOCATION_TREE = [
 
 export const CATALOG: Record<ServiceTab, CatalogItem[]> = {
   accommodation: [
-    { name: 'Hemingways Nairobi', service: 'BB Double Hemingway Suite', location: 'Nairobi', group: 'Hemingways', headOffice: 'Nairobi, Kenya', starred: true },
-    { name: 'Hemingways Watamu', service: 'BB Double Hemingway Suite', location: 'Watamu', group: 'Hemingways', headOffice: 'Nairobi, Kenya', starred: true },
+    { name: 'Hemingways Nairobi', service: 'Double Suite', location: 'Nairobi', group: 'Hemingways', headOffice: 'Nairobi, Kenya', starred: true },
+    { name: 'Hemingways Watamu', service: 'Double Suite', location: 'Watamu', group: 'Hemingways', headOffice: 'Nairobi, Kenya', starred: true },
     { name: 'Elewana Loisaba Tented Camp', service: 'GPKG Double Safari Tent', location: 'Loisaba', group: 'Elewana', headOffice: 'Nairobi, Kenya', starred: true },
     { name: 'Elewana Sand River Masai Mara', service: 'GPKG Family Tent', location: 'Masai Mara', group: 'Elewana', headOffice: 'Nairobi, Kenya', starred: true },
     { name: 'Elewana Serengeti Migration Camp', service: 'GPKG Double Safari Tent', location: 'Serengeti', group: 'Elewana', headOffice: 'Arusha, Tanzania', starred: true },
@@ -238,16 +238,21 @@ export const EXTRAS_CATALOG = [
 ]
 
 /**
- * Room-type capacities for the builder room dropdown.
- * Includes Hemingways suite products (max pax) plus generic types used by other suppliers.
+ * Hemingways room products for the builder dropdown.
+ * Basis (BB / GPKG / FB / …) is chosen separately — these are occupancy only.
  */
+export const ROOM_TYPES = [
+  { name: 'Single Suite', cap: 1 },
+  { name: 'Double Suite', cap: 2 },
+  { name: 'Twin Suite', cap: 2 },
+  { name: 'Triple Suite', cap: 3 },
+  { name: 'Double/Twin Day Room', cap: 2 },
+] as const
+
+/** Capacity lookup for room types (dropdown + any legacy seed labels). */
 export const ROOM_CAP: Record<string, number> = {
-  'BB Double Hemingway Suite': 2,
-  'BB Single Hemingway Suite': 1,
-  'GPKG Double Hemingway Suite': 3,
-  'GPKG Single Hemingway Suite': 3,
-  'GPKG Triple Hemingway Suite': 3,
-  'Hemingway Suite Double/Twin Day Room': 2,
+  ...Object.fromEntries(ROOM_TYPES.map((r) => [r.name, r.cap])),
+  // Labels used by non-Hemingways suppliers and older seeded itineraries
   Single: 1,
   Twin: 2,
   Double: 2,
@@ -255,6 +260,20 @@ export const ROOM_CAP: Record<string, number> = {
   Family: 4,
   'BB Double Deluxe Suite': 2,
   'BB Twin Deluxe Suite': 2,
+  'GPKG Double Safari Tent': 3,
+  'GPKG CIOR (Two Chd 12 to 17.99 yrs)': 2,
+  'GPKG Family Tent': 4,
+  'GPKG Stable Cottage': 3,
+}
+
+/**
+ * Options for a room-type dropdown. Always includes the room's saved type so
+ * editing a service booked against another supplier's product still shows it.
+ */
+export function roomTypeOptions(current?: string): { name: string; cap: number }[] {
+  const options = ROOM_TYPES.map((r) => ({ name: r.name, cap: r.cap }))
+  if (!current || options.some((o) => o.name === current)) return options
+  return [{ name: current, cap: ROOM_CAP[current] ?? 2 }, ...options]
 }
 
 export const BASIS = {
@@ -317,7 +336,7 @@ export const SYSTEM_PRICE = [
   { label: 'Net', value: '$2250' },
   { label: 'Sell', value: '--' },
   { label: 'Discount', value: '--' },
-  { label: 'Specials', value: '--' },
+  { label: 'Special Offer(s)', value: '--' },
   { label: 'Purchase price', value: '$2250' },
   { label: 'CPS margin 30%', value: '$675' },
   { label: 'TC commission', value: '$0' },

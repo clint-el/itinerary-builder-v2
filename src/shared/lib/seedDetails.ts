@@ -399,7 +399,7 @@ function buildCsvSeedServices(it: Itinerary): AddedService[] {
       accommodationSeedPrice(hxNets, [], 30.01),
       [
         { label: 'Location', value: 'Nairobi' },
-        { label: 'Rooms', value: 'BB Double Deluxe Suite, BB Twin Deluxe Suite' },
+        { label: 'Rooms', value: 'Double Suite, Twin Suite' },
         { label: 'Basis', value: 'Bed & Breakfast' },
         { label: 'Dates', value: formatRange('2026-09-01', '2026-09-03') },
         { label: 'Guests', value: '4 pax' },
@@ -407,7 +407,7 @@ function buildCsvSeedServices(it: Itinerary): AddedService[] {
       {
         location: 'Nairobi',
         supplier: 'Hemingways Nairobi',
-        service: 'BB Double Deluxe Suite',
+        service: 'Double Suite',
         start: '2026-09-01',
         end: '2026-09-03',
         basis: 'bb',
@@ -415,7 +415,7 @@ function buildCsvSeedServices(it: Itinerary): AddedService[] {
         rooms: [
           {
             id: 'r1',
-            type: 'BB Double Deluxe Suite',
+            type: 'Double Suite',
             basis: 'bb',
             rate: 765,
             qty: 1,
@@ -425,7 +425,7 @@ function buildCsvSeedServices(it: Itinerary): AddedService[] {
           },
           {
             id: 'r2',
-            type: 'BB Twin Deluxe Suite',
+            type: 'Twin Suite',
             basis: 'bb',
             rate: 765,
             qty: 1,
@@ -436,7 +436,7 @@ function buildCsvSeedServices(it: Itinerary): AddedService[] {
         ],
         extras: [],
         customExtras: [],
-        promotion: null,
+        promotion: 'early-bird',
         holds: [],
         notes: 'Legacy CSV seed — Nairobi arrival nights',
       },
