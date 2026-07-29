@@ -3,6 +3,7 @@ import {
   BASIS,
   EXTRAS_CATALOG,
   GUESTS,
+  roomTypeId,
   TAB_META,
 } from '@/shared/lib/catalogs'
 import { rackOf } from '@/shared/lib/helpers'
@@ -134,7 +135,8 @@ export function guestChipStyle(g: Guest) {
 }
 
 export function asRooms(draft: Record<string, unknown>): Room[] {
-  return (Array.isArray(draft.rooms) ? draft.rooms : []) as Room[]
+  const rooms = (Array.isArray(draft.rooms) ? draft.rooms : []) as Room[]
+  return rooms.map((room) => ({ ...room, type: roomTypeId(room.type) }))
 }
 
 export function asVehicles(draft: Record<string, unknown>): Vehicle[] {
@@ -432,6 +434,7 @@ export function buildAddedService(
     expanded: true,
     draft: structuredClone({
       ...draft,
+      ...(tab === 'accommodation' ? { rooms } : {}),
       ...(tab === 'flight' ? { qty: autoQty } : {}),
     }),
   }

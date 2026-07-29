@@ -415,7 +415,7 @@ function buildCsvSeedServices(it: Itinerary): AddedService[] {
         rooms: [
           {
             id: 'r1',
-            type: 'Double Suite',
+            type: 'hemingways-double-suite',
             basis: 'bb',
             rate: 765,
             qty: 1,
@@ -425,7 +425,7 @@ function buildCsvSeedServices(it: Itinerary): AddedService[] {
           },
           {
             id: 'r2',
-            type: 'Twin Suite',
+            type: 'hemingways-twin-suite',
             basis: 'bb',
             rate: 765,
             qty: 1,
@@ -468,7 +468,7 @@ function buildCsvSeedServices(it: Itinerary): AddedService[] {
         rooms: [
           {
             id: 'r1',
-            type: 'GPKG Double Safari Tent',
+            type: 'elewana-double-safari-tent',
             basis: 'fi',
             rate: 1110.1,
             qty: 1,
@@ -478,7 +478,7 @@ function buildCsvSeedServices(it: Itinerary): AddedService[] {
           },
           {
             id: 'r2',
-            type: 'GPKG CIOR (Two Chd 12 to 17.99 yrs)',
+            type: 'elewana-cior-two-children',
             basis: 'fi',
             rate: 832.58,
             qty: 1,
@@ -539,7 +539,7 @@ function buildCsvSeedServices(it: Itinerary): AddedService[] {
         rooms: [
           {
             id: 'r1',
-            type: 'GPKG Family Tent',
+            type: 'elewana-family-tent',
             basis: 'fi',
             rate: 2586.55,
             qty: 1,
@@ -613,7 +613,7 @@ function buildCsvSeedServices(it: Itinerary): AddedService[] {
         rooms: [
           {
             id: 'r1',
-            type: 'GPKG Double Safari Tent',
+            type: 'elewana-double-safari-tent',
             basis: 'fi',
             rate: 1244.4,
             qty: 1,
@@ -623,7 +623,7 @@ function buildCsvSeedServices(it: Itinerary): AddedService[] {
           },
           {
             id: 'r2',
-            type: 'GPKG CIOR (Two Chd 12 to 17.99 yrs)',
+            type: 'elewana-cior-two-children',
             basis: 'fi',
             rate: 933.3,
             qty: 1,
@@ -706,7 +706,7 @@ function buildCsvSeedServices(it: Itinerary): AddedService[] {
         rooms: [
           {
             id: 'r1',
-            type: 'GPKG Stable Cottage',
+            type: 'elewana-stable-cottage',
             basis: 'fb',
             rate: 1140.7,
             qty: 2,
@@ -1175,7 +1175,7 @@ export function buildSeedServices(it: Itinerary): AddedService[] {
         rooms: [
           {
             id: 'r1',
-            type: 'Double',
+            type: 'generic-double',
             basis: 'fb',
             rate: Math.round(stayPrice / nights / 2),
             qty: 1,

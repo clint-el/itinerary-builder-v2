@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { liveSystemPrice } from '@/shared/lib/catalogs'
+import { liveSystemPrice, roomTypeLabel } from '@/shared/lib/catalogs'
 import { rackOf } from '@/shared/lib/helpers'
 import { Button } from '@/components/ui/button'
 import {
@@ -69,7 +69,7 @@ export function PricingSection({
     guests,
   )
   const discount = Number(draft.discount) || 0
-  const systemPrice = liveSystemPrice(net, rack, discount)
+  const systemPrice = liveSystemPrice(net, rack, discount, String(draft.promotion || '') || null)
 
   const liveRows: {
     id?: string
@@ -123,7 +123,7 @@ export function PricingSection({
             : overrideOn
               ? pricingRows.map((r) => ({
                   id: r.id,
-                  type: r.type,
+                  type: roomTypeLabel(r.type),
                   charge: r.charge,
                   net: r.net,
                   rack: r.rack,

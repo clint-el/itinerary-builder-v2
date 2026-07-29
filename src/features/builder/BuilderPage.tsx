@@ -196,6 +196,7 @@ export function BuilderPage() {
     draftTotals.net,
     draftTotals.rack,
     Number(draft.discount) || 0,
+    String(draft.promotion || '') || null,
   )
   const footerNet = footerRows.find((x) => x.label === 'Net')?.value || '$0.00'
   const footerClient =

@@ -164,7 +164,7 @@ export function TransportationPanel({
           {isHire ? (
             <>
               <div className="grid gap-1.5">
-                <Label>Hire start</Label>
+                <Label>Start</Label>
                 <DatePickerGridInput
                   value={String(draft.hireStart || '')}
                   onChange={(value) => patch({ hireStart: value })}
@@ -172,7 +172,7 @@ export function TransportationPanel({
                 />
               </div>
               <div className="grid gap-1.5">
-                <Label>Hire end</Label>
+                <Label>End</Label>
                 <DatePickerGridInput
                   value={String(draft.hireEnd || '')}
                   onChange={(value) => patch({ hireEnd: value })}
@@ -235,10 +235,10 @@ export function TransportationPanel({
           <div className="mb-3 flex items-center justify-between">
             <div>
               <h3 className="text-[13px] font-bold uppercase tracking-wide text-[#475569]">
-                Hire routes
+                Routes
               </h3>
               <p className="text-[11.5px] text-[#94A3B8]">
-                Key in each leg of the hire — date, route and times
+                Key in each leg — date, route and times
               </p>
             </div>
             <Button
@@ -266,7 +266,7 @@ export function TransportationPanel({
           </div>
 
           {hireRoutes.length === 0 ? (
-            <p className="text-[12.5px] text-[#A1A1A1]">No routes yet — add the first leg of the hire.</p>
+            <p className="text-[12.5px] text-[#A1A1A1]">No routes yet — add the first leg.</p>
           ) : (
             <div className="space-y-3">
               {hireRoutes.map((r, i) => (

@@ -5,7 +5,8 @@ import {
   CATALOG,
   DESTINATIONS,
   EXTRAS_CATALOG,
-  ROOM_CAP,
+  roomTypeCapacity,
+  roomTypeId,
   roomTypeOptions,
   VEHICLE_TYPES,
 } from '@/shared/lib/catalogs'
@@ -227,7 +228,7 @@ export function AddServiceOverlay({
       setRooms([
         {
           id: uid('rm'),
-          type: 'Double Suite',
+          type: 'hemingways-double-suite',
           basis: 'fb',
           rate: 390,
           guestIds: party.slice(0, 2).map((g) => g.id),
@@ -243,7 +244,7 @@ export function AddServiceOverlay({
       ...prev,
       {
         id: uid('rm'),
-        type: 'Double Suite',
+        type: 'hemingways-double-suite',
         basis: 'fb',
         rate: 390,
         guestIds: [],
@@ -257,7 +258,7 @@ export function AddServiceOverlay({
     setRooms((prev) =>
       prev.map((r) => {
         if (r.id !== roomId) return r
-        const cap = ROOM_CAP[r.type] ?? 2
+        const cap = roomTypeCapacity(r.type)
         const has = r.guestIds.includes(guestId)
         if (has) return { ...r, guestIds: r.guestIds.filter((id) => id !== guestId) }
         if (r.guestIds.length >= cap) return r
@@ -696,7 +697,7 @@ export function AddServiceOverlay({
                         <div className="mb-2 flex flex-wrap items-center gap-2">
                           <span className="text-xs font-bold text-[#525252]">Room {idx + 1}</span>
                           <Select
-                            value={room.type}
+                            value={roomTypeId(room.type)}
                             onValueChange={(value) =>
                               setRooms((prev) =>
                                 prev.map((r) => (r.id === room.id ? { ...r, type: value } : r)),
@@ -708,7 +709,7 @@ export function AddServiceOverlay({
                             </SelectTrigger>
                             <SelectContent>
                             {roomTypeOptions(room.type).map((t) => (
-                              <SelectItem key={t.name} value={t.name}>
+                              <SelectItem key={t.id} value={t.id}>
                                 {t.name}
                               </SelectItem>
                             ))}

@@ -5,7 +5,8 @@ import {
   BASIS_OPTIONS,
   EXTRAS_CATALOG,
   PROMOTIONS,
-  ROOM_CAP,
+  roomTypeCapacity,
+  roomTypeId,
   roomTypeOptions,
 } from '@/shared/lib/catalogs'
 import { Button } from '@/components/ui/button'
@@ -308,7 +309,7 @@ export function AccommodationPanel({
 
           {rooms.map((room, i) => {
             const qty = roomQty(room)
-            const cap = (ROOM_CAP[room.type] || 2) * qty
+            const cap = roomTypeCapacity(room.type) * qty
             const over = room.guestIds.length > cap
             const br = roomPriceBreakdown(room, start, end, guests)
             const datesDiffer =
@@ -329,7 +330,7 @@ export function AccommodationPanel({
                     {i + 1}
                   </span>
                   <Select
-                    value={room.type}
+                    value={roomTypeId(room.type)}
                     onValueChange={(value) =>
                       setRooms(rooms.map((x) => (x.id === room.id ? { ...x, type: value } : x)))
                     }
@@ -339,7 +340,7 @@ export function AccommodationPanel({
                     </SelectTrigger>
                     <SelectContent>
                       {roomTypeOptions(room.type).map((t) => (
-                        <SelectItem key={t.name} value={t.name}>
+                        <SelectItem key={t.id} value={t.id}>
                           {t.name}
                         </SelectItem>
                       ))}
@@ -480,7 +481,7 @@ export function AccommodationPanel({
                       onValueChange={(value) => addGuestToRoom(room.id, Number(value))}
                       disabled={unassigned.length === 0}
                     >
-                      <SelectTrigger className="h-8 w-auto min-w-[180px] bg-white text-[12.5px]">
+                      <SelectTrigger className="h-8 w-auto min-w-45 bg-white text-[12.5px]">
                         <SelectValue placeholder="+ Add guest to this room" />
                       </SelectTrigger>
                       <SelectContent>
@@ -536,7 +537,7 @@ export function AccommodationPanel({
                 ...rooms,
                 {
                   id: `r${Date.now()}`,
-                  type: 'Double Suite',
+                  type: 'hemingways-double-suite',
                   basis: String(draft.basis || 'bb'),
                   rate: 150,
                   qty: 1,

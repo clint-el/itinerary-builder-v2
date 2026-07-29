@@ -237,43 +237,76 @@ export const EXTRAS_CATALOG = [
   { id: 'executive-room-supplement', title: "Supplement — Hemingway's Executive Room", price: 75 },
 ]
 
-/**
- * Hemingways room products for the builder dropdown.
- * Basis (BB / GPKG / FB / …) is chosen separately — these are occupancy only.
- */
-export const ROOM_TYPES = [
-  { name: 'Single Suite', cap: 1 },
-  { name: 'Double Suite', cap: 2 },
-  { name: 'Twin Suite', cap: 2 },
-  { name: 'Triple Suite', cap: 3 },
-  { name: 'Double/Twin Day Room', cap: 2 },
-] as const
-
-/** Capacity lookup for room types (dropdown + any legacy seed labels). */
-export const ROOM_CAP: Record<string, number> = {
-  ...Object.fromEntries(ROOM_TYPES.map((r) => [r.name, r.cap])),
-  // Labels used by non-Hemingways suppliers and older seeded itineraries
-  Single: 1,
-  Twin: 2,
-  Double: 2,
-  Triple: 3,
-  Family: 4,
-  'BB Double Deluxe Suite': 2,
-  'BB Twin Deluxe Suite': 2,
-  'GPKG Double Safari Tent': 3,
-  'GPKG CIOR (Two Chd 12 to 17.99 yrs)': 2,
-  'GPKG Family Tent': 4,
-  'GPKG Stable Cottage': 3,
+export type RoomTypeOption = {
+  id: string
+  name: string
+  cap: number
+  supplier: 'Hemingways' | 'Elewana' | 'Generic'
+  legacyNames?: readonly string[]
 }
 
 /**
- * Options for a room-type dropdown. Always includes the room's saved type so
- * editing a service booked against another supplier's product still shows it.
+ * Stable room-product catalog. Room.type persists the id; names are display
+ * values only and can change without invalidating saved itinerary records.
  */
-export function roomTypeOptions(current?: string): { name: string; cap: number }[] {
-  const options = ROOM_TYPES.map((r) => ({ name: r.name, cap: r.cap }))
-  if (!current || options.some((o) => o.name === current)) return options
-  return [{ name: current, cap: ROOM_CAP[current] ?? 2 }, ...options]
+export const ROOM_TYPE_CATALOG: readonly RoomTypeOption[] = [
+  { id: 'hemingways-single-suite', name: 'Single Suite', cap: 1, supplier: 'Hemingways', legacyNames: ['BB Single Hemingway Suite', 'GPKG Single Hemingway Suite'] },
+  { id: 'hemingways-double-suite', name: 'Double Suite', cap: 2, supplier: 'Hemingways', legacyNames: ['BB Double Hemingway Suite', 'GPKG Double Hemingway Suite', 'BB Double Deluxe Suite'] },
+  { id: 'hemingways-twin-suite', name: 'Twin Suite', cap: 2, supplier: 'Hemingways', legacyNames: ['BB Twin Deluxe Suite'] },
+  { id: 'hemingways-triple-suite', name: 'Triple Suite', cap: 3, supplier: 'Hemingways', legacyNames: ['GPKG Triple Hemingway Suite'] },
+  { id: 'hemingways-day-room', name: 'Double/Twin Day Room', cap: 2, supplier: 'Hemingways', legacyNames: ['Hemingway Suite Double/Twin Day Room'] },
+  { id: 'elewana-double-safari-tent', name: 'GPKG Double Safari Tent', cap: 3, supplier: 'Elewana' },
+  { id: 'elewana-cior-two-children', name: 'GPKG CIOR (Two Chd 12 to 17.99 yrs)', cap: 2, supplier: 'Elewana' },
+  { id: 'elewana-family-tent', name: 'GPKG Family Tent', cap: 4, supplier: 'Elewana' },
+  { id: 'elewana-stable-cottage', name: 'GPKG Stable Cottage', cap: 3, supplier: 'Elewana' },
+  { id: 'generic-single', name: 'Single', cap: 1, supplier: 'Generic' },
+  { id: 'generic-twin', name: 'Twin', cap: 2, supplier: 'Generic' },
+  { id: 'generic-double', name: 'Double', cap: 2, supplier: 'Generic' },
+  { id: 'generic-triple', name: 'Triple', cap: 3, supplier: 'Generic' },
+  { id: 'generic-family', name: 'Family', cap: 4, supplier: 'Generic' },
+]
+
+/** Default options shown for a new Hemingways room. */
+export const ROOM_TYPES = ROOM_TYPE_CATALOG.filter((room) => room.supplier === 'Hemingways')
+
+export function resolveRoomType(value?: string): RoomTypeOption | undefined {
+  if (!value) return undefined
+  return ROOM_TYPE_CATALOG.find(
+    (room) =>
+      room.id === value ||
+      room.name === value ||
+      room.legacyNames?.includes(value),
+  )
+}
+
+export function roomTypeId(value?: string): string {
+  return resolveRoomType(value)?.id ?? value ?? ''
+}
+
+export function roomTypeLabel(value?: string): string {
+  return resolveRoomType(value)?.name ?? value ?? 'Room'
+}
+
+export function roomTypeCapacity(value?: string): number {
+  return resolveRoomType(value)?.cap ?? 2
+}
+
+/**
+ * New rooms show Hemingways products. Existing non-Hemingways or legacy rooms
+ * prepend their resolved product so their saved selection remains visible.
+ */
+export function roomTypeOptions(current?: string): RoomTypeOption[] {
+  const selected = resolveRoomType(current)
+  if (!current || (selected && ROOM_TYPES.some((room) => room.id === selected.id))) {
+    return [...ROOM_TYPES]
+  }
+  if (!selected) {
+    return [
+      { id: current, name: current, cap: 2, supplier: 'Generic' },
+      ...ROOM_TYPES,
+    ]
+  }
+  return [selected, ...ROOM_TYPES]
 }
 
 export const BASIS = {
@@ -343,17 +376,36 @@ export const SYSTEM_PRICE = [
   { label: 'Client price', value: '$3263', strong: true },
 ] as const
 
-/** Build a live system-price summary from draft net/rack + discount. */
-export function liveSystemPrice(net: number, rack: number, discount: number) {
-  const client = Math.max(0, rack - (discount || 0))
+/** Build a live system-price summary from draft net/rack + discount + special offer. */
+export function liveSystemPrice(
+  net: number,
+  rack: number,
+  discount: number,
+  promotionId?: string | null,
+) {
+  const promo = PROMOTIONS.find((p) => p.id === promotionId)
+  let specialAmount = 0
+  let specialValue = '--'
+  if (promo?.id === 'early-bird') {
+    specialAmount = Math.round(rack * 0.1 * 100) / 100
+    specialValue = `−${formatUsdStatic(specialAmount)}`
+  } else if (promo?.id === 'stay-more') {
+    specialValue = promo.title
+  } else if (promo?.id === 'honeymoon') {
+    specialValue = promo.title
+  } else if (promo) {
+    specialValue = promo.title
+  }
+
+  const client = Math.max(0, rack - (discount || 0) - specialAmount)
   const margin = client - net
   const marginPct = client > 0 ? Math.round((margin / client) * 100) : 0
   return [
     { label: 'Rack', value: formatUsdStatic(rack) },
     { label: 'Net', value: formatUsdStatic(net) },
-    { label: 'Sell', value: formatUsdStatic(client) },
+    { label: 'Sell', value: formatUsdStatic(Math.max(0, rack - (discount || 0))) },
     { label: 'Discount', value: discount ? formatUsdStatic(discount) : '--' },
-    { label: 'Specials', value: '--' },
+    { label: 'Special Offer(s)', value: specialValue },
     { label: 'Purchase price', value: formatUsdStatic(net) },
     {
       label: `CPS margin ${marginPct}%`,

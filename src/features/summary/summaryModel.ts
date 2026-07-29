@@ -1,4 +1,5 @@
 import { nightsBetween, parseMoney, rackOf } from '@/shared/lib/helpers'
+import { roomTypeLabel } from '@/shared/lib/catalogs'
 import type { AddedService, QuoteGroup, ServiceTab } from '@/shared/lib/types'
 import { formatUsd } from '@/shared/lib/utils'
 import {
@@ -388,7 +389,7 @@ export function linesFromServices(services: AddedService[]): SummaryLine[] {
             type,
             date: rStart,
             supplier,
-            roomType: room.type || 'Room',
+            roomType: roomTypeLabel(room.type),
             basis: String(room.basis || defaultBasis).toUpperCase(),
             rooms: roomQty(room),
             pax: room.guestIds.length,

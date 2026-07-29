@@ -79,6 +79,7 @@ export interface Guest {
 
 export interface Room {
   id: string
+  /** Stable room-product id from ROOM_TYPE_CATALOG (legacy labels are normalized on read). */
   type: string
   basis: string
   rate: number

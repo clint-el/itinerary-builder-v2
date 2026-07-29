@@ -214,7 +214,7 @@ export function RightPane({
                       <span className="text-[13px] font-bold text-[#171717]">{svc.priceLabel}</span>
                     </div>
                     <div className="mt-0.5 flex items-center justify-between">
-                      <span className="text-[11px] text-[#A1A1A1]">Cost (Nett) / Sell (Rack)</span>
+                      <span className="text-[11px] text-[#A1A1A1]">Cost / Sell</span>
                       <span className="text-[11.5px] font-semibold text-[#171717]">
                         {netLabel} / {rackLabel}
                       </span>
