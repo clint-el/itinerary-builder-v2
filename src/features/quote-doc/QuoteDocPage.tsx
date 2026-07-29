@@ -359,17 +359,42 @@ export function QuoteDocPage() {
   }
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-[#3F3F46]">
+    <div className="qd-shell flex h-screen flex-col overflow-hidden bg-[#3F3F46]">
       <style>{`
         @media print {
-          body * { visibility: hidden; }
-          .qd-print-area, .qd-print-area * { visibility: visible; }
-          .qd-print-area { position: absolute; inset: 0; transform: none !important; }
-          .qd-page { box-shadow: none !important; margin-top: 0 !important; break-after: page; }
+          @page { size: A4; margin: 0; }
+          html, body {
+            height: auto !important;
+            overflow: visible !important;
+            background: #FFFFFF !important;
+          }
+          body, .qd-print-area, .qd-print-area * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .qd-chrome { display: none !important; }
+          .qd-shell, .qd-scroll {
+            height: auto !important;
+            overflow: visible !important;
+            padding: 0 !important;
+            background: #FFFFFF !important;
+          }
+          .qd-print-area {
+            transform: none !important;
+            width: auto !important;
+            margin: 0 !important;
+          }
+          .qd-page {
+            box-shadow: none !important;
+            margin: 0 !important;
+            break-after: page;
+            break-inside: avoid;
+          }
+          .qd-page:last-of-type { break-after: auto; }
         }
       `}</style>
 
-      <div className="relative z-20 flex h-14 shrink-0 items-center gap-3.5 border-b bg-white px-4">
+      <div className="qd-chrome relative z-20 flex h-14 shrink-0 items-center gap-3.5 border-b bg-white px-4">
         <button
           type="button"
           onClick={() => navigate(`/summary/${id}`)}
@@ -453,7 +478,7 @@ export function QuoteDocPage() {
       </div>
 
       {pendingHolds > 0 && !warningDismissed ? (
-        <div className="flex shrink-0 items-center gap-2.5 border-b border-[#FDE68A] bg-[#FEF3C7] px-4 py-2.5">
+        <div className="qd-chrome flex shrink-0 items-center gap-2.5 border-b border-[#FDE68A] bg-[#FEF3C7] px-4 py-2.5">
           <TriangleAlert className="size-4 shrink-0 text-[#92400E]" />
           <span className="text-[12.5px] font-semibold text-[#92400E]">
             {pendingHolds} service hold{pendingHolds === 1 ? '' : 's'} on this itinerary. Confirm before the agent accepts.
@@ -466,8 +491,8 @@ export function QuoteDocPage() {
         </div>
       ) : null}
 
-      <div className="flex min-h-0 flex-1">
-        <div className="w-[132px] shrink-0 overflow-y-auto border-r border-[#18181B] bg-[#27272A] py-4">
+      <div className="qd-shell flex min-h-0 flex-1">
+        <div className="qd-chrome w-[132px] shrink-0 overflow-y-auto border-r border-[#18181B] bg-[#27272A] py-4">
           {pageDefs.map((page, index) => {
             const active = activePage === page.key
             return (
@@ -494,7 +519,7 @@ export function QuoteDocPage() {
           })}
         </div>
 
-        <div ref={viewportRef} className="min-w-0 flex-1 overflow-auto py-7">
+        <div ref={viewportRef} className="qd-scroll min-w-0 flex-1 overflow-auto py-7">
           <div className="qd-print-area mx-auto flex w-[794px] flex-col items-center" style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top center' }}>
             <section data-qd-page="1" className="qd-page flex h-[1123px] w-[794px] shrink-0 flex-col overflow-hidden bg-white shadow-[0_12px_32px_rgba(0,0,0,0.35)]">
               <div className="relative h-[470px] shrink-0 overflow-hidden bg-[#E7E5E4]">
@@ -656,7 +681,7 @@ export function QuoteDocPage() {
         </div>
       </div>
       {flash ? (
-        <div className="fixed bottom-6 right-6 z-[95] flex items-center gap-2.5 rounded-lg bg-[#171717] px-4.5 py-3 text-[13.5px] font-semibold text-white shadow-2xl">
+        <div className="qd-chrome fixed bottom-6 right-6 z-[95] flex items-center gap-2.5 rounded-lg bg-[#171717] px-4.5 py-3 text-[13.5px] font-semibold text-white shadow-2xl">
           <span className="text-[#00D492]">✓</span>{flash}
         </div>
       ) : null}

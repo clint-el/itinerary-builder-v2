@@ -1,0 +1,13 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# Client-side routing: every unmatched path must serve index.html so
+# react-router can resolve it instead of Netlify returning its own 404.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
