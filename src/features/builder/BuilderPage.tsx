@@ -38,7 +38,9 @@ import {
   asRooms,
   buildAddedService,
   computeDraftTotals,
+  draftMissingRequirements,
   roomPriceBreakdown,
+  sortServicesByDate,
   type AuditEntry,
   type PricingRow,
 } from './builderUtils'
@@ -114,6 +116,7 @@ export function BuilderPage() {
   }
 
   function doAdd() {
+    if (draftMissingRequirements(activeTab, draft).length > 0) return
     const card = buildAddedService(
       activeTab,
       { ...draft, priceOverride: pricingOverride },
@@ -121,7 +124,7 @@ export function BuilderPage() {
       pricingOverride ? pricingRows : undefined,
       guests,
     )
-    const next = [...services, card]
+    const next = sortServicesByDate([...services, card])
     setServices(next)
     setSeq((s) => s + 1)
     setDrafts((prev) => ({ ...prev, [activeTab]: defaultDraft(activeTab) }))
@@ -130,6 +133,7 @@ export function BuilderPage() {
   }
 
   function addToItinerary() {
+    if (draftMissingRequirements(activeTab, draft).length > 0) return
     if (
       activeTab === 'accommodation' &&
       PROMOTIONS.find((p) => p.id === draft.promotion && p.active)
@@ -186,6 +190,8 @@ export function BuilderPage() {
   }
 
   const promo = PROMOTIONS.find((p) => p.id === draft.promotion)
+  const missingRequirements = draftMissingRequirements(activeTab, draft)
+  const canAdd = missingRequirements.length === 0
   const draftTotals = computeDraftTotals(
     activeTab,
     { ...draft, priceOverride: pricingOverride },
@@ -371,33 +377,45 @@ export function BuilderPage() {
           </div>
 
           <div className="flex shrink-0 items-center justify-between gap-4 border-t border-[#E5E7EB] bg-white px-6 py-3">
-            <div className="flex items-center gap-5 rounded-md bg-[#F3F4F6] px-4 py-2">
-              <div>
-                <p className="mb-0.5 text-[11px] font-semibold uppercase tracking-[0.3px] text-[#A1A1A1]">
-                  Supplier Net
-                </p>
-                <span className="text-[15px] font-bold text-[#171717]">{footerNet}</span>
+            <div className="flex min-w-0 flex-1 items-center gap-5">
+              <div className="flex items-center gap-5 rounded-md bg-[#F3F4F6] px-4 py-2">
+                <div>
+                  <p className="mb-0.5 text-[11px] font-semibold uppercase tracking-[0.3px] text-[#A1A1A1]">
+                    Supplier Net
+                  </p>
+                  <span className="text-[15px] font-bold text-[#171717]">{footerNet}</span>
+                </div>
+                <div>
+                  <p className="mb-0.5 text-[11px] font-semibold uppercase tracking-[0.3px] text-[#A1A1A1]">
+                    Client Pays
+                  </p>
+                  <span className="text-[15px] font-bold text-[#171717]">{footerClient}</span>
+                </div>
+                <div>
+                  <p className="mb-0.5 text-[11px] font-semibold uppercase tracking-[0.3px] text-[#A1A1A1]">
+                    Discount
+                  </p>
+                  <input
+                    type="number"
+                    min={0}
+                    value={Number(draft.discount) || ''}
+                    onChange={(e) => patchDraft({ discount: Number(e.target.value) || 0 })}
+                    className="h-[22px] w-[70px] rounded-[5px] border border-[#E5E7EB] px-1.5 text-[13px] font-semibold text-[#171717]"
+                  />
+                </div>
               </div>
-              <div>
-                <p className="mb-0.5 text-[11px] font-semibold uppercase tracking-[0.3px] text-[#A1A1A1]">
-                  Client Pays
+              {!canAdd ? (
+                <p className="min-w-0 truncate text-[12px] text-[#B45309]" title={missingRequirements.join(', ')}>
+                  Required: {missingRequirements.join(', ')}
                 </p>
-                <span className="text-[15px] font-bold text-[#171717]">{footerClient}</span>
-              </div>
-              <div>
-                <p className="mb-0.5 text-[11px] font-semibold uppercase tracking-[0.3px] text-[#A1A1A1]">
-                  Discount
-                </p>
-                <input
-                  type="number"
-                  min={0}
-                  value={Number(draft.discount) || ''}
-                  onChange={(e) => patchDraft({ discount: Number(e.target.value) || 0 })}
-                  className="h-[22px] w-[70px] rounded-[5px] border border-[#E5E7EB] px-1.5 text-[13px] font-semibold text-[#171717]"
-                />
-              </div>
+              ) : null}
             </div>
-            <Button className="h-[38px] bg-[#931115] px-5 hover:bg-[#7a0e12]" onClick={addToItinerary}>
+            <Button
+              className="h-[38px] shrink-0 bg-[#931115] px-5 hover:bg-[#7a0e12] disabled:opacity-50"
+              disabled={!canAdd}
+              title={canAdd ? undefined : `Fill required fields: ${missingRequirements.join(', ')}`}
+              onClick={addToItinerary}
+            >
               Add to itinerary
             </Button>
           </div>

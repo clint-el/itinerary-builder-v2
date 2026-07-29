@@ -5,6 +5,7 @@ import {
   CATALOG,
   DESTINATIONS,
   EXTRAS_CATALOG,
+  extrasForTab,
   roomTypeCapacity,
   roomTypeId,
   roomTypeOptions,
@@ -134,7 +135,11 @@ export function AddServiceOverlay({
   const [rooms, setRooms] = useState<Room[]>([])
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [activities, setActivities] = useState<ActivityItem[]>([])
-  const [selectedExtras, setSelectedExtras] = useState<string[]>(['conservancy'])
+  const [selectedExtras, setSelectedExtras] = useState<string[]>(() =>
+    extrasForTab('accommodation')
+      .filter((e) => e.mandatory)
+      .map((e) => e.id),
+  )
   const [holds, setHolds] = useState<Hold[]>([])
   const [discount, setDiscount] = useState(0)
   const [toastMsg, setToastMsg] = useState('')
@@ -143,6 +148,13 @@ export function AddServiceOverlay({
   const meta = TYPE_META[searchType]
   const catalog = CATALOG[tab]
   const nights = nightsBetween(startDate, endDate)
+  const tabExtras = extrasForTab(tab)
+
+  useEffect(() => {
+    setSelectedExtras(tabExtras.filter((e) => e.mandatory).map((e) => e.id))
+    // Reset extras when the service type changes so lodging items don't stick on transport.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab])
 
   const ready =
     !!supplier &&
@@ -165,7 +177,11 @@ export function AddServiceOverlay({
     setRooms([])
     setVehicles([])
     setActivities([])
-    setSelectedExtras(['conservancy'])
+    setSelectedExtras(
+      extrasForTab('accommodation')
+        .filter((e) => e.mandatory)
+        .map((e) => e.id),
+    )
     setHolds([])
     setDiscount(0)
     setToastMsg('')
@@ -192,7 +208,11 @@ export function AddServiceOverlay({
     setRooms([])
     setVehicles([])
     setActivities([])
-    setSelectedExtras(tab === 'accommodation' || keepType ? ['conservancy'] : [])
+    setSelectedExtras(
+      (tab === 'accommodation' || keepType ? extrasForTab('accommodation') : extrasForTab(tab))
+        .filter((e) => e.mandatory)
+        .map((e) => e.id),
+    )
     setHolds([])
     setDiscount(0)
   }
@@ -853,7 +873,7 @@ export function AddServiceOverlay({
               <section className="border-b border-dashed border-[#E5E7EB] px-6 py-4">
                 <span className="mb-3 block text-sm font-semibold text-[#171717]">Extras</span>
                 <div className="flex flex-col gap-2">
-                  {EXTRAS_CATALOG.map((ex) => {
+                  {tabExtras.map((ex) => {
                     const checked = selectedExtras.includes(ex.id)
                     return (
                       <label

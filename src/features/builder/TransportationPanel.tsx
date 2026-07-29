@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Plus, RefreshCw, Trash2 } from 'lucide-react'
-import { EXTRAS_CATALOG, VEHICLE_TYPES } from '@/shared/lib/catalogs'
+import { extrasForTab, VEHICLE_TYPES } from '@/shared/lib/catalogs'
 import { rackOf } from '@/shared/lib/helpers'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -641,7 +641,9 @@ export function TransportationPanel({
           <p className="text-[11px] font-semibold uppercase tracking-wide text-[#A1A1A1]">
             Catalog
           </p>
-          {EXTRAS_CATALOG.filter((c) => !extraIds.includes(c.id)).map((c) => (
+          {extrasForTab('transportation')
+            .filter((c) => !extraIds.includes(c.id))
+            .map((c) => (
             <button
               key={c.id}
               type="button"

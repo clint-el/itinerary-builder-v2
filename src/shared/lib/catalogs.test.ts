@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  extrasForTab,
   roomTypeCapacity,
   roomTypeId,
   roomTypeLabel,
@@ -26,5 +27,32 @@ describe('room type catalog', () => {
       id: 'Supplier Legacy Room',
       name: 'Supplier Legacy Room',
     })
+  })
+})
+
+describe('extrasForTab', () => {
+  it('returns only transportation extras for vehicles', () => {
+    const ids = extrasForTab('transportation').map((e) => e.id)
+    expect(ids).toEqual(
+      expect.arrayContaining([
+        'drivers-lunch-box',
+        'after-hours-transfer',
+        'exclusive-vehicle',
+        'child-seat',
+        'flight-transfers',
+        'drinks-supplement',
+      ]),
+    )
+    expect(ids).not.toContain('spa-treatments')
+    expect(ids).not.toContain('executive-room-supplement')
+    expect(ids).not.toContain('conservancy')
+  })
+
+  it('keeps lodging extras on accommodation', () => {
+    const ids = extrasForTab('accommodation').map((e) => e.id)
+    expect(ids).toContain('conservancy')
+    expect(ids).toContain('spa-treatments')
+    expect(ids).not.toContain('child-seat')
+    expect(ids).not.toContain('drivers-lunch-box')
   })
 })

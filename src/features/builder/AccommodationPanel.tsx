@@ -3,8 +3,8 @@ import {
   BASIS,
   BASIS_DETAILS,
   BASIS_OPTIONS,
-  EXTRAS_CATALOG,
   PROMOTIONS,
+  extrasForTab,
   roomTypeCapacity,
   roomTypeId,
   roomTypeOptions,
@@ -604,7 +604,9 @@ export function AccommodationPanel({
               Catalog
             </p>
             <div className="space-y-1.5">
-              {EXTRAS_CATALOG.filter((c) => !extraIds.includes(c.id)).map((c) => (
+              {extrasForTab('accommodation')
+                .filter((c) => !extraIds.includes(c.id))
+                .map((c) => (
                 <button
                   key={c.id}
                   type="button"

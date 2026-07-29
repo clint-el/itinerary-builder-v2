@@ -439,3 +439,105 @@ export function buildAddedService(
     }),
   }
 }
+
+function missing(value: unknown) {
+  return !String(value ?? '').trim()
+}
+
+/** Required fields that must be set before a draft can be added to the itinerary. */
+export function draftMissingRequirements(
+  tab: ServiceTab,
+  draft: Record<string, unknown>,
+): string[] {
+  const needed: string[] = []
+
+  if (tab === 'accommodation') {
+    if (missing(draft.location)) needed.push('Location')
+    if (missing(draft.supplier)) needed.push('Supplier')
+    if (missing(draft.service)) needed.push('Service')
+    if (missing(draft.start)) needed.push('Start date')
+    if (missing(draft.end)) needed.push('End date')
+    if (asRooms(draft).length === 0) needed.push('At least one room')
+    return needed
+  }
+
+  if (tab === 'transportation') {
+    if (missing(draft.location)) needed.push('Location')
+    if (missing(draft.supplier)) needed.push('Supplier')
+    if (missing(draft.service)) needed.push('Service')
+    if (draft.transMode === 'hire') {
+      if (missing(draft.hireStart)) needed.push('Start date')
+      if (missing(draft.hireEnd)) needed.push('End date')
+      if (asVehicles(draft).length === 0) needed.push('At least one vehicle')
+      if (asHireRoutes(draft).length === 0) needed.push('At least one route')
+    } else {
+      if (missing(draft.transDate)) needed.push('Transfer date')
+      if (missing(draft.pickup)) needed.push('Pickup')
+      if (missing(draft.dropoff)) needed.push('Drop-off')
+    }
+    return needed
+  }
+
+  if (tab === 'flight') {
+    if (missing(draft.location)) needed.push('Location')
+    if (missing(draft.supplier)) needed.push('Supplier')
+    if (missing(draft.service)) needed.push('Service')
+    if (missing(draft.departDate)) needed.push('Departure date')
+    if (draft.flightMode === 'return' && missing(draft.returnDate)) needed.push('Return date')
+    return needed
+  }
+
+  if (tab === 'activity') {
+    if (missing(draft.location)) needed.push('Location')
+    if (missing(draft.supplier)) needed.push('Supplier')
+    if (missing(draft.service)) needed.push('Service')
+    if (asActivities(draft).length === 0) needed.push('At least one activity')
+    return needed
+  }
+
+  // other
+  if (missing(draft.supplier) && missing(draft.description)) needed.push('Supplier or description')
+  if (missing(draft.startDate)) needed.push('Start date')
+  if (asActivities(draft).length === 0 && !(Number(draft.qty) > 0 && Number(draft.price) > 0)) {
+    needed.push('At least one item or a priced quantity')
+  }
+  return needed
+}
+
+export function canAddDraft(tab: ServiceTab, draft: Record<string, unknown>) {
+  return draftMissingRequirements(tab, draft).length === 0
+}
+
+function firstDate(...values: unknown[]) {
+  for (const value of values) {
+    const text = String(value ?? '').trim()
+    if (text) return text
+  }
+  return ''
+}
+
+/** The date a service starts on, used to keep the itinerary in chronological order. */
+export function serviceStartDate(service: AddedService): string {
+  const d = (service.draft || {}) as Record<string, unknown>
+  if (service.tab === 'accommodation') return firstDate(d.start)
+  if (service.tab === 'transportation') {
+    return d.transMode === 'hire' ? firstDate(d.hireStart) : firstDate(d.transDate)
+  }
+  if (service.tab === 'flight') return firstDate(d.departDate)
+  return firstDate(d.startDate, asActivities(d)[0]?.start)
+}
+
+/**
+ * Chronological order by start date. Dateless services sort last, and the sort
+ * is stable so services sharing a date keep their existing relative order.
+ */
+export function sortServicesByDate(services: AddedService[]): AddedService[] {
+  return services.slice().sort((a, b) => {
+    const dateA = serviceStartDate(a)
+    const dateB = serviceStartDate(b)
+    if (!dateA && !dateB) return 0
+    if (!dateA) return 1
+    if (!dateB) return -1
+    return dateA.localeCompare(dateB)
+  })
+}

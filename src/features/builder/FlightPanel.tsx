@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
-import { EXTRAS_CATALOG, PROMOTIONS } from '@/shared/lib/catalogs'
+import { PROMOTIONS, extrasForTab } from '@/shared/lib/catalogs'
 import { rackOf } from '@/shared/lib/helpers'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -338,7 +338,9 @@ export function FlightPanel({
           <p className="text-[11px] font-semibold uppercase tracking-wide text-[#A1A1A1]">
             Catalog
           </p>
-          {EXTRAS_CATALOG.filter((c) => !extraIds.includes(c.id)).map((c) => (
+          {extrasForTab('flight')
+            .filter((c) => !extraIds.includes(c.id))
+            .map((c) => (
             <button
               key={c.id}
               type="button"

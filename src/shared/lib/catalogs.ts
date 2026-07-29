@@ -221,21 +221,38 @@ export const CATALOG: Record<ServiceTab, CatalogItem[]> = {
   ],
 }
 
+export type ExtraCatalogItem = {
+  id: string
+  title: string
+  price: number
+  mandatory?: boolean
+  /** Service tabs that can pick this extra. Defaults to accommodation. */
+  tabs?: ServiceTab[]
+}
+
 /** Hemingways extras portfolio — avg prices from live booking history. */
-export const EXTRAS_CATALOG = [
-  { id: 'garden-buffet-lunch', title: 'Garden Buffet Lunch Adult (N)', price: 28 },
-  { id: 'beverage-tz', title: 'Beverage TZ', price: 103 },
-  { id: 'dinner-voucher', title: 'Dinner Voucher Adult (N)', price: 43 },
-  { id: 'curio-shop', title: 'Curio Shop (TZ) USD', price: 231 },
-  { id: 'dinner', title: 'Dinner', price: 159 },
-  { id: 'drinks-supplement', title: 'Drinks Supplement TZ', price: 61 },
-  { id: 'lunch', title: 'Lunch', price: 286 },
-  { id: 'spa-treatments', title: 'SPA Treatments', price: 173 },
-  { id: 'drivers-lunch-box', title: "Drivers Lunch Box (TZ) USD", price: 5 },
-  { id: 'conservancy', title: 'Park/Conservancy Fees', price: 100, mandatory: true },
-  { id: 'flight-transfers', title: 'Flight Transfers (Arrive/Depart)', price: 0 },
-  { id: 'executive-room-supplement', title: "Supplement — Hemingway's Executive Room", price: 75 },
+export const EXTRAS_CATALOG: ExtraCatalogItem[] = [
+  { id: 'garden-buffet-lunch', title: 'Garden Buffet Lunch Adult (N)', price: 28, tabs: ['accommodation'] },
+  { id: 'beverage-tz', title: 'Beverage TZ', price: 103, tabs: ['accommodation'] },
+  { id: 'dinner-voucher', title: 'Dinner Voucher Adult (N)', price: 43, tabs: ['accommodation'] },
+  { id: 'curio-shop', title: 'Curio Shop (TZ) USD', price: 231, tabs: ['accommodation'] },
+  { id: 'dinner', title: 'Dinner', price: 159, tabs: ['accommodation'] },
+  { id: 'drinks-supplement', title: 'Drinks Supplement TZ', price: 61, tabs: ['accommodation', 'transportation'] },
+  { id: 'lunch', title: 'Lunch', price: 286, tabs: ['accommodation'] },
+  { id: 'spa-treatments', title: 'SPA Treatments', price: 173, tabs: ['accommodation'] },
+  { id: 'drivers-lunch-box', title: "Drivers Lunch Box (TZ) USD", price: 5, tabs: ['transportation'] },
+  { id: 'conservancy', title: 'Park/Conservancy Fees', price: 100, mandatory: true, tabs: ['accommodation'] },
+  { id: 'flight-transfers', title: 'Flight Transfers (Arrive/Depart)', price: 0, tabs: ['flight', 'transportation'] },
+  { id: 'executive-room-supplement', title: "Supplement — Hemingway's Executive Room", price: 75, tabs: ['accommodation'] },
+  { id: 'after-hours-transfer', title: 'After-hours Transfer Surcharge', price: 40, tabs: ['transportation'] },
+  { id: 'exclusive-vehicle', title: 'Exclusive Use of Vehicle', price: 150, tabs: ['transportation'] },
+  { id: 'child-seat', title: 'Child Seat', price: 15, tabs: ['transportation'] },
 ]
+
+/** Catalog extras available for a given service tab. */
+export function extrasForTab(tab: ServiceTab): ExtraCatalogItem[] {
+  return EXTRAS_CATALOG.filter((extra) => (extra.tabs ?? ['accommodation']).includes(tab))
+}
 
 export type RoomTypeOption = {
   id: string
