@@ -111,6 +111,7 @@ const LEAD_NAMES: Record<string, { first: string; last: string; salutation?: str
   'CPS5686-3': { first: 'Priya', last: 'Patel', salutation: 'Mrs' },
   CPS5687: { first: 'Oliver', last: 'Bennett', salutation: 'Mr' },
   'CPS5687-1': { first: 'Oliver', last: 'Bennett', salutation: 'Mr' },
+  CPS5688: { first: 'James', last: 'Harper', salutation: 'Mr' },
 }
 
 const CHILD_AGES: Record<string, number[]> = {
@@ -125,6 +126,7 @@ const CHILD_AGES: Record<string, number[]> = {
   'CPS5686-3': [13, 5],
   CPS5687: [10, 8],
   'CPS5687-1': [10, 8],
+  CPS5688: [14, 8],
 }
 
 /** Named guest details for every seeded itinerary. */
@@ -288,9 +290,9 @@ function serviceCard(
   price: number,
   details: { label: string; value: string }[],
   draft: Record<string, unknown>,
+  marginPct = 23,
 ): AddedService {
   const t = TAB_META[tab]
-  const marginPct = 23
   const margin = Math.round(price * (marginPct / 100) * 100) / 100
   const net = Math.round((price - margin) * 100) / 100
   return {
@@ -317,8 +319,820 @@ function serviceCard(
   }
 }
 
+function customExtra(
+  id: string,
+  title: string,
+  price: number,
+  opts?: { qty?: number; timeUnit?: string; qtyLabel?: string; rack?: number; pax?: number },
+) {
+  return {
+    id,
+    title,
+    price,
+    custom: true as const,
+    qty: opts?.qty,
+    timeUnit: opts?.timeUnit,
+    qtyLabel: opts?.qtyLabel,
+    rack: opts?.rack,
+    pax: opts?.pax,
+  }
+}
+
+function sellFromNet(net: number, marginPct: number) {
+  if (!net) return 0
+  if (marginPct <= 0) return Math.round(net * 100) / 100
+  if (marginPct >= 100) return Math.round(net * 100) / 100
+  return Math.round((net / (1 - marginPct / 100)) * 100) / 100
+}
+
+function accommodationSeedPrice(roomNets: number[], feeSells: number[], marginPct: number) {
+  const roomsNet = roomNets.reduce((a, b) => a + b, 0)
+  const feesSell = feeSells.reduce((a, b) => a + b, 0)
+  return sellFromNet(roomsNet, marginPct) + feesSell
+}
+
+function blendedMarginPct(nets: number[], sells: number[]) {
+  const totalNet = nets.reduce((a, b) => a + b, 0)
+  const totalSell = sells.reduce((a, b) => a + b, 0)
+  if (!totalSell) return 0
+  return Math.round((1 - totalNet / totalSell) * 10000) / 100
+}
+
+/** Hand-authored builder services from legacy data.csv (CPS5688). */
+function buildCsvSeedServices(it: Itinerary): AddedService[] {
+  const guestIds = [1, 2, 3, 4]
+  let seq = 0
+  const next = () => ++seq
+
+  const hxNets = [1530, 1530]
+  const loisRoomNets = [3330.3, 2497.74]
+  const loisFeeNets = [1080, 540]
+  const loisFeeSells = [1080, 540]
+  const maraRoomNets = [7759.65]
+  const maraFeeNets = [1200, 300]
+  const maraFeeSells = [1200, 300]
+  const serRoomNets = [4977.6, 3733.2]
+  const serFeeNets = [566.4, 660.8, 188.8, 94.4]
+  const serFeeSells = [566.4, 660.8, sellFromNet(188.8, 2), sellFromNet(94.4, 2)]
+  const manorRoomNets = [4562.8]
+  const manorFeeNets = [141.6, 47.2]
+  const manorFeeSells = [141.6, sellFromNet(47.2, 2)]
+  const vehicleUpgradeNet = 600
+  const vehicleUpgradeSell = 1000
+  const balloonNet = 452.6
+  const balloonSell = 620
+
+  const loisSell = accommodationSeedPrice(loisRoomNets, loisFeeSells, 39.99)
+  const maraSell =
+    accommodationSeedPrice(maraRoomNets, maraFeeSells, 40) + vehicleUpgradeSell
+  const serSell = accommodationSeedPrice(serRoomNets, serFeeSells, 47) + balloonSell
+  const manorSell = accommodationSeedPrice(manorRoomNets, manorFeeSells, 46.99)
+
+  return [
+    serviceCard(
+      it,
+      'accommodation',
+      next(),
+      'Hemingways Nairobi',
+      '2 room(s) · Bed & Breakfast',
+      '2 night(s)',
+      accommodationSeedPrice(hxNets, [], 30.01),
+      [
+        { label: 'Location', value: 'Nairobi' },
+        { label: 'Rooms', value: 'BB Double Deluxe Suite, BB Twin Deluxe Suite' },
+        { label: 'Basis', value: 'Bed & Breakfast' },
+        { label: 'Dates', value: formatRange('2026-09-01', '2026-09-03') },
+        { label: 'Guests', value: '4 pax' },
+      ],
+      {
+        location: 'Nairobi',
+        supplier: 'Hemingways Nairobi',
+        service: 'BB Double Deluxe Suite',
+        start: '2026-09-01',
+        end: '2026-09-03',
+        basis: 'bb',
+        discount: 0,
+        rooms: [
+          {
+            id: 'r1',
+            type: 'BB Double Deluxe Suite',
+            basis: 'bb',
+            rate: 765,
+            qty: 1,
+            guestIds: guestIds.slice(0, 2),
+            start: '2026-09-01',
+            end: '2026-09-03',
+          },
+          {
+            id: 'r2',
+            type: 'BB Twin Deluxe Suite',
+            basis: 'bb',
+            rate: 765,
+            qty: 1,
+            guestIds: guestIds.slice(2),
+            start: '2026-09-01',
+            end: '2026-09-03',
+          },
+        ],
+        extras: [],
+        customExtras: [],
+        promotion: null,
+        holds: [],
+        notes: 'Legacy CSV seed — Nairobi arrival nights',
+      },
+      30.01,
+    ),
+    serviceCard(
+      it,
+      'accommodation',
+      next(),
+      'Elewana Loisaba Tented Camp',
+      '2 room(s) · Fully Inclusive',
+      '3 night(s)',
+      loisSell,
+      [
+        { label: 'Location', value: 'Loisaba' },
+        { label: 'Rooms', value: 'GPKG Double Safari Tent, GPKG CIOR' },
+        { label: 'Basis', value: 'Fully Inclusive' },
+        { label: 'Dates', value: formatRange('2026-09-03', '2026-09-06') },
+        { label: 'Guests', value: '4 pax' },
+      ],
+      {
+        location: 'Loisaba',
+        supplier: 'Elewana Loisaba Tented Camp',
+        service: 'GPKG Double Safari Tent',
+        start: '2026-09-03',
+        end: '2026-09-06',
+        basis: 'fi',
+        discount: 0,
+        rooms: [
+          {
+            id: 'r1',
+            type: 'GPKG Double Safari Tent',
+            basis: 'fi',
+            rate: 1110.1,
+            qty: 1,
+            guestIds: guestIds.slice(0, 2),
+            start: '2026-09-03',
+            end: '2026-09-06',
+          },
+          {
+            id: 'r2',
+            type: 'GPKG CIOR (Two Chd 12 to 17.99 yrs)',
+            basis: 'fi',
+            rate: 832.58,
+            qty: 1,
+            guestIds: guestIds.slice(2),
+            start: '2026-09-03',
+            end: '2026-09-06',
+          },
+        ],
+        extras: [],
+        customExtras: [
+          customExtra('lois-cons-adult', 'Conservancy Fees — Adult', loisFeeNets[0], {
+            qty: 3,
+            timeUnit: 'days',
+            qtyLabel: '3 days',
+            rack: loisFeeSells[0],
+            pax: 2,
+          }),
+          customExtra('lois-cons-child', 'Conservancy Fees — Child (3 - 17.99 yrs)', loisFeeNets[1], {
+            qty: 3,
+            timeUnit: 'days',
+            qtyLabel: '3 days',
+            rack: loisFeeSells[1],
+            pax: 2,
+          }),
+        ],
+        promotion: null,
+        holds: [],
+        notes: '',
+      },
+      blendedMarginPct([...loisRoomNets, ...loisFeeNets], [
+        sellFromNet(loisRoomNets[0] + loisRoomNets[1], 39.99),
+        ...loisFeeSells,
+      ]),
+    ),
+    serviceCard(
+      it,
+      'accommodation',
+      next(),
+      'Elewana Sand River Masai Mara',
+      '1 room(s) · Fully Inclusive',
+      '3 night(s)',
+      maraSell,
+      [
+        { label: 'Location', value: 'Masai Mara' },
+        { label: 'Rooms', value: 'GPKG Family Tent' },
+        { label: 'Basis', value: 'Fully Inclusive' },
+        { label: 'Dates', value: formatRange('2026-09-06', '2026-09-09') },
+        { label: 'Guests', value: '4 pax' },
+      ],
+      {
+        location: 'Masai Mara',
+        supplier: 'Elewana Sand River Masai Mara',
+        service: 'GPKG Family Tent',
+        start: '2026-09-06',
+        end: '2026-09-09',
+        basis: 'fi',
+        discount: 0,
+        rooms: [
+          {
+            id: 'r1',
+            type: 'GPKG Family Tent',
+            basis: 'fi',
+            rate: 2586.55,
+            qty: 1,
+            guestIds,
+            start: '2026-09-06',
+            end: '2026-09-09',
+          },
+        ],
+        extras: [],
+        customExtras: [
+          customExtra('mara-upgrade', 'Private safari vehicle & guide upgrade', vehicleUpgradeNet, {
+            qty: 3,
+            timeUnit: 'days',
+            qtyLabel: '3 days',
+            rack: vehicleUpgradeSell,
+            pax: 4,
+          }),
+          customExtra('mara-res-adult', 'Masai Mara National Reserve Fees — Adult', maraFeeNets[0], {
+            qty: 3,
+            timeUnit: 'days',
+            qtyLabel: '3 days',
+            rack: maraFeeSells[0],
+            pax: 2,
+          }),
+          customExtra(
+            'mara-res-child',
+            'Masai Mara National Reserve Fees — Child (9 to 17.99 years)',
+            maraFeeNets[1],
+            {
+              qty: 3,
+              timeUnit: 'days',
+              qtyLabel: '3 days',
+              rack: maraFeeSells[1],
+              pax: 2,
+            },
+          ),
+        ],
+        promotion: null,
+        holds: [],
+        notes: '',
+      },
+      blendedMarginPct([...maraRoomNets, ...maraFeeNets, vehicleUpgradeNet], [
+        sellFromNet(maraRoomNets[0], 40),
+        ...maraFeeSells,
+        vehicleUpgradeSell,
+      ]),
+    ),
+    serviceCard(
+      it,
+      'accommodation',
+      next(),
+      'Elewana Serengeti Migration Camp',
+      '2 room(s) · Fully Inclusive',
+      '4 night(s)',
+      serSell,
+      [
+        { label: 'Location', value: 'Serengeti' },
+        { label: 'Rooms', value: 'GPKG Double Safari Tent, GPKG CIOR' },
+        { label: 'Basis', value: 'Fully Inclusive' },
+        { label: 'Dates', value: formatRange('2026-09-09', '2026-09-13') },
+        { label: 'Guests', value: '4 pax' },
+      ],
+      {
+        location: 'Serengeti',
+        supplier: 'Elewana Serengeti Migration Camp',
+        service: 'GPKG Double Safari Tent',
+        start: '2026-09-09',
+        end: '2026-09-13',
+        basis: 'fi',
+        discount: 0,
+        rooms: [
+          {
+            id: 'r1',
+            type: 'GPKG Double Safari Tent',
+            basis: 'fi',
+            rate: 1244.4,
+            qty: 1,
+            guestIds: guestIds.slice(0, 2),
+            start: '2026-09-09',
+            end: '2026-09-13',
+          },
+          {
+            id: 'r2',
+            type: 'GPKG CIOR (Two Chd 12 to 17.99 yrs)',
+            basis: 'fi',
+            rate: 933.3,
+            qty: 1,
+            guestIds: guestIds.slice(2),
+            start: '2026-09-09',
+            end: '2026-09-13',
+          },
+        ],
+        extras: [],
+        customExtras: [
+          customExtra('ser-balloon', 'Hot-air balloon safari with bush breakfast', balloonNet, {
+            qty: 1,
+            timeUnit: 'flight',
+            qtyLabel: '1 flight',
+            rack: balloonSell,
+            pax: 4,
+          }),
+          customExtra('ser-conc-adult', 'Concession Fee — Adult', serFeeNets[0], {
+            qty: 4,
+            timeUnit: 'days',
+            qtyLabel: '4 days',
+            rack: serFeeSells[0],
+            pax: 2,
+          }),
+          customExtra('ser-park-adult', 'Park Fee — Adult', serFeeNets[1], {
+            qty: 4,
+            timeUnit: 'days',
+            qtyLabel: '4 days',
+            rack: serFeeSells[1],
+            pax: 2,
+          }),
+          customExtra('ser-park-child', 'Park Fees — Child (5 to 15.99 yrs)', serFeeNets[2], {
+            qty: 4,
+            timeUnit: 'days',
+            qtyLabel: '4 days',
+            rack: serFeeSells[2],
+            pax: 2,
+          }),
+          customExtra('ser-conc-child', 'Concession Fees — Child (5 to 15.99 yrs)', serFeeNets[3], {
+            qty: 4,
+            timeUnit: 'days',
+            qtyLabel: '4 days',
+            rack: serFeeSells[3],
+            pax: 2,
+          }),
+        ],
+        promotion: null,
+        holds: [],
+        notes: '',
+      },
+      blendedMarginPct([...serRoomNets, ...serFeeNets, balloonNet], [
+        sellFromNet(serRoomNets[0] + serRoomNets[1], 47),
+        ...serFeeSells,
+        balloonSell,
+      ]),
+    ),
+    serviceCard(
+      it,
+      'accommodation',
+      next(),
+      'Elewana The Manor at Ngorongoro',
+      '2 room(s) · Full Board',
+      '2 night(s)',
+      manorSell,
+      [
+        { label: 'Location', value: 'Ngorongoro' },
+        { label: 'Rooms', value: 'GPKG Stable Cottage' },
+        { label: 'Basis', value: 'Full Board' },
+        { label: 'Dates', value: formatRange('2026-09-13', '2026-09-15') },
+        { label: 'Guests', value: '4 pax' },
+      ],
+      {
+        location: 'Ngorongoro',
+        supplier: 'Elewana The Manor at Ngorongoro',
+        service: 'GPKG Stable Cottage',
+        start: '2026-09-13',
+        end: '2026-09-15',
+        basis: 'fb',
+        discount: 0,
+        rooms: [
+          {
+            id: 'r1',
+            type: 'GPKG Stable Cottage',
+            basis: 'fb',
+            rate: 1140.7,
+            qty: 2,
+            guestIds,
+            start: '2026-09-13',
+            end: '2026-09-15',
+          },
+        ],
+        extras: [],
+        customExtras: [
+          customExtra('manor-ncca-adult', 'NCCA Park Fees — Adult', manorFeeNets[0], {
+            qty: 2,
+            timeUnit: 'days',
+            qtyLabel: '2 days',
+            rack: manorFeeSells[0],
+            pax: 2,
+          }),
+          customExtra('manor-ncca-child', 'NCCA Park Fees — Child (5 to 15.99 yrs)', manorFeeNets[1], {
+            qty: 2,
+            timeUnit: 'days',
+            qtyLabel: '2 days',
+            rack: manorFeeSells[1],
+            pax: 2,
+          }),
+        ],
+        promotion: null,
+        holds: [],
+        notes: '',
+      },
+      blendedMarginPct([...manorRoomNets, ...manorFeeNets], [
+        sellFromNet(manorRoomNets[0], 46.99),
+        ...manorFeeSells,
+      ]),
+    ),
+    serviceCard(
+      it,
+      'transportation',
+      next(),
+      'Cheli & Peacock Safaris Nairobi',
+      '1 vehicle(s)',
+      '4 PAX',
+      sellFromNet(50, 72.22),
+      [
+        { label: 'Service', value: 'Nairobi One Way Transfer' },
+        { label: 'Vehicles', value: 'Sedan' },
+        { label: 'Date', value: formatRange('2026-09-01', '2026-09-01') },
+      ],
+      {
+        location: 'Nairobi',
+        supplier: 'Cheli & Peacock Safaris Nairobi',
+        service: 'Nairobi One Way Transfer',
+        transMode: 'transfer',
+        transDate: '2026-09-01',
+        hireStart: '',
+        hireEnd: '',
+        pickup: 'JKIA',
+        dropoff: 'Hemingways Nairobi',
+        timeFrom: '10:00',
+        timeTo: '11:30',
+        discount: 0,
+        vehicles: [{ id: 'v1', type: 'Sedan', cap: 4, rate: 50, guestIds }],
+        extras: [],
+        customExtras: [],
+      },
+      72.22,
+    ),
+    serviceCard(
+      it,
+      'transportation',
+      next(),
+      'Cheli & Peacock Safaris Nairobi',
+      '1 vehicle(s)',
+      '4 PAX',
+      sellFromNet(250, 40.48),
+      [
+        { label: 'Service', value: 'Nairobi Full Day Car Hire and Driver' },
+        { label: 'Vehicles', value: 'Safari Vehicle' },
+        { label: 'Date', value: formatRange('2026-09-02', '2026-09-02') },
+      ],
+      {
+        location: 'Nairobi',
+        supplier: 'Cheli & Peacock Safaris Nairobi',
+        service: 'Nairobi Full Day Car Hire and Driver',
+        transMode: 'hire',
+        transDate: '',
+        hireStart: '2026-09-02',
+        hireEnd: '2026-09-02',
+        pickup: 'Hemingways Nairobi',
+        dropoff: 'Hemingways Nairobi',
+        timeFrom: '08:00',
+        timeTo: '17:00',
+        discount: 0,
+        vehicles: [{ id: 'v1', type: 'Safari Vehicle', cap: 6, rate: 250, guestIds }],
+        extras: [],
+        customExtras: [],
+      },
+      40.48,
+    ),
+    serviceCard(
+      it,
+      'transportation',
+      next(),
+      'Cheli & Peacock Safaris Nairobi',
+      '1 vehicle(s)',
+      '4 PAX',
+      sellFromNet(50, 72.22),
+      [
+        { label: 'Service', value: 'Nairobi One Way Transfer' },
+        { label: 'Vehicles', value: 'Sedan' },
+        { label: 'Date', value: formatRange('2026-09-03', '2026-09-03') },
+      ],
+      {
+        location: 'Nairobi',
+        supplier: 'Cheli & Peacock Safaris Nairobi',
+        service: 'Nairobi One Way Transfer',
+        transMode: 'transfer',
+        transDate: '2026-09-03',
+        hireStart: '',
+        hireEnd: '',
+        pickup: 'Hemingways Nairobi',
+        dropoff: 'Wilson Airport',
+        timeFrom: '07:00',
+        timeTo: '08:00',
+        discount: 0,
+        vehicles: [{ id: 'v1', type: 'Sedan', cap: 4, rate: 50, guestIds }],
+        extras: [],
+        customExtras: [],
+      },
+      72.22,
+    ),
+    serviceCard(
+      it,
+      'flight',
+      next(),
+      'AirKenya Wilson1',
+      'WILSON TO LOISABA OW',
+      '4 PAX',
+      sellFromNet(534.5, 27.96) + sellFromNet(267.25, 28),
+      [
+        { label: 'Service', value: 'WILSON TO LOISABA OW' },
+        { label: 'Date', value: formatRange('2026-09-03', '2026-09-03') },
+        { label: 'Pax', value: '2A, 2Y' },
+      ],
+      {
+        location: 'Nairobi',
+        supplier: 'AirKenya Wilson1',
+        service: 'WILSON TO LOISABA OW',
+        flightMode: 'oneway',
+        departDate: '2026-09-03',
+        returnDate: '',
+        capacity: 12,
+        qty: 1,
+        discount: 0,
+        pax: { adult: 2, youth: 2, child: 0, infant: 0 },
+        rates: { adult: 267.25, youth: 133.625, child: 0, infant: 0 },
+        fareLines: [
+          { route: 'WIL – LOI', pax: 2, net: 534.5, rack: sellFromNet(534.5, 27.96) },
+          { route: 'WIL – LOI (teens)', pax: 2, net: 267.25, rack: sellFromNet(267.25, 28) },
+        ],
+        extras: [],
+        customExtras: [],
+        promotion: null,
+      },
+      27.96,
+    ),
+    serviceCard(
+      it,
+      'flight',
+      next(),
+      'AirKenya Central Kenya1',
+      'LOISABA TO MARA OW',
+      '4 PAX',
+      sellFromNet(855.8, 27.96) + sellFromNet(427.9, 28),
+      [
+        { label: 'Service', value: 'LOISABA TO MARA OW' },
+        { label: 'Date', value: formatRange('2026-09-06', '2026-09-06') },
+        { label: 'Pax', value: '2A, 2Y' },
+      ],
+      {
+        location: 'Loisaba',
+        supplier: 'AirKenya Central Kenya1',
+        service: 'LOISABA TO MARA OW',
+        flightMode: 'oneway',
+        departDate: '2026-09-06',
+        returnDate: '',
+        capacity: 12,
+        qty: 1,
+        discount: 0,
+        pax: { adult: 2, youth: 2, child: 0, infant: 0 },
+        rates: { adult: 427.9, youth: 213.95, child: 0, infant: 0 },
+        fareLines: [
+          { route: 'LOI – MRE', pax: 2, net: 855.8, rack: sellFromNet(855.8, 27.96) },
+          { route: 'LOI – MRE (teens)', pax: 2, net: 427.9, rack: sellFromNet(427.9, 28) },
+        ],
+        extras: [],
+        customExtras: [],
+        promotion: null,
+      },
+      27.96,
+    ),
+    serviceCard(
+      it,
+      'flight',
+      next(),
+      'AirKenya Mara1',
+      'MARA TO KOGATENDE OW',
+      '4 PAX',
+      sellFromNet(1275.8, 28) + sellFromNet(637.9, 28),
+      [
+        { label: 'Service', value: 'MARA TO KOGATENDE OW' },
+        { label: 'Date', value: formatRange('2026-09-09', '2026-09-09') },
+        { label: 'Pax', value: '2A, 2Y' },
+      ],
+      {
+        location: 'Masai Mara',
+        supplier: 'AirKenya Mara1',
+        service: 'MARA TO KOGATENDE OW',
+        flightMode: 'oneway',
+        departDate: '2026-09-09',
+        returnDate: '',
+        capacity: 12,
+        qty: 1,
+        discount: 0,
+        pax: { adult: 2, youth: 2, child: 0, infant: 0 },
+        rates: { adult: 637.9, youth: 318.95, child: 0, infant: 0 },
+        fareLines: [
+          { route: 'MRE – KTD', pax: 2, net: 1275.8, rack: sellFromNet(1275.8, 28) },
+          { route: 'MRE – KTD (teens)', pax: 2, net: 637.9, rack: sellFromNet(637.9, 28) },
+        ],
+        extras: [],
+        customExtras: [],
+        promotion: null,
+      },
+      28,
+    ),
+    serviceCard(
+      it,
+      'flight',
+      next(),
+      'Auric Air Serengeti1',
+      'SEN - SERENGETI NORTH to MANYARA',
+      '4 PAX',
+      sellFromNet(465, 25) + sellFromNet(232.5, 25),
+      [
+        { label: 'Service', value: 'SEN - SERENGETI NORTH to MANYARA' },
+        { label: 'Date', value: formatRange('2026-09-13', '2026-09-13') },
+        { label: 'Pax', value: '2A, 2Y' },
+      ],
+      {
+        location: 'Serengeti',
+        supplier: 'Auric Air Serengeti1',
+        service: 'SEN - SERENGETI NORTH to MANYARA',
+        flightMode: 'oneway',
+        departDate: '2026-09-13',
+        returnDate: '',
+        capacity: 12,
+        qty: 1,
+        discount: 0,
+        pax: { adult: 2, youth: 2, child: 0, infant: 0 },
+        rates: { adult: 232.5, youth: 116.25, child: 0, infant: 0 },
+        fareLines: [
+          { route: 'SEN – LKY', pax: 2, net: 465, rack: sellFromNet(465, 25) },
+          { route: 'SEN – LKY (teens)', pax: 2, net: 232.5, rack: sellFromNet(232.5, 25) },
+        ],
+        extras: [],
+        customExtras: [],
+        promotion: null,
+      },
+      25,
+    ),
+    serviceCard(
+      it,
+      'flight',
+      next(),
+      'Auric Air Manyara1',
+      'MANYARA to KILIMANJARO',
+      '4 PAX',
+      sellFromNet(329, 24.89) + sellFromNet(164.5, 25),
+      [
+        { label: 'Service', value: 'MANYARA to KILIMANJARO' },
+        { label: 'Date', value: formatRange('2026-09-15', '2026-09-15') },
+        { label: 'Pax', value: '2A, 2Y' },
+      ],
+      {
+        location: 'Ngorongoro',
+        supplier: 'Auric Air Manyara1',
+        service: 'MANYARA to KILIMANJARO',
+        flightMode: 'oneway',
+        departDate: '2026-09-15',
+        returnDate: '',
+        capacity: 12,
+        qty: 1,
+        discount: 0,
+        pax: { adult: 2, youth: 2, child: 0, infant: 0 },
+        rates: { adult: 164.5, youth: 82.25, child: 0, infant: 0 },
+        fareLines: [
+          { route: 'LKY – JRO', pax: 2, net: 329, rack: sellFromNet(329, 24.89) },
+          { route: 'LKY – JRO (teens)', pax: 2, net: 164.5, rack: sellFromNet(164.5, 25) },
+        ],
+        extras: [],
+        customExtras: [],
+        promotion: null,
+      },
+      24.89,
+    ),
+    serviceCard(
+      it,
+      'activity',
+      next(),
+      'Cheli and Peacock Safaris Kenya',
+      '6 activities',
+      '02 Sep 2026',
+      45 + 36 + 50 + 160 + 80 + 25,
+      [
+        { label: 'Location', value: 'Nairobi' },
+        { label: 'Service', value: 'Giraffe Centre Entrance Fee' },
+        { label: 'Date', value: formatRange('2026-09-02', '2026-09-02') },
+      ],
+      {
+        location: 'Nairobi',
+        supplier: 'Cheli and Peacock Safaris Kenya',
+        service: 'Giraffe Centre Entrance Fee',
+        startDate: '2026-09-02',
+        endDate: '2026-09-02',
+        discount: 0,
+        days: ['2026-09-02'],
+        activities: [
+          { id: 'a1', name: 'Giraffe Centre Entrance Fee', rate: 45, start: '2026-09-02', end: '2026-09-02', guestIds: [] },
+          { id: 'a2', name: 'Karen Blixen Museum Entry Fee', rate: 36, start: '2026-09-02', end: '2026-09-02', guestIds: [] },
+          {
+            id: 'a3',
+            name: 'Sheldrick Wildlife Trust Nairobi Orphanage Visit',
+            rate: 50,
+            start: '2026-09-02',
+            end: '2026-09-02',
+            guestIds: [],
+          },
+          {
+            id: 'a4',
+            name: 'Nairobi National Park Entrance Fees - Adult',
+            rate: 160,
+            start: '2026-09-02',
+            end: '2026-09-02',
+            guestIds: [],
+          },
+          {
+            id: 'a5',
+            name: 'Nairobi National Park Entrance Fees - Child (3 - 17.99 yrs)',
+            rate: 80,
+            start: '2026-09-02',
+            end: '2026-09-02',
+            guestIds: [],
+          },
+          {
+            id: 'a6',
+            name: 'Vehicle & Driver Nairobi National Park Entry Fees',
+            rate: 25,
+            start: '2026-09-02',
+            end: '2026-09-02',
+            guestIds: [],
+          },
+        ],
+        extras: [],
+        customExtras: [],
+      },
+      0,
+    ),
+    serviceCard(
+      it,
+      'other',
+      next(),
+      'KE AMREF Flying Doctors',
+      'Amref Silver: Kenya/Tanzania/Zanzibar 30 days',
+      '4 PAX',
+      sellFromNet(64, 20),
+      [
+        { label: 'Service', value: 'Amref Silver: Kenya/Tanzania/Zanzibar 30 days' },
+        { label: 'Date', value: formatRange('2026-09-01', '2026-09-01') },
+      ],
+      {
+        location: 'Nairobi',
+        supplier: 'KE AMREF Flying Doctors',
+        service: 'Amref Silver: Kenya/Tanzania/Zanzibar 30 days',
+        description: 'Amref Silver: Kenya/Tanzania/Zanzibar 30 days',
+        startDate: '2026-09-01',
+        endDate: '2026-09-30',
+        qty: 4,
+        price: 16,
+        discount: 0,
+        activities: [],
+      },
+      20,
+    ),
+    serviceCard(
+      it,
+      'other',
+      next(),
+      'Umbato Meet and Assist Services',
+      'JKIA Meet & Assist (Arrival)',
+      '4 PAX',
+      sellFromNet(75, 16.67),
+      [
+        { label: 'Service', value: 'JKIA Meet & Assist (Arrival)' },
+        { label: 'Date', value: formatRange('2026-09-01', '2026-09-01') },
+      ],
+      {
+        location: 'Nairobi',
+        supplier: 'Umbato Meet and Assist Services',
+        service: 'JKIA Meet & Assist (Arrival)',
+        description: 'JKIA Meet & Assist (Arrival)',
+        startDate: '2026-09-01',
+        endDate: '2026-09-01',
+        qty: 1,
+        price: 75,
+        discount: 0,
+        activities: [],
+      },
+      16.67,
+    ),
+  ]
+}
+
 /** Builder "added services" mirrored from the itinerary destination / dates. */
 export function buildSeedServices(it: Itinerary): AddedService[] {
+  if (it.id === 'CPS5688') return buildCsvSeedServices(it)
+
   const lodge = lodgeFor(it.destination)
   const acc = CATALOG.accommodation.find((c) => c.location.includes(lodge.loc.split(',')[0])) ||
     CATALOG.accommodation[0]

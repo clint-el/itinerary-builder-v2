@@ -4,6 +4,7 @@ import { AppShell } from '@/app/AppShell'
 import { BuilderPage } from '@/features/builder/BuilderPage'
 import { InquiriesPage } from '@/features/inquiries/InquiriesPage'
 import { QuotePage } from '@/features/quote/QuotePage'
+import { QuoteDocPage } from '@/features/quote-doc/QuoteDocPage'
 import { SummaryPage } from '@/features/summary/SummaryPage'
 
 export function App() {
@@ -17,6 +18,7 @@ export function App() {
           <Route path="/build/:id" element={<BuilderPage />} />
           <Route path="/quote/:id" element={<QuotePage />} />
           <Route path="/summary/:id" element={<SummaryPage />} />
+          <Route path="/quote-doc/:id" element={<QuoteDocPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

@@ -78,6 +78,22 @@ describe('storage', () => {
 
   it('generates next inquiry id after highest root CPS number', () => {
     const next = nextInquiryId(listItineraries())
-    expect(next).toBe('CPS5688')
+    expect(next).toBe('CPS5689')
+  })
+
+  it('seeds CPS5688 draft from legacy CSV with all service tabs', () => {
+    const it = listItineraries().find((x) => x.id === 'CPS5688')
+    expect(it?.status).toBe('DRAFT')
+    expect(it?.title).toBe('Elewana Kenya & Tanzania Safari')
+    const services = getServices('CPS5688')
+    const tabs = new Set(services.map((s) => s.tab))
+    expect(tabs.has('accommodation')).toBe(true)
+    expect(tabs.has('transportation')).toBe(true)
+    expect(tabs.has('flight')).toBe(true)
+    expect(tabs.has('activity')).toBe(true)
+    expect(tabs.has('other')).toBe(true)
+    expect(services.some((s) => s.title === 'Hemingways Nairobi')).toBe(true)
+    expect(services.some((s) => s.draft.supplier === 'Elewana Loisaba Tented Camp')).toBe(true)
+    expect(services.some((s) => s.draft.service === 'WILSON TO LOISABA OW')).toBe(true)
   })
 })

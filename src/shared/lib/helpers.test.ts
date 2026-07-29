@@ -154,7 +154,7 @@ describe('helpers', () => {
   it('copies itinerary with new CPS id after highest root', () => {
     const src = SEED_ITINERARIES[0]
     const copy = copyItinerary(src, SEED_ITINERARIES)
-    expect(copy.id).toBe('CPS5688')
+    expect(copy.id).toBe('CPS5689')
     expect(copy.title.startsWith('Copy ')).toBe(true)
     expect(copy.status).toBe('DRAFT')
   })

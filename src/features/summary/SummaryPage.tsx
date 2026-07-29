@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { CalendarDays, ChevronLeft, List } from 'lucide-react'
+import { CalendarDays, ChevronLeft, FileText, List } from 'lucide-react'
 import { useStore } from '@/app/store'
 import { Button } from '@/components/ui/button'
 import { isBuilderStatus, isTerminalStatus, nightsBetween, transitions } from '@/shared/lib/helpers'
@@ -228,7 +228,15 @@ export function SummaryPage() {
 
           <aside className="sticky top-0 w-[300px] shrink-0">
             <div className="rounded-[14px] border border-[#E5E7EB] bg-white px-[22px] py-5">
-              <div className="mb-3.5 text-base font-bold text-[#171717]">Pricing</div>
+              <div className="mb-3 text-base font-bold text-[#171717]">Pricing</div>
+              <div className="mb-3 flex items-baseline justify-between gap-2.5 border-b border-[#E5E7EB] pb-1.5">
+                <span className="text-[10.5px] font-bold uppercase tracking-wide text-[#94A3B8]">
+                  Service
+                </span>
+                <span className="text-[10.5px] font-bold uppercase tracking-wide text-[#94A3B8]">
+                  Sell price
+                </span>
+              </div>
               <div className="mb-4 flex flex-col gap-3.5">
                 {pricing.priceGroups.map((g) => (
                   <div key={g.name}>
@@ -284,6 +292,12 @@ export function SummaryPage() {
             <ChevronLeft />
             Back to editing
           </Button>
+          {lines.length > 0 ? (
+            <Button variant="outline" onClick={() => navigate(`/quote-doc/${id}`)}>
+              <FileText />
+              View quote PDF
+            </Button>
+          ) : null}
           <StatusChip status={itinerary.status} />
           <span className="truncate">{nextHint}</span>
         </div>

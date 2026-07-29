@@ -11,6 +11,7 @@ import type {
   AddedService,
   CustomExtra,
   Guest,
+  HireRoute,
   Room,
   ServiceTab,
   Vehicle,
@@ -38,15 +39,21 @@ export const RAIL: {
 ]
 
 export const TRANS_SERVICES = [
-  'Nairobi One Way Transfer',
-  'Nairobi Return Transfer',
-  'Airport Pick-up Transfer',
-  'Airport Drop-off Transfer',
-  'Half-Day Car Hire',
-  'Full-Day Car Hire',
+  { title: 'Nairobi One Way Transfer', price: 50, unit: 'per transfer' },
+  { title: 'Nairobi Return Transfer', price: 110, unit: 'per transfer' },
+  { title: 'Airport Pick-up Transfer', price: 55, unit: 'per transfer' },
+  { title: 'Airport Drop-off Transfer', price: 55, unit: 'per transfer' },
+  { title: 'Nairobi Full Day Car Hire and Driver', price: 250, unit: 'per day' },
+  { title: 'Half-Day Car Hire', price: 150, unit: 'per day' },
+  { title: 'Full-Day Car Hire', price: 280, unit: 'per day' },
 ]
 
 export const FLIGHT_SERVICES = [
+  'WILSON TO LOISABA OW',
+  'LOISABA TO MARA OW',
+  'MARA TO KOGATENDE OW',
+  'SEN - SERENGETI NORTH to MANYARA',
+  'MANYARA to KILIMANJARO',
   'Scheduled Economy',
   'Scheduled Business',
   'Private Charter',
@@ -69,6 +76,12 @@ export function nights(start: string, end: string) {
   if (!start || !end) return 1
   const d = (new Date(end).getTime() - new Date(start).getTime()) / 86400000
   return d > 0 ? Math.round(d) : 1
+}
+
+/** Car hire bills per day of the hire window; a one-off transfer is a single flat rate. */
+export function transportDays(draft: Record<string, unknown>) {
+  if (draft.transMode !== 'hire') return 1
+  return nights(String(draft.hireStart || ''), String(draft.hireEnd || ''))
 }
 
 export function findGuest(id: number, guests: Guest[] = GUESTS): Guest | undefined {
@@ -101,6 +114,32 @@ export function asVehicles(draft: Record<string, unknown>): Vehicle[] {
   return (Array.isArray(draft.vehicles) ? draft.vehicles : []) as Vehicle[]
 }
 
+export function asHireRoutes(draft: Record<string, unknown>): HireRoute[] {
+  return (Array.isArray(draft.hireRoutes) ? draft.hireRoutes : []) as HireRoute[]
+}
+
+export type HireServiceLine = { date: string; location: string; days: number }
+
+/** Consecutive days at the same pickup/drop-off consolidate into a single billed line. */
+export function consolidateHireRoutes(routes: HireRoute[]): HireServiceLine[] {
+  const sorted = [...routes].filter((r) => r.date).sort((a, b) => a.date.localeCompare(b.date))
+  const result: HireServiceLine[] = []
+  for (const r of sorted) {
+    const location =
+      r.pickup && r.dropoff && r.pickup !== r.dropoff ? `${r.pickup} – ${r.dropoff}` : r.pickup || r.dropoff || '—'
+    const last = result[result.length - 1]
+    if (last) {
+      const expectedNext = new Date(`${last.date}T00:00:00`).getTime() + last.days * 86400000
+      if (last.location === location && new Date(`${r.date}T00:00:00`).getTime() === expectedNext) {
+        last.days += 1
+        continue
+      }
+    }
+    result.push({ date: r.date, location, days: 1 })
+  }
+  return result
+}
+
 export function asActivities(draft: Record<string, unknown>): ActivityItem[] {
   return (Array.isArray(draft.activities) ? draft.activities : []) as ActivityItem[]
 }
@@ -121,7 +160,15 @@ export function extraObjects(draft: Record<string, unknown>) {
   return ids
     .map((id) => EXTRAS_CATALOG.find((c) => c.id === id))
     .filter(Boolean)
-    .concat(custom) as { id: string; title: string; price: number; mandatory?: boolean; custom?: boolean }[]
+    .concat(custom) as {
+    id: string
+    title: string
+    price: number
+    mandatory?: boolean
+    custom?: boolean
+    qty?: number
+    timeUnit?: string
+  }[]
 }
 
 export function roomQty(room: Room) {
@@ -198,8 +245,11 @@ export function computeDraftTotals(
   }
   if (tab === 'transportation') {
     const vehicles = asVehicles(draft)
-    const net = vehicles.reduce((sum, v) => sum + v.rate, 0)
-    return { net, rack: rackOf(net) }
+    const extras = extraObjects(draft)
+    const extrasNet = extras.reduce((sum, e) => sum + e.price, 0)
+    const days = transportDays(draft)
+    const vehiclesNet = vehicles.reduce((sum, v) => sum + v.rate, 0) * days
+    return { net: vehiclesNet + extrasNet, rack: rackOf(vehiclesNet) + rackOf(extrasNet) }
   }
   if (tab === 'flight') {
     const pax = (draft.pax || { adult: 0, youth: 0, child: 0, infant: 0 }) as Record<string, number>
@@ -273,6 +323,8 @@ export function buildAddedService(
       { label: 'Guests', value: `${accUsed.length} pax` },
     ]
   } else if (tab === 'transportation') {
+    const transDays = transportDays(draft)
+    const transExtras = extraObjects(draft)
     title = String(draft.supplier || 'Transportation')
     subtitle = `${vehicles.length} vehicle(s)`
     dateMeta = `${transUsed.length} PAX`
@@ -286,10 +338,14 @@ export function buildAddedService(
             ? `${draft.hireStart || 'TBD'} – ${draft.hireEnd || 'TBD'}`
             : String(draft.transDate || 'TBD'),
       },
+      ...(draft.transMode === 'hire'
+        ? [{ label: 'Duration', value: `${transDays} day(s)` }]
+        : []),
       { label: 'Location', value: String(draft.location || '—') },
       { label: 'Pickup', value: String(draft.pickup || '—') },
       { label: 'Drop-off', value: String(draft.dropoff || '—') },
       { label: 'Time', value: `${draft.timeFrom || 'TBD'} – ${draft.timeTo || 'TBD'}` },
+      ...(transExtras.length ? [{ label: 'Extras', value: String(transExtras.length) }] : []),
     ]
   } else if (tab === 'flight') {
     title = String(draft.supplier || 'Flight')

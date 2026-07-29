@@ -3,11 +3,15 @@ import type { AddedService, QuoteGroup, ServiceTab } from '@/shared/lib/types'
 import { formatUsd } from '@/shared/lib/utils'
 import {
   asActivities,
+  asHireRoutes,
   asRooms,
   asVehicles,
+  consolidateHireRoutes,
+  extraObjects,
   flightAutoQty,
   nights,
   roomQty,
+  transportDays,
   usedGuestIds,
 } from '@/features/builder/builderUtils'
 
@@ -15,7 +19,9 @@ export type SummaryServiceType =
   | 'accommodation'
   | 'flight'
   | 'transfer'
+  | 'disposal'
   | 'activity'
+  | 'extra'
   | 'other'
 
 export type SummaryLine = {
@@ -38,9 +44,13 @@ export type SummaryLine = {
   pickup?: string
   dropoff?: string
   veh?: number
-  // activity / other
+  // disposal
+  location?: string
+  // activity / other / extra
   service?: string
   days?: number
+  // extra
+  qty?: string
 }
 
 export const SUMMARY_TYPE_META: Record<
@@ -71,6 +81,14 @@ export const SUMMARY_TYPE_META: Record<
     tint: '#FFFCF3',
     noun: 'transfers',
   },
+  disposal: {
+    name: 'Vehicle Disposal',
+    initial: 'V',
+    iconBg: '#FFF1F2',
+    iconFg: '#BE123C',
+    tint: '#FFF8F9',
+    noun: 'vehicles',
+  },
   activity: {
     name: 'Activity',
     initial: 'Ac',
@@ -78,6 +96,14 @@ export const SUMMARY_TYPE_META: Record<
     iconFg: '#7E22CE',
     tint: '#FCF8FF',
     noun: 'activities',
+  },
+  extra: {
+    name: 'Extras & Special Offers',
+    initial: 'E',
+    iconBg: '#E0F2FE',
+    iconFg: '#0369A1',
+    tint: '#F5FBFF',
+    noun: 'extras',
   },
   other: {
     name: 'Other',
@@ -93,7 +119,9 @@ const ORDER: SummaryServiceType[] = [
   'accommodation',
   'flight',
   'transfer',
+  'disposal',
   'activity',
+  'extra',
   'other',
 ]
 
@@ -128,11 +156,29 @@ const COLS: Record<SummaryServiceType, [string, 'l' | 'c' | 'r'][]> = {
     ['No. of Pax', 'c'],
     MARGIN_COL,
   ],
+  disposal: [
+    ['Date', 'l'],
+    ['Supplier', 'l'],
+    ['V. Type', 'l'],
+    ['At Disposal In', 'l'],
+    ['No. of Veh.', 'c'],
+    ['No. of Days', 'c'],
+    ['No. of Pax', 'c'],
+    MARGIN_COL,
+  ],
   activity: [
     ['Date', 'l'],
     ['Supplier', 'l'],
     ['Service', 'l'],
     ['No. of Pax', 'c'],
+    MARGIN_COL,
+  ],
+  extra: [
+    ['Date', 'l'],
+    ['Supplier', 'l'],
+    ['Extra', 'l'],
+    ['No. of Pax', 'c'],
+    ['Qty', 'c'],
     MARGIN_COL,
   ],
   other: [
@@ -150,7 +196,10 @@ const GRID: Record<SummaryServiceType, string> = {
   flight: '86px minmax(160px,1.6fr) 150px minmax(120px,1.2fr) 92px minmax(160px,1.3fr)',
   transfer:
     '86px minmax(150px,1.5fr) minmax(90px,1fr) minmax(130px,1.3fr) minmax(130px,1.3fr) 92px 92px minmax(160px,1.3fr)',
+  disposal:
+    '86px minmax(150px,1.5fr) minmax(90px,1fr) minmax(170px,1.7fr) 92px 100px 92px minmax(160px,1.3fr)',
   activity: '86px minmax(150px,1.5fr) minmax(220px,2.2fr) 92px minmax(160px,1.3fr)',
+  extra: '86px minmax(150px,1.5fr) minmax(220px,2.2fr) 92px 96px minmax(160px,1.3fr)',
   other: '86px minmax(150px,1.5fr) minmax(220px,2.2fr) 92px 104px minmax(160px,1.3fr)',
 }
 
@@ -220,8 +269,28 @@ function cellValues(type: SummaryServiceType, s: SummaryLine): string[] {
         String(s.pax ?? '—'),
         marginRow(s),
       ]
+    case 'disposal':
+      return [
+        fmtShortDate(s.date),
+        s.supplier,
+        s.vType || '—',
+        s.location || '—',
+        String(s.veh ?? '—'),
+        String(s.days ?? '—'),
+        String(s.pax ?? '—'),
+        marginRow(s),
+      ]
     case 'activity':
       return [fmtShortDate(s.date), s.supplier, s.service || '—', String(s.pax ?? '—'), marginRow(s)]
+    case 'extra':
+      return [
+        fmtShortDate(s.date),
+        s.supplier,
+        s.service || '—',
+        String(s.pax ?? '—'),
+        s.qty || '—',
+        marginRow(s),
+      ]
     case 'other':
       return [
         fmtShortDate(s.date),
@@ -234,6 +303,17 @@ function cellValues(type: SummaryServiceType, s: SummaryLine): string[] {
   }
 }
 
+function extraQtyLabel(ex: { qty?: number; timeUnit?: string; qtyLabel?: string }) {
+  if (ex.qtyLabel) return ex.qtyLabel
+  if (ex.qty && ex.timeUnit) return `${ex.qty} ${ex.timeUnit}`
+  if (ex.qty) return String(ex.qty)
+  return '1'
+}
+
+function extraRackOf(ex: { price: number; rack?: number }) {
+  return ex.rack != null ? ex.rack : rackOf(ex.price)
+}
+
 export function linesFromServices(services: AddedService[]): SummaryLine[] {
   const lines: SummaryLine[] = []
   for (const svc of services) {
@@ -242,46 +322,159 @@ export function linesFromServices(services: AddedService[]): SummaryLine[] {
     const net = Number(svc.net) || Math.round((svc.price || 0) / 1.3)
     const rack = Number(svc.rack) || svc.price || 0
 
+    // Extras attached to a service become their own "Extras & Special Offers" line(s),
+    // so they must be peeled out of the parent service's rolled-up net/rack.
+    const extras = extraObjects(d) as {
+      id: string
+      title: string
+      price: number
+      rack?: number
+      qty?: number
+      timeUnit?: string
+      qtyLabel?: string
+      pax?: number
+    }[]
+    const extrasNet = extras.reduce((sum, e) => sum + e.price, 0)
+    const extrasRack = extras.reduce((sum, e) => sum + extraRackOf(e), 0)
+    const parentNet = net - extrasNet
+    const parentRack = rack - extrasRack
+    const pushExtras = (date: string, pax: number, supplier: string) => {
+      for (const ex of extras) {
+        lines.push({
+          type: 'extra',
+          date,
+          supplier,
+          service: ex.title,
+          pax: ex.pax ?? pax,
+          qty: extraQtyLabel(ex),
+          net: ex.price,
+          rack: extraRackOf(ex),
+        })
+      }
+    }
+
     if (type === 'accommodation') {
       const rooms = asRooms(d)
-      const roomCount = rooms.reduce((sum, r) => sum + roomQty(r), 0) || rooms.length || 1
-      const pax = usedGuestIds(rooms).length
       const start = String(d.start || rooms[0]?.start || '')
       const end = String(d.end || rooms[0]?.end || '')
-      const basisKey = String(d.basis || 'bb')
-      lines.push({
-        type,
-        date: start,
-        supplier: String(d.supplier || svc.title),
-        roomType: rooms.map((r) => r.type).filter(Boolean).join(', ') || 'Room',
-        basis: String(basisKey || 'bb').toUpperCase(),
-        rooms: roomCount,
-        pax,
-        nights: nights(start, end),
-        net,
-        rack,
-      })
+      const defaultBasis = String(d.basis || 'bb')
+      const supplier = String(d.supplier || svc.title)
+      const paxAll = usedGuestIds(rooms).length
+
+      if (rooms.length === 0) {
+        lines.push({
+          type,
+          date: start,
+          supplier,
+          roomType: 'Room',
+          basis: defaultBasis.toUpperCase(),
+          rooms: 1,
+          pax: paxAll,
+          nights: nights(start, end),
+          net: parentNet,
+          rack: parentRack,
+        })
+      } else {
+        const weights = rooms.map((r) => {
+          const rn = nights(r.start || start, r.end || end) || 1
+          return Math.max(0.01, (Number(r.rate) || 0) * roomQty(r) * rn)
+        })
+        const totalW = weights.reduce((a, b) => a + b, 0)
+        rooms.forEach((room, i) => {
+          const rStart = room.start || start
+          const rEnd = room.end || end
+          const share = weights[i] / totalW
+          lines.push({
+            type,
+            date: rStart,
+            supplier,
+            roomType: room.type || 'Room',
+            basis: String(room.basis || defaultBasis).toUpperCase(),
+            rooms: roomQty(room),
+            pax: room.guestIds.length,
+            nights: nights(rStart, rEnd),
+            net: Math.round(parentNet * share * 100) / 100,
+            rack: Math.round(parentRack * share * 100) / 100,
+          })
+        })
+      }
+      pushExtras(start, paxAll || 1, supplier)
+      continue
+    }
+
+    if (type === 'transfer' && d.transMode === 'hire') {
+      const vehicles = asVehicles(d)
+      const paxCount = usedGuestIds(vehicles).length
+      const serviceLines = consolidateHireRoutes(asHireRoutes(d))
+      const supplier = String(d.supplier || d.service || svc.title)
+
+      if (serviceLines.length) {
+        serviceLines.forEach((line) => {
+          const vehicleLines = vehicles.length ? vehicles : [{ type: 'Vehicle', rate: parentNet, guestIds: [] }]
+          vehicleLines.forEach((vehicle) => {
+            const lineNet = vehicle.rate * line.days
+            lines.push({
+              type: 'disposal',
+              date: line.date,
+              supplier,
+              vType: vehicle.type,
+              location: line.location,
+              veh: 1,
+              days: line.days,
+              pax: vehicle.guestIds.length || paxCount,
+              net: lineNet,
+              rack: rackOf(lineNet),
+            })
+          })
+        })
+        pushExtras(serviceLines[0].date, paxCount, supplier)
+      } else {
+        const date = String(d.hireStart || '')
+        const vehicleLines = vehicles.length ? vehicles : [{ type: 'Vehicle', rate: parentNet, guestIds: [] }]
+        const totalRate = vehicleLines.reduce((sum, vehicle) => sum + vehicle.rate, 0) || 1
+        vehicleLines.forEach((vehicle) => {
+          const share = vehicle.rate / totalRate
+          lines.push({
+            type: 'disposal',
+            date,
+            supplier,
+            vType: vehicle.type,
+            location: String(d.location || '—'),
+            veh: 1,
+            days: transportDays(d),
+            pax: vehicle.guestIds.length || paxCount,
+            net: Math.round(parentNet * share * 100) / 100,
+            rack: Math.round(parentRack * share * 100) / 100,
+          })
+        })
+        pushExtras(date, paxCount, supplier)
+      }
       continue
     }
 
     if (type === 'transfer') {
       const vehicles = asVehicles(d)
-      const date =
-        d.transMode === 'hire'
-          ? String(d.hireStart || '')
-          : String(d.transDate || '')
-      lines.push({
-        type,
-        date,
-        supplier: String(d.supplier || d.service || svc.title),
-        vType: vehicles.map((v) => v.type).join(', ') || 'Vehicle',
-        pickup: String(d.pickup || '—'),
-        dropoff: String(d.dropoff || '—'),
-        veh: vehicles.length || 1,
-        pax: usedGuestIds(vehicles).length,
-        net,
-        rack,
+      const date = String(d.transDate || '')
+      const paxCount = usedGuestIds(vehicles).length
+      const supplier = String(d.supplier || d.service || svc.title)
+      const vehicleLines = vehicles.length ? vehicles : [{ type: 'Vehicle', rate: parentNet, guestIds: [] }]
+      const totalRate = vehicleLines.reduce((sum, vehicle) => sum + vehicle.rate, 0) || 1
+      vehicleLines.forEach((vehicle) => {
+        const share = vehicle.rate / totalRate
+        lines.push({
+          type,
+          date,
+          supplier,
+          vType: vehicle.type,
+          pickup: String(d.pickup || '—'),
+          dropoff: String(d.dropoff || '—'),
+          veh: 1,
+          pax: vehicle.guestIds.length || paxCount,
+          net: Math.round(parentNet * share * 100) / 100,
+          rack: Math.round(parentRack * share * 100) / 100,
+        })
       })
+      pushExtras(date, paxCount, supplier)
       continue
     }
 
@@ -290,16 +483,41 @@ export function linesFromServices(services: AddedService[]): SummaryLine[] {
       const totalPax =
         (pax.adult || 0) + (pax.youth || 0) + (pax.child || 0) + (pax.infant || 0)
       const service = String(d.service || '')
-      lines.push({
-        type,
-        date: String(d.departDate || ''),
-        supplier: String(d.supplier || svc.title),
-        charter: /charter/i.test(service) ? 'Charter' : 'Schedule',
-        route: String(d.location || service || '—'),
-        pax: totalPax || flightAutoQty(d),
-        net,
-        rack,
-      })
+      const date = String(d.departDate || '')
+      const paxCount = totalPax || flightAutoQty(d)
+      const supplier = String(d.supplier || svc.title)
+      const fareLines = (Array.isArray(d.fareLines) ? d.fareLines : []) as {
+        route: string
+        pax: number
+        net: number
+        rack: number
+      }[]
+      if (fareLines.length) {
+        fareLines.forEach((fare) => {
+          lines.push({
+            type,
+            date,
+            supplier,
+            charter: /charter/i.test(service) ? 'Charter' : 'Schedule',
+            route: fare.route,
+            pax: fare.pax,
+            net: fare.net,
+            rack: fare.rack,
+          })
+        })
+      } else {
+        lines.push({
+          type,
+          date,
+          supplier,
+          charter: /charter/i.test(service) ? 'Charter' : 'Schedule',
+          route: String(d.location || service || '—'),
+          pax: paxCount,
+          net: parentNet,
+          rack: parentRack,
+        })
+      }
+      pushExtras(date, paxCount, supplier)
       continue
     }
 
@@ -307,15 +525,16 @@ export function linesFromServices(services: AddedService[]): SummaryLine[] {
       const activities = asActivities(d)
       if (activities.length) {
         for (const a of activities) {
-          const aNet = a.rate * a.guestIds.length
+          const aNet = a.guestIds.length > 0 ? a.rate * a.guestIds.length : a.rate
+          const aRack = aNet // activity fees in seed are typically 0% margin unless overridden
           lines.push({
             type,
             date: String(a.start || d.startDate || ''),
             supplier: String(d.supplier || svc.title),
             service: a.name,
-            pax: a.guestIds.length,
+            pax: a.guestIds.length || undefined,
             net: aNet,
-            rack: rackOf(aNet),
+            rack: aRack,
           })
         }
       } else {
@@ -324,40 +543,43 @@ export function linesFromServices(services: AddedService[]): SummaryLine[] {
           date: String(d.startDate || ''),
           supplier: String(d.supplier || svc.title),
           service: String(d.service || svc.subtitle || 'Activity'),
-          pax: 0,
-          net,
-          rack,
+          pax: undefined,
+          net: parentNet,
+          rack: parentRack,
         })
       }
+      pushExtras(String(d.startDate || ''), 0, String(d.supplier || svc.title))
       continue
     }
 
     const activities = asActivities(d)
     if (activities.length) {
       for (const a of activities) {
-        const aNet = a.rate * a.guestIds.length
+        const aNet = a.guestIds.length > 0 ? a.rate * a.guestIds.length : a.rate
         lines.push({
           type: 'other',
           date: String(a.start || d.startDate || ''),
           supplier: String(d.supplier || svc.title),
           service: a.name,
-          pax: a.guestIds.length,
-          days: nightsBetween(String(d.startDate || ''), String(d.endDate || '')) || 1,
+          pax: a.guestIds.length || undefined,
+          days: nightsBetween(String(a.start || d.startDate || ''), String(a.end || d.endDate || '')) || 1,
           net: aNet,
-          rack: rackOf(aNet),
+          rack: aNet,
         })
       }
+      pushExtras(String(d.startDate || ''), 0, String(d.supplier || svc.title))
     } else {
       lines.push({
         type: 'other',
         date: String(d.startDate || ''),
         supplier: String(d.supplier || svc.title),
         service: String(d.description || d.service || 'Other'),
-        pax: Number(d.qty) || 1,
+        pax: Number(d.qty) || undefined,
         days: nightsBetween(String(d.startDate || ''), String(d.endDate || '')) || 1,
-        net,
-        rack,
+        net: parentNet,
+        rack: parentRack,
       })
+      pushExtras(String(d.startDate || ''), Number(d.qty) || 0, String(d.supplier || svc.title))
     }
   }
   return lines
@@ -409,16 +631,53 @@ export type SummaryCard = {
   rows: { cells: string[] }[]
 }
 
+const SINGULAR_NOUN: Record<string, string> = {
+  stays: 'stay',
+  flights: 'flight',
+  transfers: 'transfer',
+  vehicles: 'vehicle',
+  activities: 'activity',
+  extras: 'extra',
+  services: 'service',
+}
+
+function nounLabel(count: number, noun: string) {
+  return count === 1 ? SINGULAR_NOUN[noun] || noun : noun
+}
+
+/** Same date + supplier consecutive rows share a stay; blank repeated Date/Supplier cells. */
+function mergeSupplierRows(items: SummaryLine[], rows: { cells: string[] }[]) {
+  rows.forEach((row, i) => {
+    const prev = items[i - 1]
+    const cur = items[i]
+    if (i > 0 && prev && cur && cur.date === prev.date && cur.supplier === prev.supplier) {
+      row.cells[0] = ''
+      row.cells[1] = ''
+    }
+  })
+  return rows
+}
+
+function accommodationCountLabel(items: SummaryLine[]) {
+  const stays: Record<string, number> = {}
+  items.forEach((s) => {
+    const k = `${s.supplier}|${s.date}`
+    stays[k] = Math.max(stays[k] || 0, s.nights || 0)
+  })
+  const keys = Object.keys(stays)
+  const nts = keys.reduce((a, k) => a + stays[k], 0)
+  return `${keys.length} ${nounLabel(keys.length, 'stays')} · ${nts} ${nounLabel(nts, 'nights')}`
+}
+
 export function buildSummaryCards(lines: SummaryLine[]): SummaryCard[] {
   return ORDER.map((type) => {
     const items = lines.filter((s) => s.type === type)
     if (!items.length) return null
     const m = SUMMARY_TYPE_META[type]
-    let countLabel = `${items.length} ${m.noun}`
-    if (type === 'accommodation') {
-      const nts = items.reduce((a, s) => a + (s.nights || 0), 0)
-      countLabel = `${items.length} stays · ${nts} nights`
-    }
+    const countLabel =
+      type === 'accommodation'
+        ? accommodationCountLabel(items)
+        : `${items.length} ${nounLabel(items.length, m.noun)}`
     return {
       type,
       name: m.name,
@@ -429,7 +688,7 @@ export function buildSummaryCards(lines: SummaryLine[]): SummaryCard[] {
       countLabel,
       gridCols: GRID[type],
       headers: COLS[type].map(([label, align]) => ({ label, align })),
-      rows: items.map((s) => ({ cells: cellValues(type, s) })),
+      rows: mergeSupplierRows(items, items.map((s) => ({ cells: cellValues(type, s) }))),
     }
   }).filter(Boolean) as SummaryCard[]
 }
@@ -467,7 +726,7 @@ export function buildSummaryDays(lines: SummaryLine[]): SummaryDay[] {
         countLabel: '',
         gridCols: GRID[type],
         headers: COLS[type].map(([label, align]) => ({ label, align })),
-        rows: items.map((s) => ({ cells: cellValues(type, s) })),
+        rows: mergeSupplierRows(items, items.map((s) => ({ cells: cellValues(type, s) }))),
       } satisfies SummaryCard
     }).filter(Boolean) as SummaryCard[]
 
@@ -496,20 +755,21 @@ export function buildSummaryPricing(lines: SummaryLine[]) {
     if (s.type === 'accommodation') return s.roomType || '—'
     if (s.type === 'flight') return s.route || '—'
     if (s.type === 'transfer') return `${s.pickup || '—'} → ${s.dropoff || '—'}`
+    if (s.type === 'disposal') return `${s.vType || 'Vehicle'} at disposal · ${s.location || '—'}`
     return s.service || '—'
   }
 
   const priceGroups = ORDER.map((type) => {
     const gi = lines.filter((s) => s.type === type)
     if (!gi.length) return null
-    const sub = gi.reduce((a, s) => a + (s.net || 0), 0)
+    const sub = gi.reduce((a, s) => a + (s.rack || 0), 0)
     return {
       name: SUMMARY_TYPE_META[type].name,
       subtotal: formatUsd(sub),
       items: gi.map((s) => ({
         supplier: s.supplier,
         desc: descOf(s),
-        value: formatUsd(s.net || 0),
+        value: formatUsd(s.rack || 0),
       })),
     }
   }).filter(Boolean) as SummaryPriceGroup[]

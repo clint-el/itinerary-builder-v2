@@ -151,7 +151,9 @@ export const LOCATION_TREE = [
     name: 'Kenya',
     kind: 'Country',
     children: [
+      { id: 'nairobi', name: 'Nairobi', kind: 'Region' },
       { id: 'central-kenya', name: 'Central Kenya', kind: 'Region' },
+      { id: 'loisaba', name: 'Loisaba', kind: 'Region' },
       {
         id: 'southern-kenya',
         name: 'Southern Kenya',
@@ -170,6 +172,8 @@ export const LOCATION_TREE = [
     kind: 'Country',
     children: [
       { id: 'serengeti', name: 'Serengeti', kind: 'Region' },
+      { id: 'ngorongoro', name: 'Ngorongoro', kind: 'Region' },
+      { id: 'kilimanjaro', name: 'Kilimanjaro', kind: 'Region' },
       { id: 'zanzibar', name: 'Zanzibar', kind: 'Region' },
     ],
   },
@@ -177,26 +181,39 @@ export const LOCATION_TREE = [
 
 export const CATALOG: Record<ServiceTab, CatalogItem[]> = {
   accommodation: [
-    { name: 'Hemingways Nairobi', service: 'Garden Suite', location: 'Central Kenya', group: 'Hemingways', headOffice: 'Nairobi, Kenya', starred: true },
-    { name: 'Mara Serena Lodge', service: 'Luxury Tent', location: 'Masai Mara', group: 'Serena', headOffice: 'Nairobi, Kenya', starred: true },
+    { name: 'Hemingways Nairobi', service: 'BB Double Deluxe Suite', location: 'Nairobi', group: 'Hemingways', headOffice: 'Nairobi, Kenya', starred: true },
+    { name: 'Elewana Loisaba Tented Camp', service: 'GPKG Double Safari Tent', location: 'Loisaba', group: 'Elewana', headOffice: 'Nairobi, Kenya', starred: true },
+    { name: 'Elewana Sand River Masai Mara', service: 'GPKG Family Tent', location: 'Masai Mara', group: 'Elewana', headOffice: 'Nairobi, Kenya', starred: true },
+    { name: 'Elewana Serengeti Migration Camp', service: 'GPKG Double Safari Tent', location: 'Serengeti', group: 'Elewana', headOffice: 'Arusha, Tanzania', starred: true },
+    { name: 'Elewana The Manor at Ngorongoro', service: 'GPKG Stable Cottage', location: 'Ngorongoro', group: 'Elewana', headOffice: 'Arusha, Tanzania', starred: true },
+    { name: 'Mara Serena Lodge', service: 'Luxury Tent', location: 'Masai Mara', group: 'Serena', headOffice: 'Nairobi, Kenya', starred: false },
     { name: "Governors' Camp", service: 'Riverside Tent', location: 'Masai Mara', group: 'Governors', headOffice: 'Nairobi, Kenya', starred: false },
     { name: 'Ol Tukai Lodge', service: 'Garden View Room', location: 'Amboseli', group: 'AA Lodges', headOffice: 'Nairobi, Kenya', starred: false },
   ],
   transportation: [
-    { name: 'Bushtops Transfers', service: 'Airstrip transfer', location: 'Masai Mara', group: 'Bushtops', headOffice: 'Nairobi, Kenya', starred: true },
+    { name: 'Cheli & Peacock Safaris Nairobi', service: 'Nairobi One Way Transfer', location: 'Nairobi', group: 'Cheli & Peacock', headOffice: 'Nairobi, Kenya', starred: true },
+    { name: 'Bushtops Transfers', service: 'Airstrip transfer', location: 'Masai Mara', group: 'Bushtops', headOffice: 'Nairobi, Kenya', starred: false },
     { name: 'Mara Route Vehicles', service: 'Full-day game drive', location: 'Masai Mara', group: 'Mara Route', headOffice: 'Nairobi, Kenya', starred: false },
     { name: 'Nairobi Airport Transfers', service: 'Airport transfer', location: 'Central Kenya', group: 'CityLink', headOffice: 'Nairobi, Kenya', starred: false },
   ],
   flight: [
-    { name: 'Safarilink', service: 'Charter flight', location: 'Masai Mara', group: 'Safarilink', headOffice: 'Nairobi, Kenya', starred: true },
+    { name: 'AirKenya Wilson1', service: 'WILSON TO LOISABA OW', location: 'Nairobi', group: 'AirKenya', headOffice: 'Nairobi, Kenya', starred: true },
+    { name: 'AirKenya Central Kenya1', service: 'LOISABA TO MARA OW', location: 'Central Kenya', group: 'AirKenya', headOffice: 'Nairobi, Kenya', starred: true },
+    { name: 'AirKenya Mara1', service: 'MARA TO KOGATENDE OW', location: 'Masai Mara', group: 'AirKenya', headOffice: 'Nairobi, Kenya', starred: true },
+    { name: 'Auric Air Serengeti1', service: 'SEN - SERENGETI NORTH to MANYARA', location: 'Serengeti', group: 'Auric Air', headOffice: 'Arusha, Tanzania', starred: true },
+    { name: 'Auric Air Manyara1', service: 'MANYARA to KILIMANJARO', location: 'Ngorongoro', group: 'Auric Air', headOffice: 'Arusha, Tanzania', starred: true },
+    { name: 'Safarilink', service: 'Charter flight', location: 'Masai Mara', group: 'Safarilink', headOffice: 'Nairobi, Kenya', starred: false },
     { name: 'AirKenya', service: 'Scheduled flight', location: 'Central Kenya', group: 'AirKenya', headOffice: 'Nairobi, Kenya', starred: false },
   ],
   activity: [
-    { name: "Governors' Balloon Safaris", service: 'Hot-air balloon safari', location: 'Masai Mara', group: 'Governors', headOffice: 'Nairobi, Kenya', starred: true },
+    { name: 'Cheli and Peacock Safaris Kenya', service: 'Giraffe Centre Entrance Fee', location: 'Nairobi', group: 'Cheli & Peacock', headOffice: 'Nairobi, Kenya', starred: true },
+    { name: "Governors' Balloon Safaris", service: 'Hot-air balloon safari', location: 'Masai Mara', group: 'Governors', headOffice: 'Nairobi, Kenya', starred: false },
     { name: 'Mara Walking Safaris', service: 'Guided bush walk', location: 'Masai Mara', group: 'Independent', headOffice: 'Nairobi, Kenya', starred: false },
     { name: 'Nairobi City Tour', service: 'Half-day city tour', location: 'Central Kenya', group: 'CityLink', headOffice: 'Nairobi, Kenya', starred: false },
   ],
   other: [
+    { name: 'KE AMREF Flying Doctors', service: 'Amref Silver: Kenya/Tanzania/Zanzibar 30 days', location: 'Nairobi', group: 'AMREF', headOffice: 'Nairobi, Kenya', starred: true },
+    { name: 'Umbato Meet and Assist Services', service: 'JKIA Meet & Assist (Arrival)', location: 'Nairobi', group: 'Umbato', headOffice: 'Nairobi, Kenya', starred: true },
     { name: 'Local Guide Services', service: 'Freelance guide', location: 'Masai Mara', group: 'Independent', headOffice: 'Nairobi, Kenya', starred: false },
   ],
 }
@@ -214,6 +231,8 @@ export const BASIS = {
   bb: 'Bed & Breakfast',
   ro: 'Room Only',
   gd: 'Game Drive',
+  gp: 'Game Package',
+  fi: 'Fully Inclusive',
 } as const
 
 export const BASIS_DETAILS = {
@@ -222,6 +241,8 @@ export const BASIS_DETAILS = {
   bb: { included: 'Breakfast is included daily.', excluded: 'Lunch, dinner, beverages and park fees are not included.' },
   ro: { included: 'Accommodation only, no meals included.', excluded: 'All meals, beverages and park fees are not included.' },
   gd: { included: 'Breakfast and a shared game drive are included daily.', excluded: 'Lunch, dinner and park fees are not included.' },
+  gp: { included: 'Full board plus scheduled game drives are included daily.', excluded: 'Park/conservancy fees, alcoholic beverages and laundry are not included.' },
+  fi: { included: 'All meals and scheduled game activities are included daily.', excluded: 'Park/conservancy fees, alcoholic beverages and laundry are not included.' },
 } as const
 
 export const BASIS_OPTIONS = Object.entries(BASIS).map(([id, label]) => ({ id, label }))
@@ -251,6 +272,9 @@ export const PROMOTIONS = [
 ]
 
 export const ACTIVITY_TYPES = [
+  { name: 'Giraffe Centre Entrance Fee', rate: 45, includes: 'Entrance to the Giraffe Centre and educational briefing.', excludes: 'Transport and personal purchases are not included.' },
+  { name: 'Karen Blixen Museum Entry Fee', rate: 36, includes: 'Museum entrance and guided walkthrough of the house and grounds.', excludes: 'Transport and souvenir purchases are not included.' },
+  { name: 'Sheldrick Wildlife Trust Nairobi Orphanage Public Hours Visit', rate: 50, includes: 'Public visiting-hour entry to the elephant orphanage.', excludes: 'Park entry fees and private guiding are not included.' },
   { name: 'Game drive', rate: 60, includes: 'Professional driver-guide, park entry coordination, and bottled water throughout the drive.', excludes: 'Personal expenses, gratuities, and any premium beverages are not covered.' },
   { name: 'Guided nature walk', rate: 45, includes: 'Licensed walking guide, safety briefing, and use of binoculars during the walk.', excludes: 'Park conservation fees and personal travel insurance are not included.' },
   { name: 'Hot air balloon safari', rate: 420, includes: 'Sunrise balloon flight, champagne breakfast on landing, and a flight certificate.', excludes: 'Transfers to the launch site and gratuities to the crew are excluded.' },
@@ -302,9 +326,10 @@ function formatUsdStatic(n: number) {
 }
 
 export const VEHICLE_TYPES = [
+  { type: 'Safari Vehicle', cap: 6, rate: 250 },
   { type: 'Land Cruiser', cap: 6, rate: 220 },
   { type: 'Minivan', cap: 8, rate: 280 },
-  { type: 'Sedan', cap: 3, rate: 150 },
+  { type: 'Sedan', cap: 4, rate: 150 },
 ]
 
 export const SEED_ITINERARIES: Itinerary[] = [
@@ -325,6 +350,7 @@ export const SEED_ITINERARIES: Itinerary[] = [
   { id: 'CPS5686-3', reference: 'CPS5686-3', itineraryRef: 'ITN-10242-3', title: 'Patel Family', agency: 'Black Tomato', agent: '', safariPlanner: 'Amelia Earhart', destination: 'Kenya', travelDateFrom: '2026-06-10', travelDateTo: '2026-06-20', createdAt: '2026-05-20', status: 'SUPERSEDED', paymentStatus: 'UNPAID', totalUsd: 15900, balanceUsd: 15900, updatedAt: '2026-07-08T09:12:00Z', adults: 2, children: 2, infants: 0 },
   { id: 'CPS5687', reference: 'CPS5687', itineraryRef: 'ITN-10243', title: 'Bennett Family', agency: 'CPS', agent: '', safariPlanner: 'Noah Kiptoo', destination: 'Tanzania', travelDateFrom: '2026-09-05', travelDateTo: '2026-09-12', createdAt: '2026-06-01', status: 'DRAFT', paymentStatus: 'UNPAID', totalUsd: 22000, balanceUsd: 22000, updatedAt: '2026-07-08T09:12:00Z', adults: 2, children: 2, infants: 0 },
   { id: 'CPS5687-1', reference: 'CPS5687-1', itineraryRef: 'ITN-10243-1', title: 'Bennett Family', agency: 'CPS', agent: '', safariPlanner: 'Noah Kiptoo', destination: 'Tanzania', travelDateFrom: '2026-09-05', travelDateTo: '2026-09-12', createdAt: '2026-06-01', status: 'DRAFT', paymentStatus: 'UNPAID', totalUsd: 22000, balanceUsd: 22000, updatedAt: '2026-07-08T09:12:00Z', adults: 2, children: 2, infants: 0 },
+  { id: 'CPS5688', reference: 'CPS5688', itineraryRef: 'ITN-10244', title: 'Elewana Kenya & Tanzania Safari', agency: 'CPS', agent: '', safariPlanner: 'Amelia Earhart', destination: 'Kenya', travelDateFrom: '2026-09-01', travelDateTo: '2026-09-15', createdAt: '2026-07-01', status: 'DRAFT', paymentStatus: 'UNPAID', totalUsd: 42140.96, balanceUsd: 42140.96, updatedAt: '2026-07-20T10:00:00Z', adults: 2, children: 2, infants: 0 },
   { id: 'CPS5685', reference: 'CPS5685', itineraryRef: 'ITN-10241', title: 'Untitled Itinerary', agency: 'Zoo Groups', agent: 'David Ochieng', safariPlanner: 'Amelia Earhart', destination: 'Kenya', travelDateFrom: '2026-10-11', travelDateTo: '2026-10-18', createdAt: '2026-06-25', status: 'CANCELLED', paymentStatus: 'REFUND_PENDING', totalUsd: 11200, balanceUsd: -3200, updatedAt: '2026-06-28T13:33:00Z', adults: 2, children: 1, infants: 0 },
 ]
 
@@ -408,7 +434,12 @@ export function defaultDraft(tab: ServiceTab): Record<string, unknown> {
       location: '', supplier: '', service: '', transMode: 'transfer',
       transDate: '', hireStart: '', hireEnd: '', pickup: '', dropoff: '', timeFrom: '', timeTo: '',
       discount: 0,
+      transPax: { adult: 0, child: 0, infant: 0 },
       vehicles: [{ id: 'v1', type: 'Land Cruiser', cap: 6, rate: 220, guestIds: [] as number[] }],
+      hireRoutes: [] as unknown[],
+      extras: [] as string[],
+      customExtras: [] as unknown[],
+      customExtraSeq: 1,
     }
   }
   if (tab === 'flight') {

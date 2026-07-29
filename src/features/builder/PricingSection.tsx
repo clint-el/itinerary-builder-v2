@@ -159,6 +159,9 @@ export function PricingSection({
                     : [{ type: 'No rooms priced yet', charge: '—', net: 0, rack: 0 }]
                 })()
 
+  const isTransport = tab === 'transportation'
+  const gridCols = isTransport ? 'grid-cols-[1.6fr_0.9fr_0.9fr]' : 'grid-cols-[1.4fr_0.8fr_0.9fr_0.9fr]'
+
   const originalRatesRef = useRef<Record<string, { net: number; rack: number }>>({})
   const wasOverrideOn = useRef(false)
   useEffect(() => {
@@ -201,22 +204,27 @@ export function PricingSection({
       ) : null}
 
       <div className="mb-3 overflow-hidden rounded-lg border">
-        <div className="grid grid-cols-[1.4fr_0.8fr_0.9fr_0.9fr] gap-2 bg-[#4B4B4B] px-3 py-2.5 text-[11px] font-bold uppercase tracking-wide text-white">
-          <span>Type</span>
-          <span>Charge</span>
-          <span className="text-right">$,NET</span>
-          <span className="text-right">$, RACK</span>
+        <div
+          className={`grid ${gridCols} gap-2 bg-[#4B4B4B] px-3 py-2.5 text-[11px] font-bold uppercase tracking-wide text-white`}
+        >
+          <span>{isTransport ? 'Vehicle' : 'Type'}</span>
+          {!isTransport ? <span>Charge</span> : null}
+          <span className="text-right">{isTransport ? '$ Net' : '$,NET'}</span>
+          <span className="text-right">{isTransport ? '$ Rack' : '$, RACK'}</span>
         </div>
+        {isTransport && liveRows.length === 0 ? (
+          <div className="px-3 py-2 text-[12px] text-[#A1A1A1]">No vehicles added yet.</div>
+        ) : null}
         {liveRows.map((r, i) => {
           const original = originalRatesRef.current[r.type]
           return (
           <div
             key={`${r.type}-${i}`}
-            className="grid grid-cols-[1.4fr_0.8fr_0.9fr_0.9fr] items-center gap-2 border-b px-3 py-2 last:border-0"
+            className={`grid ${gridCols} items-center gap-2 border-b px-3 py-2 last:border-0`}
             style={{ background: i % 2 === 1 ? '#F9FAFB' : '#FFFFFF' }}
           >
             <span className="truncate text-[13px] font-semibold">{r.type}</span>
-            <span className="text-[12px] text-[#737373]">{r.charge}</span>
+            {!isTransport ? <span className="text-[12px] text-[#737373]">{r.charge}</span> : null}
             <div className="text-right">
               {overrideOn && r.onNet ? (
                 <>

@@ -219,7 +219,7 @@ export function AccommodationPanel({
       <div className="flex gap-1 border-b">
         {tabBtn('guests', 'Guests')}
         {tabBtn('extras', 'Extras', extras.length)}
-        {tabBtn('promotions', 'Specials')}
+        {tabBtn('promotions', 'Special Offer(s)')}
         {tabBtn('supplier', 'Supplier')}
         {tabBtn('notes', 'Supplier Notes')}
       </div>

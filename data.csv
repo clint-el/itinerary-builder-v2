@@ -1,0 +1,46 @@
+﻿Type,From,Supplier,Service,Cost,Status,Net Margin %
+ACCOMMODATION,01/09/2026,Hemingways Nairobi,BB Double Deluxe Suite,1530,Quotation,30.01
+ACCOMMODATION,01/09/2026,Hemingways Nairobi,BB Twin Deluxe Suite,1530,Quotation,30.01
+ACCOMMODATION,03/09/2026,Elewana Loisaba Tented Camp,GPKG Double Safari Tent,3330.3,Quotation,39.99
+ACCOMMODATION,03/09/2026,Elewana Loisaba Tented Camp,Conservancy Fees Adult (GPKG Double Safari Tent),1080,Quotation,0
+ACCOMMODATION,03/09/2026,Elewana Loisaba Tented Camp,GPKG CIOR (Two Chd 12 to 17.99 yrs),2497.74,Quotation,39.97
+ACCOMMODATION,03/09/2026,Elewana Loisaba Tented Camp,Conservancy Fees Child (3 to 17.99yrs) (GPKG CIOR (Two Chd 12 to 17.99 yrs)),540,Quotation,0
+ACCOMMODATION,06/09/2026,Elewana Sand River Masai Mara,GPKG Family Tent,7759.65,Quotation,40
+ACCOMMODATION,06/09/2026,Elewana Sand River Masai Mara,Masai Mara National Reserve Fees Adult (GPKG Family Tent),1200,Quotation,0
+ACCOMMODATION,06/09/2026,Elewana Sand River Masai Mara,Masai Mara National Reserve Fees Child (9 to 17.99 years) (GPKG Family Tent),300,Quotation,0
+ACCOMMODATION,09/09/2026,Elewana Serengeti Migration Camp,GPKG Double Safari Tent,4977.6,Quotation,47
+ACCOMMODATION,09/09/2026,Elewana Serengeti Migration Camp,Concession Fee Adult (GPKG Double Safari Tent),566.4,Quotation,0
+ACCOMMODATION,09/09/2026,Elewana Serengeti Migration Camp,Park Fee Adult (GPKG Double Safari Tent),660.8,Quotation,0
+ACCOMMODATION,09/09/2026,Elewana Serengeti Migration Camp,GPKG CIOR (Two Chd 12 to 17.99 yrs),3733.2,Quotation,47
+ACCOMMODATION,09/09/2026,Elewana Serengeti Migration Camp,Park Fees Child (5 to 15.99 yrs) (GPKG CIOR (Two Chd 12 to 17.99 yrs)),188.8,Quotation,2
+ACCOMMODATION,09/09/2026,Elewana Serengeti Migration Camp,Concession Fees Child (5 to 15.99 yrs) (GPKG CIOR (Two Chd 12 to 17.99 yrs)),94.4,Quotation,2
+ACCOMMODATION,13/09/2026,Elewana The Manor at Ngorongoro,GPKG Stable Cottage,4562.8,Quotation,46.99
+ACCOMMODATION,14/09/2026,Elewana The Manor at Ngorongoro,NCCA Park Fees Adult (GPKG Stable Cottage),141.6,Quotation,0
+ACCOMMODATION,14/09/2026,Elewana The Manor at Ngorongoro,NCCA Park Fees Child (5 to 15.99 yrs) (GPKG Stable Cottage),47.2,Quotation,2
+TRANSPORT,01/09/2026,Cheli & Peacock Safaris Nairobi,Nairobi One Way Transfer,50,Quotation,72.22
+TRANSPORT,02/09/2026,Cheli & Peacock Safaris Nairobi,Nairobi Full Day Car Hire and Driver,250,Quotation,40.48
+TRANSPORT,03/09/2026,Cheli & Peacock Safaris Nairobi,Nairobi One Way Transfer,50,Quotation,72.22
+TRAVEL,03/09/2026,AirKenya Wilson1,WILSON TO LOISABA OW,534.5,Quotation,27.96
+TRAVEL,03/09/2026,AirKenya Wilson1,Flight Teenagers (12 to 17.99 years) (WILSON TO LOISABA OW),267.25,Quotation,28.000000000000004
+TRAVEL,03/09/2026,AirKenya Wilson1,Flight Child (2 to 11.99 years) (WILSON TO LOISABA OW),200.44,Quotation,28.000000000000004
+TRAVEL,06/09/2026,AirKenya Central Kenya1,LOISABA TO MARA OW,855.8,Quotation,27.96
+TRAVEL,06/09/2026,AirKenya Central Kenya1,Flight Teenagers (12 to 17.99 years) (LOISABA TO MARA OW),427.9,Quotation,28.000000000000004
+TRAVEL,06/09/2026,AirKenya Central Kenya1,Flight Child (2 to 11.99 years) (LOISABA TO MARA OW),320.92,Quotation,28.000000000000004
+TRAVEL,09/09/2026,AirKenya Mara1,MARA TO KOGATENDE OW,1275.8,Quotation,28
+TRAVEL,09/09/2026,AirKenya Mara1,Flight Teenagers (12 to 17.99 years) (MARA TO KOGATENDE OW),637.9,Quotation,28.000000000000004
+TRAVEL,09/09/2026,AirKenya Mara1,Flight Child (2 to 11.99 years) (MARA TO KOGATENDE OW),478.42,Quotation,28.000000000000004
+TRAVEL,13/09/2026,Auric Air Serengeti1,SEN - SERENGETI NORTH to MANYARA,465,Quotation,25
+TRAVEL,13/09/2026,Auric Air Serengeti1,Flight Teenagers (12 to 17.99 years) (SEN - SERENGETI NORTH to MANYARA),232.5,Quotation,25
+TRAVEL,13/09/2026,Auric Air Serengeti1,Flight Child (2 to 11.99 years) (SEN - SERENGETI NORTH to MANYARA),190.65,Quotation,25
+TRAVEL,15/09/2026,Auric Air Manyara1,MANYARA to KILIMANJARO,329,Quotation,24.89
+TRAVEL,15/09/2026,Auric Air Manyara1,Flight Teenagers (12 to 17.99 years) (MANYARA to KILIMANJARO),164.5,Quotation,25
+TRAVEL,15/09/2026,Auric Air Manyara1,Flight Child (2 to 11.99 years) (MANYARA to KILIMANJARO),134.89,Quotation,25
+OTHER,01/09/2026,KE AMREF Flying Doctors,Amref Silver: Kenya/Tanzania/Zanzibar 30 days,64,Quotation,20
+OTHER,01/09/2026,Umbato Meet and Assist Services,JKIA Meet & Assist (Arrival),75,Quotation,16.67
+ACTIVITY,02/09/2026,Cheli and Peacock Safaris Kenya,Giraffe Centre Entrance Fee,45,Quotation,0
+ACTIVITY,02/09/2026,Cheli and Peacock Safaris Kenya,Karen Blixen Museum Entry Fee,36,Quotation,0
+ACTIVITY,02/09/2026,Cheli and Peacock Safaris Kenya,Sheldrick Wildlife Trust Nairobi Orphanage Public Hours Visit,50,Quotation,0
+ACTIVITY,02/09/2026,Cheli and Peacock Safaris Kenya,Nairobi National Park Entrance Fees - Adult (Sheldrick Wildlife Trust Nairobi Orphanage Public Hours Visit),160,Quotation,0
+ACTIVITY,02/09/2026,Cheli and Peacock Safaris Kenya,Nairobi National Park Entrance Fees - Child (3 - 17.99 yrs) (Sheldrick Wildlife Trust Nairobi Orphanage Public Hours Visit),80,Quotation,0
+ACTIVITY,02/09/2026,Cheli and Peacock Safaris Kenya,Vehicle & Driver Nairobi National Park Entry Fees (Sheldrick Wildlife Trust Nairobi Orphanage Public Hours Visit),25,Quotation,0
+,,,,,,37.29

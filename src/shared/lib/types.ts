@@ -96,6 +96,15 @@ export interface Vehicle {
   guestIds: number[]
 }
 
+export interface HireRoute {
+  id: string
+  date: string
+  pickup: string
+  dropoff: string
+  timeFrom: string
+  timeTo: string
+}
+
 export interface ActivityItem {
   id: string
   name: string

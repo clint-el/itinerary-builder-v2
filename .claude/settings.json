@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(nohup npm run dev)",
+      "Bash(disown)",
+      "Bash(node check_quotedoc2.mjs)",
+      "Bash(node check_quotedoc3.mjs)",
+      "Bash(sed -i '' \"s/getByRole\\('button', { name: 'Day by day' }\\)/getByRole\\('button', { name: '✓ Day by day' }\\)/\" check_quotedoc3.mjs)",
+      "Bash(sed -i '' \"s/getByRole\\('button', { name: 'Payment \\\\& terms' }\\)/getByRole\\('button', { name: '✓ Payment \\\\& terms' }\\)/\" check_quotedoc3.mjs)",
+      "Bash(grep -n \"const \\\\[optionsOpen\\\\|relative shrink-0\\\\\">$\\\\|setOptionsOpen\" /Users/blnr/Desktop/work/cps/SOL/itinerary-builder-demo/src/features/quote-doc/QuoteDocPage.tsx)",
+      "Bash(node check_quotedoc4.mjs)",
+      "Bash(node check_photos.mjs)"
+    ]
+  }
+}
