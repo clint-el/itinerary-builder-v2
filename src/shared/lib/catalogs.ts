@@ -382,9 +382,8 @@ export const ACTIVITY_TYPES = [
 ]
 
 export const SYSTEM_PRICE = [
-  { label: 'Rack', value: '$3364' },
-  { label: 'Net', value: '$2250' },
-  { label: 'Sell', value: '--' },
+  { label: 'Sell', value: '$3364' },
+  { label: 'Cost', value: '$2250' },
   { label: 'Discount', value: '--' },
   { label: 'Special Offer(s)', value: '--' },
   { label: 'Purchase price', value: '$2250' },
@@ -393,6 +392,51 @@ export const SYSTEM_PRICE = [
   { label: 'Client price', value: '$3263', strong: true },
 ] as const
 
+/** Apply a flat discount and/or special offer to BOTH cost and sell.
+ * Flat $ discounts are pro-rated onto cost by the sell reduction ratio.
+ * Percentage promos (e.g. early-bird 10%) cut both sides by the same rate.
+ * CNP (contracted-net-price) holds cost and only moves sell — not used here. */
+export function applyOfferToCostAndSell(
+  net: number,
+  rack: number,
+  discount = 0,
+  promotionId?: string | null,
+) {
+  const promo = PROMOTIONS.find((p) => p.id === promotionId)
+  let sellDelta = Math.max(0, Number(discount) || 0)
+  let costDelta = 0
+  let label = sellDelta > 0 ? 'Discount' : ''
+
+  if (promo?.id === 'early-bird') {
+    const promoSell = Math.round(rack * 0.1 * 100) / 100
+    const promoCost = Math.round(net * 0.1 * 100) / 100
+    sellDelta += promoSell
+    costDelta += promoCost
+    label = sellDelta > promoSell ? `Discount + ${promo.title}` : promo.title
+  } else if (promo) {
+    label = label ? `Discount + ${promo.title}` : promo.title
+  }
+
+  sellDelta = Math.min(sellDelta, Math.max(0, rack))
+  if (sellDelta > 0 && rack > 0) {
+    // Pro-rate any remaining flat discount onto cost at the same ratio as sell.
+    const flatSell = Math.max(0, sellDelta - (promo?.id === 'early-bird' ? Math.round(rack * 0.1 * 100) / 100 : 0))
+    if (flatSell > 0) {
+      costDelta += Math.round(net * (flatSell / rack) * 100) / 100
+    }
+  }
+  costDelta = Math.min(costDelta, Math.max(0, net))
+
+  return {
+    label: label || 'Discount',
+    sellDelta,
+    costDelta,
+    cost: Math.max(0, Math.round((net - costDelta) * 100) / 100),
+    sell: Math.max(0, Math.round((rack - sellDelta) * 100) / 100),
+    promo,
+  }
+}
+
 /** Build a live system-price summary from draft net/rack + discount + special offer. */
 export function liveSystemPrice(
   net: number,
@@ -400,36 +444,27 @@ export function liveSystemPrice(
   discount: number,
   promotionId?: string | null,
 ) {
-  const promo = PROMOTIONS.find((p) => p.id === promotionId)
-  let specialAmount = 0
-  let specialValue = '--'
-  if (promo?.id === 'early-bird') {
-    specialAmount = Math.round(rack * 0.1 * 100) / 100
-    specialValue = `−${formatUsdStatic(specialAmount)}`
-  } else if (promo?.id === 'stay-more') {
-    specialValue = promo.title
-  } else if (promo?.id === 'honeymoon') {
-    specialValue = promo.title
-  } else if (promo) {
-    specialValue = promo.title
-  }
-
-  const client = Math.max(0, rack - (discount || 0) - specialAmount)
-  const margin = client - net
-  const marginPct = client > 0 ? Math.round((margin / client) * 100) : 0
+  const offer = applyOfferToCostAndSell(net, rack, discount, promotionId)
+  const specialValue =
+    offer.promo?.id === 'early-bird'
+      ? `−${formatUsdStatic(Math.round(rack * 0.1 * 100) / 100)}`
+      : offer.promo
+        ? offer.promo.title
+        : '--'
+  const margin = offer.sell - offer.cost
+  const marginPct = offer.sell > 0 ? Math.round((margin / offer.sell) * 100) : 0
   return [
-    { label: 'Rack', value: formatUsdStatic(rack) },
-    { label: 'Net', value: formatUsdStatic(net) },
-    { label: 'Sell', value: formatUsdStatic(Math.max(0, rack - (discount || 0))) },
+    { label: 'Sell', value: formatUsdStatic(rack) },
+    { label: 'Cost', value: formatUsdStatic(net) },
     { label: 'Discount', value: discount ? formatUsdStatic(discount) : '--' },
     { label: 'Special Offer(s)', value: specialValue },
-    { label: 'Purchase price', value: formatUsdStatic(net) },
+    { label: 'Purchase price', value: formatUsdStatic(offer.cost) },
     {
       label: `CPS margin ${marginPct}%`,
       value: formatUsdStatic(margin),
     },
     { label: 'TC commission', value: '$0.00' },
-    { label: 'Client price', value: formatUsdStatic(client), strong: true },
+    { label: 'Client price', value: formatUsdStatic(offer.sell), strong: true },
   ]
 }
 
@@ -563,7 +598,8 @@ export function defaultDraft(tab: ServiceTab): Record<string, unknown> {
   if (tab === 'flight') {
     return {
       location: '', supplier: '', service: '', flightMode: 'oneway',
-      departDate: '', returnDate: '', capacity: 12, qty: 1, discount: 0,
+      departDate: '', returnDate: '', departTime: '', returnTime: '',
+      capacity: 5, capMin: 2, capMax: 5, overflowMode: 'split', qty: 1, discount: 0,
       pax: { adult: 2, youth: 0, child: 0, infant: 0 },
       rates: { adult: 180, youth: 140, child: 90, infant: 0 },
       extras: [] as string[], customExtras: [] as unknown[], customExtraSeq: 1, promotion: null,

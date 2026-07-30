@@ -1,8 +1,6 @@
-import { useState } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { AlertTriangle, CalendarDays, Check, Clock3, Info, Plus, Search, Trash2, UsersRound } from 'lucide-react'
 import { PROMOTIONS, extrasForTab } from '@/shared/lib/catalogs'
-import { rackOf } from '@/shared/lib/helpers'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -11,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import type { CatalogItem } from '@/shared/lib/types'
+import type { CatalogItem, Guest } from '@/shared/lib/types'
 import { cn, formatUsd } from '@/shared/lib/utils'
 import { DatePickerGridInput } from '@/shared/ui/date-picker'
 import { LocationDropdown } from './LocationDropdown'
@@ -25,25 +23,103 @@ const PAX_BANDS: { key: 'adult' | 'youth' | 'child' | 'infant'; label: string }[
   { key: 'child', label: 'Child' },
   { key: 'infant', label: 'Infant' },
 ]
+const FLIGHT_TIMES = [
+  '7:15 AM → 8:30 AM',
+  '10:30 AM → 11:45 AM',
+  '1:00 PM → 2:20 PM',
+  '3:45 PM → 5:00 PM',
+]
+
+function PanelHeading({
+  icon: Icon,
+  title,
+  description,
+}: {
+  icon: typeof Search
+  title: string
+  description: string
+}) {
+  return (
+    <div className="mb-3 flex items-center gap-2">
+      <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-[#E8EEF3] text-[#64748B]">
+        <Icon className="size-3.5" />
+      </span>
+      <h3 className="text-[12px] font-bold uppercase tracking-wide text-[#334155]">{title}</h3>
+      <span className="text-[11.5px] text-[#A7AFBA]">{description}</span>
+    </div>
+  )
+}
+
+function routePatch(service: string, location: string) {
+  const normalized = service.replace(/\s+OW$/i, '')
+  const parts = normalized.split(/\s+(?:TO|to)\s+/)
+  if (parts.length === 2) {
+    return { service, flightFrom: parts[0].trim(), flightTo: parts[1].trim() }
+  }
+  return { service, flightFrom: location, flightTo: service }
+}
 
 export function FlightPanel({
   draft,
   patch,
+  guests = [],
 }: {
   draft: Record<string, unknown>
   patch: (p: Record<string, unknown>) => void
+  guests?: Guest[]
 }) {
-  const [rightTab, setRightTab] = useState<FlightTab>('policy')
+  const [rightTab, setRightTab] = useState<FlightTab>('extras')
   const isReturn = draft.flightMode === 'return'
-  const pax = (draft.pax || { adult: 0, youth: 0, child: 0, infant: 0 }) as Record<string, number>
-  const rates = (draft.rates || {}) as Record<string, number>
-  const totalPax = PAX_BANDS.reduce((s, b) => s + (pax[b.key] || 0), 0)
-  const capacity = Math.max(1, Number(draft.capacity) || 1)
-  const autoQty = flightAutoQty(draft)
-  const totalCapacity = capacity * autoQty
+  const partyPax = useMemo(() => {
+    const next = { adult: 0, youth: 0, child: 0, infant: 0 }
+    for (const guest of guests) {
+      if (guest.type in next) next[guest.type] += 1
+    }
+    return next
+  }, [guests])
+  const totalPax = PAX_BANDS.reduce((s, b) => s + (partyPax[b.key] || 0), 0)
+  const capMin = Math.max(1, Number(draft.capMin) || Number(draft.minSeats) || 2)
+  const capMax = Math.max(1, Number(draft.capMax) || Number(draft.capacity) || 5)
+  const overflowMode = draft.overflowMode === 'squeeze' ? 'squeeze' : 'split'
+  const capacityDraft = { ...draft, pax: partyPax, capacity: capMax, capMax, overflowMode }
+  const autoQty = flightAutoQty(capacityDraft)
+  const totalCapacity = capMax * autoQty
+  const isOverCapacity = totalPax > capMax
+  const excessPax = Math.max(0, totalPax - capMax)
+  const squeeze = overflowMode === 'squeeze'
+  const eligible = totalPax > 0 && totalPax <= totalCapacity
+  const partySummary = PAX_BANDS
+    .filter((band) => (partyPax[band.key] || 0) > 0)
+    .map((band) => `${partyPax[band.key]} ${band.label}`)
+    .join(' · ')
   const extras = extraObjects(draft)
   const extraIds = asExtraIds(draft)
   const customExtras = asCustomExtras(draft)
+
+  useEffect(() => {
+    const current = (draft.pax || {}) as Record<string, number>
+    const changed =
+      PAX_BANDS.some((band) => (current[band.key] || 0) !== partyPax[band.key]) ||
+      Number(draft.capacity) !== capMax ||
+      Number(draft.capMax) !== capMax ||
+      Number(draft.capMin) !== capMin
+    if (changed) patch({ pax: partyPax, capacity: capMax, capMin, capMax })
+  }, [partyPax, capMax, capMin, draft.pax, draft.capacity, draft.capMax, draft.capMin, patch])
+
+  const eligibilityText =
+    totalPax === 0
+      ? 'Set passenger counts below'
+      : isOverCapacity && squeeze
+        ? `${totalPax} PAX seated on 1 flight — ${excessPax} over the ${capMax}-seat maximum, subject to supplier approval`
+        : `${totalPax} PAX · ${autoQty} ${autoQty === 1 ? 'flight' : 'flights'} · ${totalCapacity} seats available${
+            totalPax < capMin ? ` · below the ${capMin}-seat minimum, inducement fee may apply` : ''
+          }`
+  const eligibilityBg =
+    totalPax === 0 ? '#F3F4F6' : eligible ? '#D1FAE5' : squeeze ? '#FFFBEB' : '#FEE2E2'
+  const eligibilityBorder =
+    totalPax === 0 ? '#E5E7EB' : eligible ? '#A7F3D0' : squeeze ? '#FDE68A' : '#FECACA'
+  const eligibilityColor =
+    totalPax === 0 ? '#525252' : eligible ? '#059669' : squeeze ? '#B45309' : '#DC2626'
 
   const modeBtn = (on: boolean) =>
     cn(
@@ -69,52 +145,47 @@ export function FlightPanel({
     </button>
   )
 
-  const qtyNote =
-    totalPax === 0
-      ? 'Add passengers to auto-calculate charters'
-      : `${totalPax} PAX ÷ ${capacity} seats = ${autoQty} ${autoQty === 1 ? 'charter' : 'charters'}`
-
-  let eligibilityText =
-    totalPax === 0
-      ? 'Set passenger counts below'
-      : `${totalPax} PAX auto-assigned across ${autoQty} ${autoQty === 1 ? 'charter' : 'charters'} · ${totalCapacity} seats total`
-  let eligibilityBg = totalPax === 0 ? '#F3F4F6' : '#D1FAE5'
-  let eligibilityBorder = totalPax === 0 ? '#E5E7EB' : '#A7F3D0'
-  let eligibilityColor = totalPax === 0 ? '#525252' : '#059669'
-
   return (
     <div className="space-y-4">
       <section className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-4 shadow-sm">
-        <div className="mb-3">
-          <h3 className="text-[12px] font-bold uppercase tracking-wide text-[#334155]">
-            Supplier & flight details
-          </h3>
-          <p className="text-[11.5px] text-[#94A3B8]">Pick location, supplier and flight service</p>
-        </div>
+        <PanelHeading
+          icon={Search}
+          title="Supplier & flight details"
+          description="Pick the location, supplier, aircraft capacity and charter quantity"
+        />
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="grid gap-1.5">
-            <Label>Location</Label>
+            <Label>1. Location</Label>
             <LocationDropdown
-              value={String(draft.location || '')}
-              onChange={(name) => patch({ location: name, supplier: '', service: '' })}
+              value={String(draft.location || draft.flightFrom || '')}
+              onChange={(name) =>
+                patch({ location: name, flightFrom: name, flightTo: '', supplier: '', service: '' })
+              }
             />
           </div>
           <div className="grid gap-1.5">
-            <Label>Supplier</Label>
+            <Label>2. Supplier</Label>
             <SupplierPicker
               tab="flight"
               value={String(draft.supplier || '')}
-              onPick={(item: CatalogItem) => patch({ supplier: item.name, service: item.service })}
+              onPick={(item: CatalogItem) =>
+                patch({
+                  supplier: item.name,
+                  ...routePatch(item.service, String(draft.location || draft.flightFrom || '')),
+                })
+              }
             />
           </div>
           <div className="grid gap-1.5 sm:col-span-2">
-            <Label>Service</Label>
+            <Label>3. Service</Label>
             <Select
               value={String(draft.service || '') || undefined}
-              onValueChange={(value) => patch({ service: value })}
+              onValueChange={(value) =>
+                patch(routePatch(value, String(draft.location || draft.flightFrom || '')))
+              }
             >
               <SelectTrigger className="bg-white">
-                <SelectValue placeholder="Select…" />
+                <SelectValue placeholder="Select a service" />
               </SelectTrigger>
               <SelectContent>
                 {FLIGHT_SERVICES.map((s) => (
@@ -125,9 +196,9 @@ export function FlightPanel({
               </SelectContent>
             </Select>
           </div>
-          <div className="grid gap-1.5 sm:col-span-2">
-            <Label>Trip type</Label>
-            <div className="flex gap-2">
+          <div className="flex items-center gap-2 sm:col-span-2">
+            <Label className="mr-1">Trip type</Label>
+            <div className="flex gap-1.5">
               <button
                 type="button"
                 className={modeBtn(!isReturn)}
@@ -148,11 +219,11 @@ export function FlightPanel({
       </section>
 
       <section className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-4 shadow-sm">
-        <div className="mb-3">
-          <h3 className="text-[12px] font-bold uppercase tracking-wide text-[#334155]">
-            Travel dates
-          </h3>
-        </div>
+        <PanelHeading
+          icon={CalendarDays}
+          title="Travel dates"
+          description={isReturn ? 'Return — set the departure and return dates' : 'One-way — set the departure date'}
+        />
         <div className="flex flex-wrap gap-3">
           <div className="grid w-[170px] gap-1.5">
             <Label>Departure date</Label>
@@ -174,81 +245,162 @@ export function FlightPanel({
             </div>
           ) : null}
         </div>
+        <div className="my-3.5 h-px bg-[#E2E8F0]" />
+        <PanelHeading icon={Clock3} title="Flight timing" description="" />
+        <div className="mb-1 text-[11.5px] font-semibold text-[#64748B]">
+          Outbound <span className="font-normal text-[#94A3B8]">(Departure time → Arrival time)</span>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {FLIGHT_TIMES.map((time) => {
+            const selected = draft.departTime === time
+            return (
+              <button
+                key={time}
+                type="button"
+                onClick={() => patch({ departTime: selected ? '' : time })}
+                className={cn(
+                  'flex h-9 items-center gap-2 rounded-lg border bg-white px-2.5 text-[12.5px] font-semibold text-[#334155]',
+                  selected ? 'border-[#931115] ring-1 ring-[#931115]/15' : 'border-[#E2E8F0]',
+                )}
+              >
+                <span
+                  className={cn(
+                    'flex size-4 items-center justify-center rounded border',
+                    selected ? 'border-[#931115] bg-[#931115] text-white' : 'border-[#CBD5E1] bg-white',
+                  )}
+                >
+                  {selected ? <Check className="size-3" /> : null}
+                </span>
+                {time}
+              </button>
+            )
+          })}
+        </div>
+        {isReturn ? (
+          <>
+            <div className="mb-1 mt-3 text-[11.5px] font-semibold text-[#64748B]">
+              Return <span className="font-normal text-[#94A3B8]">(Departure time → Arrival time)</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {FLIGHT_TIMES.map((time) => {
+                const selected = draft.returnTime === time
+                return (
+                  <button
+                    key={time}
+                    type="button"
+                    onClick={() => patch({ returnTime: selected ? '' : time })}
+                    className={cn(
+                      'flex h-9 items-center gap-2 rounded-lg border bg-white px-2.5 text-[12.5px] font-semibold text-[#334155]',
+                      selected ? 'border-[#931115] ring-1 ring-[#931115]/15' : 'border-[#E2E8F0]',
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'flex size-4 items-center justify-center rounded border',
+                        selected ? 'border-[#931115] bg-[#931115] text-white' : 'border-[#CBD5E1] bg-white',
+                      )}
+                    >
+                      {selected ? <Check className="size-3" /> : null}
+                    </span>
+                    {time}
+                  </button>
+                )
+              })}
+            </div>
+          </>
+        ) : null}
       </section>
 
       <section className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-4 shadow-sm">
-        <div className="mb-3">
-          <h3 className="text-[12px] font-bold uppercase tracking-wide text-[#334155]">
-            Charter & capacity
-          </h3>
-          <p className="text-[11.5px] text-[#94A3B8]">
-            Charters auto-calculated from passenger count
-          </p>
+        <PanelHeading icon={UsersRound} title="Charter & capacity" description="Capacity is set by the supplier" />
+        <div className="mb-3 flex flex-wrap gap-2.5">
+          <span className="inline-flex h-[38px] items-center gap-2 rounded-lg bg-[#F1F5F9] px-3 shadow-[inset_0_0_0_1px_#E2E8F0]">
+            <span className="text-[11px] font-bold uppercase tracking-wide text-[#94A3B8]">Min seats</span>
+            <span className="text-[15px] font-bold text-[#334155]">{capMin}</span>
+          </span>
+          <span className="inline-flex h-[38px] items-center gap-2 rounded-lg bg-[#F1F5F9] px-3 shadow-[inset_0_0_0_1px_#E2E8F0]">
+            <span className="text-[11px] font-bold uppercase tracking-wide text-[#94A3B8]">Max seats</span>
+            <span className="text-[15px] font-bold text-[#334155]">{capMax}</span>
+          </span>
+          <span className="inline-flex h-[38px] items-center gap-2 rounded-lg bg-white px-3 shadow-[inset_0_0_0_1px_#E2E8F0]">
+            <span className="text-[11px] font-bold uppercase tracking-wide text-[#94A3B8]">PAX</span>
+            <span className="text-[15px] font-bold text-[#334155]">{totalPax}</span>
+          </span>
+          <span className="inline-flex h-[38px] items-center gap-2 rounded-lg bg-[#EFF6FF] px-3 shadow-[inset_0_0_0_1px_#BFDBFE]">
+            <span className="text-[11px] font-bold uppercase tracking-wide text-[#60A5FA]">Flights</span>
+            <span className="text-[15px] font-bold text-[#1D4ED8]">×{autoQty}</span>
+          </span>
         </div>
-        <div className="mb-3 grid gap-3 sm:grid-cols-2">
-          <div className="grid gap-1.5">
-            <Label>Capacity / aircraft</Label>
-            <Input
-              type="number"
-              min={1}
-              value={capacity}
-              onChange={(e) => patch({ capacity: Math.max(1, Number(e.target.value) || 1) })}
-              className="bg-white"
-            />
-          </div>
-          <div className="grid gap-1.5">
-            <Label>
-              Charters required <span className="font-medium text-[#A1A1A1]">(auto)</span>
-            </Label>
-            <div className="flex items-center gap-2.5">
-              <span className="inline-flex h-8 min-w-9 items-center justify-center rounded-lg bg-[#EFF6FF] px-2.5 text-[15px] font-bold text-[#1D4ED8] shadow-[inset_0_0_0_1px_#BFDBFE]">
-                ×{autoQty}
-              </span>
-              <span className="text-[11.5px] text-[#94A3B8]">{qtyNote}</span>
+        <p className="mb-3 text-[11.5px] text-[#94A3B8]">
+          PAX from the itinerary party — {partySummary || 'no guests'}
+        </p>
+        {isOverCapacity ? (
+          <div className="mb-2.5 rounded-lg bg-[#FFFBEB] p-[11px_12px] shadow-[inset_0_0_0_1px_#FDE68A]">
+            <div className="mb-2.5 flex items-start gap-2.5">
+              <AlertTriangle className="mt-px size-4 shrink-0 text-[#B45309]" />
+              <div>
+                <p className="text-[13px] font-bold text-[#92400E]">
+                  {totalPax} PAX exceeds the {capMax}-seat maximum by {excessPax}
+                </p>
+                <p className="mt-[3px] text-xs text-[#B45309]">Choose how to seat the remaining passengers.</p>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2">
+              {(
+                [
+                  {
+                    mode: 'split' as const,
+                    on: !squeeze,
+                    label: 'Add another flight',
+                    note: `${Math.ceil(totalPax / capMax)} flights · ${excessPax} PAX move to the next departure`,
+                  },
+                  {
+                    mode: 'squeeze' as const,
+                    on: squeeze,
+                    label: 'Seat all PAX on this flight',
+                    note: `Over capacity by ${excessPax} — supplier approval required`,
+                  },
+                ] as const
+              ).map((choice) => (
+                <button
+                  key={choice.mode}
+                  type="button"
+                  onClick={() => patch({ overflowMode: choice.mode })}
+                  className="flex w-full items-start gap-2.5 rounded-lg px-3 py-2.5 text-left"
+                  style={{
+                    background: choice.on ? '#FFFFFF' : 'rgba(255,255,255,0.6)',
+                    boxShadow: `inset 0 0 0 ${choice.on ? '1.5px #931115' : '1px #FDE68A'}`,
+                  }}
+                >
+                  <span
+                    className="mt-px flex size-[17px] shrink-0 items-center justify-center rounded"
+                    style={{
+                      background: choice.on ? '#931115' : '#FFFFFF',
+                      boxShadow: `inset 0 0 0 ${choice.on ? '1px #931115' : '1.5px #CBD5E1'}`,
+                    }}
+                  >
+                    {choice.on ? <Check className="size-[11px] text-white" strokeWidth={3.5} /> : null}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-[13px] font-semibold text-[#171717]">{choice.label}</span>
+                    <span className="mt-0.5 block text-[11.5px] text-[#94A3B8]">{choice.note}</span>
+                  </span>
+                </button>
+              ))}
             </div>
           </div>
-        </div>
+        ) : null}
         <div
-          className="rounded-lg px-3 py-2.5 text-[13px] font-bold"
+          className="flex items-start gap-2.5 rounded-lg px-3 py-2.5"
           style={{
             background: eligibilityBg,
             boxShadow: `inset 0 0 0 1px ${eligibilityBorder}`,
-            color: eligibilityColor,
           }}
         >
-          {eligibilityText}
-        </div>
-      </section>
-
-      <section className="rounded-xl border bg-white p-4">
-        <h3 className="mb-3 text-[13px] font-bold uppercase tracking-wide text-[#475569]">
-          Passengers & rates
-        </h3>
-        <div className="space-y-2">
-          {PAX_BANDS.map((b) => (
-            <div key={b.key} className="flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2">
-              <span className="w-16 text-[13px] font-semibold">{b.label}</span>
-              <Input
-                type="number"
-                className="h-8 w-20"
-                value={pax[b.key] || 0}
-                onChange={(e) =>
-                  patch({ pax: { ...pax, [b.key]: Number(e.target.value) || 0 } })
-                }
-              />
-              <Input
-                type="number"
-                className="h-8 w-24"
-                value={rates[b.key] || 0}
-                onChange={(e) =>
-                  patch({ rates: { ...rates, [b.key]: Number(e.target.value) || 0 } })
-                }
-              />
-              <span className="text-[12px] text-[#737373]">
-                rack {formatUsd(rackOf(rates[b.key] || 0))}
-              </span>
-            </div>
-          ))}
+          <Info className="mt-px size-4 shrink-0" style={{ color: eligibilityColor }} />
+          <span className="text-[13px] font-bold" style={{ color: eligibilityColor }}>
+            {eligibilityText}
+          </span>
         </div>
       </section>
 

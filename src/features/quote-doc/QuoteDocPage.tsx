@@ -25,7 +25,7 @@ import {
   SUMMARY_TYPE_META,
   type SummaryLine,
 } from '@/features/summary/summaryModel'
-import { nightsBetween } from '@/shared/lib/helpers'
+import { nightsBetween, partyGuests } from '@/shared/lib/helpers'
 import type { AddedService, Hold, Itinerary } from '@/shared/lib/types'
 import { cn, formatDay, formatUsd } from '@/shared/lib/utils'
 
@@ -71,8 +71,7 @@ const PAGE_CLASS =
 const TYPE_COLORS: Record<SummaryLine['type'], string> = {
   accommodation: '#059669',
   flight: '#2563EB',
-  transfer: '#D97706',
-  disposal: '#BE123C',
+  transportation: '#D97706',
   activity: '#7E22CE',
   extra: '#0369A1',
   other: '#475569',
@@ -124,8 +123,11 @@ function destinationLabel(itinerary: Pick<Itinerary, 'destinations' | 'destinati
 function lineLabel(line: SummaryLine) {
   if (line.type === 'accommodation') return `${line.supplier} — ${line.roomType || 'Room'}`
   if (line.type === 'flight') return line.route || line.supplier
-  if (line.type === 'transfer') return `${line.pickup || 'Pickup TBC'} → ${line.dropoff || 'Drop-off TBC'}`
-  if (line.type === 'disposal') return `${line.vType || 'Vehicle'} at disposal · ${line.location || line.supplier}`
+  if (line.type === 'transportation') {
+    return line.kind === 'disposal'
+      ? `${line.vType || 'Vehicle'} at disposal · ${line.location || line.supplier}`
+      : `${line.pickup || 'Pickup TBC'} → ${line.dropoff || 'Drop-off TBC'}`
+  }
   return line.service || line.supplier
 }
 
@@ -138,8 +140,11 @@ function lineDetail(line: SummaryLine) {
 
 function lineQty(line: SummaryLine) {
   if (line.type === 'accommodation') return `${line.nights || 1} night${line.nights === 1 ? '' : 's'}`
-  if (line.type === 'disposal') return `${line.days || 1} day${line.days === 1 ? '' : 's'}`
-  if (line.type === 'transfer') return `${line.veh || 1} vehicle${line.veh === 1 ? '' : 's'}`
+  if (line.type === 'transportation') {
+    return line.kind === 'disposal'
+      ? `${line.days || 1} day${line.days === 1 ? '' : 's'}`
+      : `${line.veh || 1} vehicle${line.veh === 1 ? '' : 's'}`
+  }
   if (line.qty) return line.qty
   if (line.pax) return `${line.pax} pax`
   return '1'
@@ -150,18 +155,25 @@ function dayItemDetail(line: SummaryLine) {
     return `${line.basis || 'Basis TBC'}${line.nights ? ` · ${line.nights} nights` : ''}`
   }
   if (line.type === 'flight') return [line.supplier, line.charter].filter(Boolean).join(' · ')
-  if (line.type === 'transfer') return [line.vType, line.supplier].filter(Boolean).join(' · ')
-  if (line.type === 'disposal') return [line.vType, `${line.days || 1} day(s)`].filter(Boolean).join(' · ')
+  if (line.type === 'transportation') {
+    return line.kind === 'disposal'
+      ? [line.vType, `${line.days || 1} day(s)`].filter(Boolean).join(' · ')
+      : [line.vType, line.supplier].filter(Boolean).join(' · ')
+  }
   return line.supplier
 }
 
 export function QuoteDocPage() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
-  const { itineraries, getServices, getQuoteGroups } = useStore()
+  const { itineraries, getServices, getQuoteGroups, getGuestDetails } = useStore()
   const itinerary = itineraries.find((item) => item.id === id)
   const services = getServices(id)
   const quoteGroups = getQuoteGroups(id)
+  const guests = useMemo(
+    () => (itinerary ? partyGuests(itinerary, getGuestDetails(id)) : []),
+    [itinerary, id, getGuestDetails],
+  )
 
   const [zoom, setZoom] = useState(80)
   const [optionsOpen, setOptionsOpen] = useState(false)
@@ -195,12 +207,17 @@ export function QuoteDocPage() {
   )
 
   const lines = useMemo(() => {
-    if (services.length) return linesFromServices(services)
+    if (services.length) return linesFromServices(services, guests)
     if (quoteGroups.length) return linesFromQuoteGroups(quoteGroups)
     return []
-  }, [quoteGroups, services])
+  }, [quoteGroups, services, guests])
   const cards = useMemo(() => buildSummaryCards(lines), [lines])
-  const pricing = useMemo(() => buildSummaryPricing(lines), [lines])
+  const totalGuestsForPricing =
+    guests.length || (itinerary ? (itinerary.adults || 0) + (itinerary.children || 0) + (itinerary.infants || 0) : 0)
+  const pricing = useMemo(
+    () => buildSummaryPricing(lines, totalGuestsForPricing),
+    [lines, totalGuestsForPricing],
+  )
   const sortedLines = useMemo(
     () => [...lines].sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999')),
     [lines],
@@ -271,7 +288,7 @@ export function QuoteDocPage() {
         dayNum: `Day ${offset + 1}`,
         dateLabel: fmtDayDate(date),
         weekday: '',
-        groups: [],
+        items: [],
         date,
         lines: [...unique.values()],
       }
@@ -757,7 +774,7 @@ function DayPage({
       <PageHeading title={title} right={reference} />
       {showLegend ? (
         <div className="mb-1 flex items-center gap-4 border-b border-[#E5E7EB] pb-3">
-          {(['flight', 'transfer', 'activity', 'accommodation'] as const).map((type) => (
+          {(['flight', 'transportation', 'activity', 'accommodation'] as const).map((type) => (
             <span key={type} className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-wide text-[#A1A1A1]">
               <span className="size-[7px] rounded-full" style={{ background: TYPE_COLORS[type] }} />
               {type === 'accommodation' ? 'Stay' : SUMMARY_TYPE_META[type].name}

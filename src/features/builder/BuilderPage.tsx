@@ -204,9 +204,9 @@ export function BuilderPage() {
     Number(draft.discount) || 0,
     String(draft.promotion || '') || null,
   )
-  const footerNet = footerRows.find((x) => x.label === 'Net')?.value || '$0.00'
+  const footerNet = footerRows.find((x) => x.label === 'Cost')?.value || '$0.00'
   const footerClient =
-    footerRows.find((x) => x.label === 'Client price' || x.label === 'Sell')?.value || '$0.00'
+    footerRows.find((x) => x.label === 'Client price')?.value || '$0.00'
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-[#F9FAFB]">
@@ -296,7 +296,7 @@ export function BuilderPage() {
             {activeTab === 'transportation' ? (
               <TransportationPanel draft={draft} patch={patchDraft} guests={guests} />
             ) : null}
-            {activeTab === 'flight' ? <FlightPanel draft={draft} patch={patchDraft} /> : null}
+            {activeTab === 'flight' ? <FlightPanel draft={draft} patch={patchDraft} guests={guests} /> : null}
             {activeTab === 'activity' || activeTab === 'other' ? (
               <ActivityOtherPanel tab={activeTab} draft={draft} patch={patchDraft} guests={guests} />
             ) : null}
@@ -381,7 +381,7 @@ export function BuilderPage() {
               <div className="flex items-center gap-5 rounded-md bg-[#F3F4F6] px-4 py-2">
                 <div>
                   <p className="mb-0.5 text-[11px] font-semibold uppercase tracking-[0.3px] text-[#A1A1A1]">
-                    Supplier Net
+                    Supplier Cost
                   </p>
                   <span className="text-[15px] font-bold text-[#171717]">{footerNet}</span>
                 </div>

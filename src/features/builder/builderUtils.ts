@@ -3,6 +3,7 @@ import {
   BASIS,
   EXTRAS_CATALOG,
   GUESTS,
+  applyOfferToCostAndSell,
   roomTypeId,
   TAB_META,
 } from '@/shared/lib/catalogs'
@@ -208,8 +209,10 @@ export function flightAutoQty(draft: Record<string, unknown>) {
   const pax = (draft.pax || { adult: 0, youth: 0, child: 0, infant: 0 }) as Record<string, number>
   const totalPax =
     (pax.adult || 0) + (pax.youth || 0) + (pax.child || 0) + (pax.infant || 0)
-  const capacity = Math.max(1, Number(draft.capacity) || 1)
+  const capacity = Math.max(1, Number(draft.capMax) || Number(draft.capacity) || 1)
   if (totalPax <= 0) return 1
+  // Squeeze keeps everyone on one flight (supplier approval). Split adds flights.
+  if (draft.overflowMode === 'squeeze' || totalPax <= capacity) return 1
   return Math.max(1, Math.ceil(totalPax / capacity))
 }
 
@@ -317,8 +320,15 @@ export function buildAddedService(
 ): AddedService {
   const meta = TAB_META[tab]
   const { net: draftNet, rack: draftRack } = computeDraftTotals(tab, draft, pricingRows, guests)
-  const clientPays = Math.max(0, draftRack - (Number(draft.discount) || 0))
-  const cardMargin = clientPays - draftNet
+  const offer = applyOfferToCostAndSell(
+    draftNet,
+    draftRack,
+    Number(draft.discount) || 0,
+    String(draft.promotion || '') || null,
+  )
+  const clientPays = offer.sell
+  const costAfter = offer.cost
+  const cardMargin = clientPays - costAfter
   const marginPct = clientPays > 0 ? Math.round((cardMargin / clientPays) * 100) : 0
 
   const rooms = asRooms(draft)
@@ -381,9 +391,14 @@ export function buildAddedService(
     subtitle = `${totalPax} passenger(s) · qty ${autoQty}`
     dateMeta = eligible ? 'Eligible' : 'Check capacity'
     details = [
+      { label: 'Route', value: `${draft.flightFrom || 'TBD'} – ${draft.flightTo || 'TBD'}` },
       { label: 'Passengers', value: String(totalPax) },
       { label: 'Qty', value: String(autoQty) },
       { label: 'Capacity', value: String(draft.capacity) },
+      {
+        label: 'Depart / Return',
+        value: `${draft.departDate || 'TBD'}${draft.flightMode === 'return' ? ` / ${draft.returnDate || 'TBD'}` : ''}`,
+      },
     ]
   } else if (tab === 'activity') {
     title = String(draft.supplier || 'Activity')
@@ -421,10 +436,11 @@ export function buildAddedService(
     details,
     price: clientPays,
     priceLabel: formatUsd(clientPays),
+    // Store gross so summary can re-apply offers from draft; labels show post-offer figures.
     net: draftNet,
     rack: draftRack,
-    netLabel: formatUsd(draftNet),
-    rackLabel: formatUsd(draftRack),
+    netLabel: formatUsd(costAfter),
+    rackLabel: formatUsd(clientPays),
     margin: cardMargin,
     marginPct,
     marginColor: cardMargin >= 0 ? '#0B7A48' : '#B91C1C',
@@ -479,7 +495,8 @@ export function draftMissingRequirements(
   }
 
   if (tab === 'flight') {
-    if (missing(draft.location)) needed.push('Location')
+    if (missing(draft.flightFrom)) needed.push('From')
+    if (missing(draft.flightTo)) needed.push('To')
     if (missing(draft.supplier)) needed.push('Supplier')
     if (missing(draft.service)) needed.push('Service')
     if (missing(draft.departDate)) needed.push('Departure date')

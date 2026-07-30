@@ -78,7 +78,8 @@ describe('draftMissingRequirements', () => {
   it('requires departure and return dates for return flights', () => {
     const draft = {
       ...defaultDraft('flight'),
-      location: 'Nairobi',
+      flightFrom: 'Wilson',
+      flightTo: 'Loisaba',
       supplier: 'AirKenya',
       service: 'WILSON TO LOISABA OW',
       flightMode: 'return',

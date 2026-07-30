@@ -518,7 +518,7 @@ export function AccommodationPanel({
                       </div>
                     ))}
                     <div className="grid grid-cols-[1fr_auto] border-t border-[#F1F1F3] bg-[#F9FAFB] px-2.5 py-1.5 font-bold text-[#171717]">
-                      <span>Room total (Net / Rack)</span>
+                      <span>Room total (Cost / Sell)</span>
                       <span>
                         {formatUsd(br.netTotal)} / {formatUsd(br.rackTotal)}
                       </span>

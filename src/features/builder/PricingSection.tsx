@@ -209,8 +209,8 @@ export function PricingSection({
         >
           <span>{isTransport ? 'Vehicle' : 'Type'}</span>
           {!isTransport ? <span>Charge</span> : null}
-          <span className="text-right">{isTransport ? '$ Net' : '$,NET'}</span>
-          <span className="text-right">{isTransport ? '$ Rack' : '$, RACK'}</span>
+          <span className="text-right">{isTransport ? '$ Cost' : '$, COST'}</span>
+          <span className="text-right">{isTransport ? '$ Sell' : '$, SELL'}</span>
         </div>
         {isTransport && liveRows.length === 0 ? (
           <div className="px-3 py-2 text-[12px] text-[#A1A1A1]">No vehicles added yet.</div>
