@@ -1,7 +1,5 @@
-import { useState } from 'react'
 import { Plus, RefreshCw, Trash2 } from 'lucide-react'
-import { extrasForTab, VEHICLE_TYPES } from '@/shared/lib/catalogs'
-import { rackOf } from '@/shared/lib/helpers'
+import { VEHICLE_TYPES } from '@/shared/lib/catalogs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -20,22 +18,12 @@ import { LocationDropdown } from './LocationDropdown'
 import { SupplierPicker } from './SupplierPicker'
 import {
   TRANS_SERVICES,
-  asCustomExtras,
-  asExtraIds,
   asHireRoutes,
   asVehicles,
-  extraObjects,
   findGuest,
   guestChipStyle,
   usedGuestIds,
 } from './builderUtils'
-
-type TransTab = 'guests' | 'extras'
-const PAX_BANDS: { key: 'adult' | 'child' | 'infant'; label: string }[] = [
-  { key: 'adult', label: 'Adults' },
-  { key: 'child', label: 'Children' },
-  { key: 'infant', label: 'Infants' },
-]
 
 export function TransportationPanel({
   draft,
@@ -46,48 +34,25 @@ export function TransportationPanel({
   patch: (p: Record<string, unknown>) => void
   guests: Guest[]
 }) {
-  const [rightTab, setRightTab] = useState<TransTab>('guests')
   const vehicles = asVehicles(draft)
   const used = usedGuestIds(vehicles)
   const isHire = draft.transMode === 'hire'
   const hireRoutes = asHireRoutes(draft)
-  const transPax = (draft.transPax || { adult: 0, child: 0, infant: 0 }) as Record<string, number>
-  const totalTransPax = (transPax.adult || 0) + (transPax.child || 0) + (transPax.infant || 0)
-  const extras = extraObjects(draft)
-  const extraIds = asExtraIds(draft)
-  const customExtras = asCustomExtras(draft)
 
   const modeBtn = (on: boolean) =>
     cn(
-      'h-[30px] rounded-[7px] border px-3.5 text-[12.5px] font-semibold',
+      'h-[38px] rounded-lg border px-5 text-[14.5px] font-semibold',
       on
         ? 'border-[#931115] bg-[#FBEBEC] text-[#931115]'
-        : 'border-[#E5E7EB] bg-white text-[#525252]',
+        : 'border-[#E5E7EB] bg-white text-[#171717]',
     )
-
-  const tabBtn = (key: TransTab, label: string, badge?: number) => (
-    <button
-      type="button"
-      onClick={() => setRightTab(key)}
-      className={cn(
-        'h-[38px] border-b-2 px-3 text-[13px] font-semibold',
-        rightTab === key ? 'border-[#931115] text-[#931115]' : 'border-transparent text-[#525252]',
-      )}
-    >
-      {label}
-      {badge != null && badge > 0 ? (
-        <span className="ml-1 rounded bg-[#F3F4F6] px-1.5 text-[11px] font-semibold">{badge}</span>
-      ) : null}
-    </button>
-  )
 
   function setVehicles(next: Vehicle[]) {
     patch({ vehicles: next })
   }
 
   function autoAssign() {
-    const cap = totalTransPax > 0 ? totalTransPax : guests.length
-    const pool = guests.map((g) => g.id).slice(0, cap)
+    const pool = guests.map((g) => g.id)
     const next = vehicles.map((v) => ({ ...v, guestIds: [] as number[] }))
     next.forEach((v) => {
       while (pool.length && v.guestIds.length < v.cap) {
@@ -97,24 +62,18 @@ export function TransportationPanel({
     setVehicles(next)
   }
 
-  const target = totalTransPax > 0 ? totalTransPax : guests.length
-  const anyOverCap = vehicles.some((v) => v.guestIds.length > v.cap)
-  const vehiclesMsg = anyOverCap
-    ? { text: 'A vehicle is over capacity', color: '#DC2626' }
-    : used.length < target
-      ? { text: `${target - used.length} to place`, color: '#B45309' }
-      : { text: 'All guests assigned', color: '#16A34A' }
-
   return (
-    <div className="space-y-4">
-      <section className="rounded-xl border bg-white p-4">
+    <div>
+      <section className="mb-5 rounded-xl border border-[#E5E7EB] bg-white px-5 pb-5 pt-[18px] shadow-sm">
         <div className="mb-3">
-          <h3 className="text-[13px] font-bold uppercase tracking-wide text-[#475569]">
+          <h3 className="text-[12.5px] font-bold uppercase tracking-[0.06em] text-[#334155]">
             Supplier & route
           </h3>
-          <p className="text-[11.5px] text-[#94A3B8]">Pick location, supplier and transfer details</p>
+          <p className="mt-1 text-[13.5px] font-medium text-[#64748B]">
+            Pick location, supplier and transfer details
+          </p>
         </div>
-        <div className="mb-3 flex gap-2">
+        <div className="mb-[18px] mt-4 flex gap-2.5">
           <button type="button" className={modeBtn(!isHire)} onClick={() => patch({ transMode: 'transfer' })}>
             Transfer
           </button>
@@ -378,287 +337,156 @@ export function TransportationPanel({
         </section>
       ) : null}
 
-      <div className="flex gap-1 border-b">
-        {tabBtn('guests', 'Guests')}
-        {tabBtn('extras', 'Extras', extras.length)}
-      </div>
+      <section>
+        <div className="mb-2.5 flex items-center justify-between">
+          <h3 className="text-[13.5px] font-bold text-[#171717]">Vehicles &amp; PAX</h3>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={autoAssign}
+              className="h-7 border-[#931115] text-xs font-semibold text-[#931115]"
+            >
+              <RefreshCw className="size-3.5" />
+              Auto-assign
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 border-[#931115] text-xs font-semibold text-[#931115]"
+              onClick={() =>
+                setVehicles([
+                  ...vehicles,
+                  { id: `v${Date.now()}`, type: 'Land Cruiser', cap: 6, rate: 220, guestIds: [] },
+                ])
+              }
+            >
+              <Plus className="size-3.5" />
+              Add vehicle
+            </Button>
+          </div>
+        </div>
 
-      {rightTab === 'guests' ? (
-        <div className="space-y-4">
-          <section className="rounded-xl border bg-white p-4">
-            <h3 className="mb-3 text-[13px] font-bold uppercase tracking-wide text-[#475569]">
-              Guests
-            </h3>
-            <div className="flex overflow-hidden rounded-lg border">
-              {PAX_BANDS.map((b, i) => (
-                <div
-                  key={b.key}
-                  className={cn(
-                    'flex flex-1 items-center justify-between gap-2 px-3 py-2',
-                    i > 0 ? 'border-l' : '',
-                  )}
-                >
-                  <span className="text-[12.5px] text-[#525252]">{b.label}</span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        patch({
-                          transPax: { ...transPax, [b.key]: Math.max(0, (transPax[b.key] || 0) - 1) },
-                        })
-                      }
-                      className="flex size-[22px] items-center justify-center rounded-md border bg-[#F9FAFB] text-[#525252]"
-                    >
-                      −
-                    </button>
-                    <span className="min-w-3.5 text-center text-[13px] font-semibold">
-                      {transPax[b.key] || 0}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        patch({ transPax: { ...transPax, [b.key]: (transPax[b.key] || 0) + 1 } })
-                      }
-                      className="flex size-[22px] items-center justify-center rounded-md border bg-[#F9FAFB] text-[#525252]"
-                    >
-                      +
-                    </button>
-                  </div>
+        <div className="space-y-2.5">
+          {vehicles.map((v, i) => {
+            const avail = guests.filter((g) => !used.includes(g.id))
+            const over = v.guestIds.length > v.cap
+            return (
+              <div key={v.id} className="overflow-hidden rounded-lg border border-[#E5E7EB] bg-white">
+                <div className="flex flex-wrap items-center gap-2 bg-[#F9FAFB] px-[9px] py-[7px]">
+                  <span className="flex size-5 items-center justify-center rounded-[5px] border border-[#E5E7EB] bg-white text-[11px] font-bold text-[#525252]">
+                    {i + 1}
+                  </span>
+                  <Select
+                    value={v.type}
+                    onValueChange={(value) => {
+                      const found = VEHICLE_TYPES.find((t) => t.type === value)
+                      setVehicles(
+                        vehicles.map((x) =>
+                          x.id === v.id
+                            ? {
+                                ...x,
+                                type: value,
+                                cap: found ? found.cap : x.cap,
+                                rate: found ? found.rate : x.rate,
+                              }
+                            : x,
+                        ),
+                      )
+                    }}
+                  >
+                    <SelectTrigger className="h-7 w-auto bg-white px-2 text-[12.5px] font-semibold">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {VEHICLE_TYPES.map((t) => (
+                        <SelectItem key={t.type} value={t.type}>
+                          {t.type} ({t.cap})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <span
+                    className="whitespace-nowrap text-xs font-semibold"
+                    style={{ color: over ? '#DC2626' : '#16A34A' }}
+                  >
+                    {v.guestIds.length} / {v.cap} PAX
+                  </span>
+                  <div className="flex-1" />
+                  <button
+                    type="button"
+                    title="Remove vehicle"
+                    onClick={() => setVehicles(vehicles.filter((x) => x.id !== v.id))}
+                    className="flex size-[26px] items-center justify-center rounded-md border border-[#E5E7EB] bg-white text-[#931115]"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
                 </div>
-              ))}
-            </div>
-          </section>
-
-          <section className="rounded-xl border bg-white p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-[13px] font-bold uppercase tracking-wide text-[#475569]">
-                Vehicles & PAX
-              </h3>
-              <div className="flex gap-2">
-                <Button size="sm" variant="outline" onClick={autoAssign}>
-                  <RefreshCw className="size-3.5" />
-                  Auto-assign
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() =>
-                    setVehicles([
-                      ...vehicles,
-                      { id: `v${Date.now()}`, type: 'Land Cruiser', cap: 6, rate: 220, guestIds: [] },
-                    ])
-                  }
-                >
-                  <Plus className="size-3.5" />
-                  Add vehicle
-                </Button>
-              </div>
-            </div>
-            {totalTransPax === 0 ? (
-              <p className="mb-3 text-[12px] text-[#A1A1A1]">
-                Add adults/children above, then Auto-assign to fill vehicles by capacity.
-              </p>
-            ) : null}
-            <div className="space-y-3">
-              {vehicles.map((v, i) => {
-                const avail = guests.filter((g) => !used.includes(g.id))
-                const over = v.guestIds.length > v.cap
-                return (
-                  <div key={v.id} className="rounded-xl border bg-[#F9FAFB] p-3">
-                    <div className="mb-2 flex flex-wrap items-center gap-2">
-                      <span className="flex size-5 items-center justify-center rounded border bg-white text-[11px] font-bold">
-                        {i + 1}
-                      </span>
-                      <Select
-                        value={v.type}
-                        onValueChange={(value) => {
-                          const found = VEHICLE_TYPES.find((t) => t.type === value)
+                <div className="flex flex-wrap items-center gap-2 p-[9px]">
+                  {v.guestIds.map((gid) => {
+                    const g = findGuest(gid, guests)
+                    if (!g) return null
+                    const cs = guestChipStyle(g)
+                    return (
+                      <GuestChip
+                        key={gid}
+                        name={g.name}
+                        resLabel={cs.resLabel}
+                        resBg={cs.resBg}
+                        resFg={cs.resFg}
+                        bg={cs.bg}
+                        bd={cs.bd}
+                        onRemove={() =>
                           setVehicles(
                             vehicles.map((x) =>
                               x.id === v.id
-                                ? {
-                                    ...x,
-                                    type: value,
-                                    cap: found ? found.cap : x.cap,
-                                    rate: found ? found.rate : x.rate,
-                                  }
+                                ? { ...x, guestIds: x.guestIds.filter((id) => id !== gid) }
                                 : x,
                             ),
                           )
-                        }}
-                      >
-                        <SelectTrigger className="h-7 w-auto bg-white text-[12.5px] font-semibold">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                        {VEHICLE_TYPES.map((t) => (
-                          <SelectItem key={t.type} value={t.type}>
-                            {t.type} ({t.cap})
-                          </SelectItem>
-                        ))}
-                        </SelectContent>
-                      </Select>
-                      <span
-                        className="text-[12px] font-semibold"
-                        style={{ color: over ? '#DC2626' : '#16A34A' }}
-                      >
-                        {v.guestIds.length} / {v.cap} PAX
-                      </span>
-                      <div className="flex-1" />
-                      <button
-                        type="button"
-                        onClick={() => setVehicles(vehicles.filter((x) => x.id !== v.id))}
-                        className="flex size-[26px] items-center justify-center rounded-md border bg-white text-[#931115]"
-                      >
-                        <Trash2 className="size-3.5" />
-                      </button>
-                    </div>
-                    <div className="mb-2 flex flex-wrap gap-1.5">
-                      {v.guestIds.map((gid) => {
-                        const g = findGuest(gid, guests)
-                        if (!g) return null
-                        const cs = guestChipStyle(g)
-                        return (
-                          <GuestChip
-                            key={gid}
-                            name={g.name}
-                            resLabel={cs.resLabel}
-                            resBg={cs.resBg}
-                            resFg={cs.resFg}
-                            bg={cs.bg}
-                            bd={cs.bd}
-                            onRemove={() =>
-                              setVehicles(
-                                vehicles.map((x) =>
-                                  x.id === v.id
-                                    ? { ...x, guestIds: x.guestIds.filter((id) => id !== gid) }
-                                    : x,
-                                ),
-                              )
-                            }
-                          />
-                        )
-                      })}
-                    </div>
-                    <Select
-                      value={undefined}
-                      onValueChange={(value) => {
-                        const gid = Number(value)
-                        if (!gid) return
-                        setVehicles(
-                          vehicles.map((x) =>
-                            x.id === v.id ? { ...x, guestIds: [...x.guestIds, gid] } : x,
-                          ),
-                        )
-                      }}
-                    >
-                      <SelectTrigger className="h-8 bg-white text-[12.5px]">
-                        <SelectValue placeholder="+ Add guest" />
-                      </SelectTrigger>
-                      <SelectContent>
+                        }
+                      />
+                    )
+                  })}
+                  <Select
+                    value={undefined}
+                    onValueChange={(value) => {
+                      const gid = Number(value)
+                      if (!gid) return
+                      setVehicles(
+                        vehicles.map((x) =>
+                          x.id === v.id ? { ...x, guestIds: [...x.guestIds, gid] } : x,
+                        ),
+                      )
+                    }}
+                  >
+                    <SelectTrigger className="h-7 w-auto border-dashed border-[#C9CCD3] bg-white px-2 text-xs font-semibold text-[#525252]">
+                      <SelectValue placeholder="+ Add guest" />
+                    </SelectTrigger>
+                    <SelectContent>
                       {avail.map((g) => (
                         <SelectItem key={g.id} value={String(g.id)}>
                           {g.name}
                         </SelectItem>
                       ))}
-                      </SelectContent>
-                    </Select>
-                    <div className="mt-2 flex justify-between text-[12px] text-[#525252]">
-                      <span>{v.type}</span>
-                      <span>
-                        {formatUsd(v.rate)} / {formatUsd(rackOf(v.rate))}
-                      </span>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-            {vehicles.length > 0 ? (
-              <p className="mt-3 text-[12px] font-semibold" style={{ color: vehiclesMsg.color }}>
-                {vehiclesMsg.text}
-              </p>
-            ) : null}
-            <textarea
-              readOnly
-              rows={3}
-              className="mt-3 w-full resize-none rounded-lg border bg-[#FAFAFB] p-2.5 text-[13px] text-[#525252]"
-              value="Rates include fuel and driver-guide. Vehicle capacity excludes driver."
-            />
-          </section>
-        </div>
-      ) : null}
-
-      {rightTab === 'extras' ? (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-[13px] font-bold">Extras</span>
-            <button
-              type="button"
-              className="text-[12px] font-medium text-[#0369A1]"
-              onClick={() => {
-                const n = Number(draft.customExtraSeq) || 1
-                patch({
-                  customExtras: [
-                    ...customExtras,
-                    { id: `custom-t${n}`, title: 'Custom extra', price: 0, custom: true },
-                  ],
-                  customExtraSeq: n + 1,
-                })
-              }}
-            >
-              Add Custom Extra
-            </button>
-          </div>
-          {extras.map((ex) => (
-            <div key={ex.id} className="overflow-hidden rounded-lg border">
-              {ex.mandatory ? (
-                <div className="bg-[#E5E7EB] py-0.5 text-center text-[10px] font-bold text-[#525252]">
-                  Mandatory
-                </div>
-              ) : null}
-              <div className="flex items-center justify-between px-2.5 py-2">
-                <span className="text-[13px] font-bold">{ex.title}</span>
-                <div className="flex items-center gap-2">
-                  <span className="text-[13px] font-semibold">{formatUsd(ex.price)}</span>
-                  {!ex.mandatory ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (ex.custom) {
-                          patch({ customExtras: customExtras.filter((x) => x.id !== ex.id) })
-                        } else {
-                          patch({ extras: extraIds.filter((id) => id !== ex.id) })
-                        }
-                      }}
-                    >
-                      <Trash2 className="size-3.5 text-[#931115]" />
-                    </button>
-                  ) : null}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
-            </div>
-          ))}
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-[#A1A1A1]">
-            Catalog
-          </p>
-          {extrasForTab('transportation')
-            .filter((c) => !extraIds.includes(c.id))
-            .map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => patch({ extras: [...extraIds, c.id] })}
-              className="flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left hover:bg-[#F9FAFB]"
-            >
-              <span className="text-[13px] font-semibold">{c.title}</span>
-              <span className="flex items-center gap-2 text-[12.5px] font-semibold text-[#525252]">
-                {formatUsd(c.price)}
-                <Plus className="size-3.5 text-[#931115]" />
-              </span>
-            </button>
-          ))}
+            )
+          })}
         </div>
-      ) : null}
+
+        <div className="mb-3 mt-3">
+          <h3 className="mb-2 text-[14px] font-semibold text-[#171717]">Service Notes</h3>
+          <textarea
+            readOnly
+            rows={3}
+            className="w-full resize-none rounded-lg border border-[#E5E7EB] bg-[#FAFAFB] px-2.5 py-2 text-[13px] text-[#525252] outline-none"
+            value="Rates include fuel and driver-guide. Vehicle capacity excludes driver."
+          />
+        </div>
+      </section>
     </div>
   )
 }

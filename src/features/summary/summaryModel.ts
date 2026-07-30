@@ -55,6 +55,7 @@ export type SummaryLine = {
   alloc?: string
   // extra
   qty?: string
+  extraKind?: 'service' | 'supplier'
 }
 
 export const SUMMARY_TYPE_META: Record<
@@ -145,6 +146,7 @@ export function linesFromServices(services: AddedService[], guests: Guest[]): Su
       timeUnit?: string
       qtyLabel?: string
       pax?: number
+      custom?: boolean
     }[]
     const extrasNet = extras.reduce((sum, e) => sum + e.price, 0)
     const extrasRack = extras.reduce((sum, e) => sum + (e.rack != null ? e.rack : rackOf(e.price)), 0)
@@ -180,6 +182,7 @@ export function linesFromServices(services: AddedService[], guests: Guest[]): Su
           qty:
             ex.qtyLabel ||
             (ex.qty && ex.timeUnit ? `${ex.qty} ${ex.timeUnit}` : ex.qty ? String(ex.qty) : '1'),
+          extraKind: ex.custom ? 'supplier' : 'service',
           net: ex.price,
           rack: ex.rack != null ? ex.rack : rackOf(ex.price),
           hold,
@@ -532,6 +535,7 @@ export type SummaryRow = {
   isChild: boolean
   cells: string[]
   meta?: string
+  kind?: 'service' | 'supplier'
 }
 
 export type SummaryBlock = {
@@ -781,11 +785,9 @@ function blockMeta(type: SummaryServiceType, group: SummaryLine[]): string {
 function extraChildRow(e: SummaryLine): SummaryRow {
   return {
     isChild: true,
+    kind: e.extraKind || 'service',
     meta: `${e.pax ?? 0} pax${e.qty ? `  ·  ${e.qty}` : ''}`,
-    cells: [e.service || 'Extra', wholeUsd(costEffOf(e)), wholeUsd(sellEffOf(e)), (() => {
-      const pct = mgnPct(costEffOf(e), sellEffOf(e))
-      return e.discount ? `${pct || 0}%  ·  ↓${e.rack > 0 ? Math.round((e.discount.sellDelta / e.rack) * 100) : 0}%` : pct ? `${pct}%` : '—'
-    })()],
+    cells: [e.service || 'Extra', combinedPriceCell(e)],
   }
 }
 
@@ -797,6 +799,7 @@ export function buildSummaryCards(lines: SummaryLine[]): SummaryCard[] {
     extrasByService.set(l.serviceId, arr)
   }
 
+  const emittedExtras = new Set<string>()
   return ORDER.map((type) => {
     const items = lines.filter((s) => s.type === type).slice().sort((a, b) => a.date.localeCompare(b.date))
     if (!items.length) return null
@@ -818,9 +821,17 @@ export function buildSummaryCards(lines: SummaryLine[]): SummaryCard[] {
       const first = group[0]
       const rows: SummaryRow[] = []
       let blockSell = 0
-      for (const l of group) {
-        rows.push({ isChild: false, cells: rowCells(type, l) })
+      for (const [index, l] of group.entries()) {
+        const cells = rowCells(type, l)
+        const previous = group[index - 1]
+        if (previous?.date === l.date) cells[0] = ''
+        if (previous?.supplier === l.supplier) cells[1] = ''
+        rows.push({ isChild: false, cells })
         blockSell += sellEffOf(l)
+      }
+      for (const l of group) {
+        if (emittedExtras.has(l.serviceId)) continue
+        emittedExtras.add(l.serviceId)
         for (const extra of extrasByService.get(l.serviceId) || []) {
           rows.push(extraChildRow(extra))
           blockSell += sellEffOf(extra)

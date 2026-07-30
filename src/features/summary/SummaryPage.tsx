@@ -32,16 +32,6 @@ function transitionButtonClass(t: LifecycleTransition) {
   return 'border border-border bg-white text-neutral-900 hover:bg-neutral-50'
 }
 
-function marginTone(text: string) {
-  const m = /^(-?\d+)%/.exec(text)
-  if (!m) return '#A1A1A1'
-  const p = Number(m[1])
-  if (p >= 30) return '#059669'
-  if (p >= 15) return '#B45309'
-  if (p > 0) return '#931115'
-  return '#A1A1A1'
-}
-
 function holdTone(text: string) {
   if (text === 'On hold') return '#0369A1'
   if (text === 'Requested') return '#B45309'
@@ -51,7 +41,7 @@ function holdTone(text: string) {
 function cellClass(align: 'l' | 'c' | 'r', dense: boolean, label: string) {
   const base = cn(
     'flex min-w-0 items-center whitespace-nowrap text-[13px] text-[#171717]',
-    dense ? 'py-1.5' : 'py-2.5',
+    dense ? 'py-1.5' : 'py-2',
     'px-3.5',
     align === 'c' && 'justify-center text-center',
     align === 'r' && 'justify-end text-right tabular-nums',
@@ -429,20 +419,31 @@ export function SummaryPage() {
 }
 
 function ServiceCard({ card: c, compact = false }: { card: SummaryCard; compact?: boolean }) {
+  const tint = {
+    accommodation: '#F6FEFB',
+    flight: '#F7FAFF',
+    transportation: '#FFFCF3',
+    activity: '#FCF8FF',
+    other: '#FAFBFC',
+    extra: '#F5FBFF',
+  }[c.type]
   return (
-    <section className={cn('overflow-hidden border border-[#E5E7EB] bg-white', compact ? 'rounded-[10px]' : 'rounded-[14px]')}>
-      <div className={cn('flex items-center gap-2.5 border-b border-[#F1F1F3]', compact ? 'px-3.5 py-2.5' : 'px-[18px] py-3.5')}>
+    <section className={cn('overflow-hidden border border-[#E5E7EB] bg-white', compact ? 'rounded-[10px]' : 'rounded-lg')}>
+      <div
+        className={cn('flex items-center gap-2.5 border-b border-[#F1F1F3]', compact ? 'px-3.5 py-2' : 'px-3.5 py-2.5')}
+        style={{ background: tint }}
+      >
         <span
           className={cn(
             'flex shrink-0 items-center justify-center font-bold',
-            compact ? 'size-6 rounded-md text-[11px]' : 'size-7 rounded-lg text-[12px]',
+            compact ? 'size-5 rounded-md text-[10px]' : 'size-6 rounded-md text-[11px]',
           )}
           style={{ background: c.iconBg, color: c.iconFg }}
         >
           {c.initial}
         </span>
-        <span className={cn('font-bold text-[#171717]', compact ? 'text-[13px]' : 'text-[14.5px]')}>{c.name}</span>
-        <span className="text-[12px] font-semibold text-[#A1A1A1]">{c.countLabel}</span>
+        <span className={cn('font-bold text-[#171717]', compact ? 'text-[12.5px]' : 'text-[13.5px]')}>{c.name}</span>
+        <span className="text-[11.5px] font-medium text-[#A1A1A1]">{c.countLabel}</span>
       </div>
       <div className="overflow-x-auto overscroll-x-contain">
         <div style={{ minWidth: c.type === 'transportation' ? 1180 : c.type === 'flight' ? 1080 : 1000 }}>
@@ -479,20 +480,38 @@ function ServiceBlock({
         r.isChild ? (
           <div
             key={ri}
-            className={cn('flex items-center gap-2.5 border-b border-[#F6F6F7] pl-[34px] pr-3.5', dense ? 'py-1.5' : 'py-2')}
+            className="grid border-b border-[#F3F4F6] bg-[#FCFCFD]"
+            style={{ gridTemplateColumns: gridCols }}
           >
-            <span className="flex-none rounded-[5px] bg-[#F4F4F5] px-[7px] py-[3px] text-[9.5px] font-bold uppercase tracking-wide text-[#71717A]">
-              Extra
-            </span>
-            <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-[#3F3F46]">{r.cells[0]}</span>
-            <span className="flex-none whitespace-nowrap text-[11.5px] font-medium text-[#B4B4BA]">{r.meta}</span>
-            <span className="flex flex-none items-baseline gap-0 tabular-nums">
-              <span className="w-[76px] text-right text-xs text-[#A1A1A1]">{r.cells[1]}</span>
-              <span className="w-[76px] text-right text-[12.5px] font-semibold text-[#3F3F46]">{r.cells[2]}</span>
-              <span className="w-[70px] text-right text-xs font-semibold" style={{ color: marginTone(r.cells[3]) }}>
-                {r.cells[3]}
+            <span style={{ gridColumn: '1 / 3' }} />
+            <div
+              className={cn(
+                'flex min-w-0 items-center gap-2 px-3.5',
+                dense ? 'py-1.5' : 'py-2',
+                r.kind === 'supplier' && 'border-l border-[#CBD5E1]',
+              )}
+              style={{ gridColumn: '3 / -2' }}
+            >
+              <span className="text-[11px] text-[#C4C4C8]">↳</span>
+              <span
+                className={cn(
+                  'flex-none rounded-[5px] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide',
+                  r.kind === 'supplier'
+                    ? 'bg-[#E0F2FE] text-[#0369A1]'
+                    : 'bg-[#F1F5F9] text-[#475569]',
+                )}
+              >
+                {r.kind === 'supplier' ? 'Supplier extra' : 'Service extra'}
               </span>
-            </span>
+              <span className="min-w-0 truncate text-[12px] font-semibold text-[#3F3F46]">{r.cells[0]}</span>
+              <span className="flex-none whitespace-nowrap text-[10.5px] font-medium text-[#B4B4BA]">{r.meta}</span>
+            </div>
+            <div
+              className="flex items-center justify-end whitespace-nowrap px-3.5 text-[11.5px] font-medium tabular-nums text-[#737373]"
+              style={{ gridColumn: '-2 / -1' }}
+            >
+              {r.cells[1]}
+            </div>
           </div>
         ) : (
           <div key={ri} className="grid" style={{ gridTemplateColumns: gridCols }}>
