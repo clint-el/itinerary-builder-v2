@@ -19,10 +19,11 @@ import {
   buildSummaryDays,
   buildSummaryPricing,
   buildVouchers,
-  GRID,
+  gridForMode,
   holdsSummaryOf,
   linesFromQuoteGroups,
   linesFromServices,
+  type PriceDisplayMode,
   type SummaryBlock,
   type SummaryCard,
   type SummaryCell,
@@ -53,8 +54,8 @@ function cellClass(align: 'l' | 'c' | 'r', dense: boolean, label: string) {
   if (label === 'Hold') return cn(base, 'text-[11.5px] font-semibold')
   if (label === 'Supplier') return cn(base, 'font-semibold')
   if (label === 'Date') return cn(base, 'text-[#737373]')
-  if (label.includes('Per Adult')) return cn(base, 'text-[12px] text-[#737373]')
-  if (label.includes('Cost / Sell')) return cn(base, 'text-[12.5px] font-semibold')
+  if (label.includes('Per person')) return cn(base, 'text-[12px] text-[#737373]')
+  if (label.includes('Cost') || label.includes('Sell')) return cn(base, 'text-[12.5px] font-semibold')
   return base
 }
 
@@ -75,6 +76,7 @@ export function SummaryPage() {
   const services = getServices(id)
   const quoteGroups = getQuoteGroups(id)
   const [view, setView] = useState<'summary' | 'byday' | 'vouchers'>('summary')
+  const [priceMode, setPriceMode] = useState<PriceDisplayMode>('all')
   const [openPriceGroups, setOpenPriceGroups] = useState<Record<string, boolean>>({})
   const [depositsOpen, setDepositsOpen] = useState(false)
   const [voucherMode, setVoucherMode] = useState<VoucherValueMode>('cost')
@@ -105,7 +107,7 @@ export function SummaryPage() {
     return []
   }, [services, quoteGroups, guests])
 
-  const cards = useMemo(() => buildSummaryCards(lines), [lines])
+  const cards = useMemo(() => buildSummaryCards(lines, priceMode), [lines, priceMode])
   const days = useMemo(() => buildSummaryDays(lines), [lines])
   const totalGuests =
     guests.length || (itinerary ? (itinerary.adults || 0) + (itinerary.children || 0) + (itinerary.infants || 0) : 0)
@@ -126,9 +128,12 @@ export function SummaryPage() {
     const keys = [...new Set(lines.map((line) => line.date || 'undated'))].sort()
     return days.map((day, index) => ({
       ...day,
-      cards: buildSummaryCards(lines.filter((line) => (line.date || 'undated') === keys[index])),
+      cards: buildSummaryCards(
+        lines.filter((line) => (line.date || 'undated') === keys[index]),
+        priceMode,
+      ),
     }))
-  }, [days, lines])
+  }, [days, lines, priceMode])
 
   if (!itinerary) {
     return (
@@ -267,19 +272,44 @@ export function SummaryPage() {
           </div>
         </section>
 
-        <div className="flex w-fit items-center gap-1 rounded-[11px] border border-[#E5E7EB] bg-white p-[5px]">
-          <button type="button" className={tabClass(view === 'summary')} onClick={() => setView('summary')}>
-            <List className="size-3.5" />
-            Summary
-          </button>
-          <button type="button" className={tabClass(view === 'byday')} onClick={() => setView('byday')}>
-            <CalendarDays className="size-3.5" />
-            By Day
-          </button>
-          <button type="button" className={tabClass(view === 'vouchers')} onClick={() => setView('vouchers')}>
-            <Ticket className="size-3.5" />
-            Vouchers
-          </button>
+        <div className="flex w-full flex-wrap items-center justify-between gap-3">
+          <div className="flex w-fit items-center gap-1 rounded-[11px] border border-[#E5E7EB] bg-white p-[5px]">
+            <button type="button" className={tabClass(view === 'summary')} onClick={() => setView('summary')}>
+              <List className="size-3.5" />
+              Summary
+            </button>
+            <button type="button" className={tabClass(view === 'byday')} onClick={() => setView('byday')}>
+              <CalendarDays className="size-3.5" />
+              By Day
+            </button>
+            <button type="button" className={tabClass(view === 'vouchers')} onClick={() => setView('vouchers')}>
+              <Ticket className="size-3.5" />
+              Vouchers
+            </button>
+          </div>
+          {view !== 'vouchers' ? (
+            <div className="flex items-center gap-2.5">
+              <span className="text-[11.5px] font-semibold text-[#A1A1A1]">Values shown</span>
+              <div className="flex gap-0.5 rounded-[9px] border border-[#E5E7EB] bg-[#F3F4F6] p-0.5">
+                {(
+                  [
+                    ['cost', 'Cost'],
+                    ['sell', 'Sell'],
+                    ['all', 'Everything'],
+                  ] as const
+                ).map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    className={valueModeClass(priceMode === mode)}
+                    onClick={() => setPriceMode(mode)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <div className="flex items-start gap-4">
@@ -298,7 +328,7 @@ export function SummaryPage() {
                 onIssue={issueVoucher}
               />
             ) : view === 'summary' ? (
-              cards.map((c) => <ServiceCard key={c.type} card={c} />)
+              cards.map((c) => <ServiceCard key={c.type} card={c} priceMode={priceMode} />)
             ) : (
               <section className="rounded-[14px] border border-[#E5E7EB] bg-white px-5 pb-5 pt-2">
                 {byDaySections.map((d) => (
@@ -315,7 +345,7 @@ export function SummaryPage() {
                     </div>
                     <div className="flex min-w-0 flex-col gap-3">
                       {d.cards.map((card) => (
-                        <ServiceCard key={card.type} card={card} compact />
+                        <ServiceCard key={card.type} card={card} compact priceMode={priceMode} />
                       ))}
                     </div>
                   </div>
@@ -685,7 +715,15 @@ function VouchersView({
   )
 }
 
-function ServiceCard({ card: c, compact = false }: { card: SummaryCard; compact?: boolean }) {
+function ServiceCard({
+  card: c,
+  compact = false,
+  priceMode = 'all',
+}: {
+  card: SummaryCard
+  compact?: boolean
+  priceMode?: PriceDisplayMode
+}) {
   const tint = {
     accommodation: '#F6FEFB',
     flight: '#F7FAFF',
@@ -694,6 +732,7 @@ function ServiceCard({ card: c, compact = false }: { card: SummaryCard; compact?
     other: '#FAFBFC',
     extra: '#F5FBFF',
   }[c.type]
+  const gridCols = gridForMode(c.type, priceMode)
   return (
     <section className={cn('overflow-hidden border border-[#E5E7EB] bg-white', compact ? 'rounded-[10px]' : 'rounded-lg')}>
       <div
@@ -713,8 +752,8 @@ function ServiceCard({ card: c, compact = false }: { card: SummaryCard; compact?
         <span className="text-[11.5px] font-medium text-[#A1A1A1]">{c.countLabel}</span>
       </div>
       <div className="overflow-x-auto overscroll-x-contain">
-        <div style={{ minWidth: c.type === 'transportation' ? 1180 : c.type === 'flight' ? 1080 : 1000 }}>
-          <div className="grid" style={{ gridTemplateColumns: GRID[c.type] }}>
+        <div style={{ minWidth: c.type === 'transportation' ? 1380 : c.type === 'flight' ? 1280 : 1240 }}>
+          <div className="grid" style={{ gridTemplateColumns: gridCols }}>
             {c.headers.map((h) => (
               <div key={h.label} className={headerClass(h.align, compact)}>
                 {h.label}
@@ -722,7 +761,7 @@ function ServiceCard({ card: c, compact = false }: { card: SummaryCard; compact?
             ))}
           </div>
           {c.blocks.map((b) => (
-            <ServiceBlock key={b.key} block={b} gridCols={GRID[c.type]} headers={c.headers} dense={compact} />
+            <ServiceBlock key={b.key} block={b} gridCols={gridCols} headers={c.headers} dense={compact} />
           ))}
         </div>
       </div>
@@ -785,14 +824,20 @@ function ServiceBlock({
             {r.cells.map((cell, ci) => {
               const header = headers[ci]
               const align = header?.align ?? 'l'
-              const cls = cellClass(align, dense, header?.label || '')
-              if (header?.label === 'Hold') return (
+              const label = header?.label || ''
+              const cls = cellClass(align, dense, label)
+              const isPrice =
+                label.includes('Cost') ||
+                label.includes('Sell') ||
+                label.includes('Per person') ||
+                label === 'Hold'
+              if (label === 'Hold') return (
                 <div key={ci} className={cls} style={{ color: holdTone(cell) }}>
                   {cell}
                 </div>
               )
               return (
-                <div key={ci} className={cn(cls, 'truncate')}>
+                <div key={ci} className={cn(cls, !isPrice && 'truncate')} title={isPrice ? undefined : cell}>
                   {cell}
                 </div>
               )

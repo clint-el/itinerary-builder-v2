@@ -127,7 +127,12 @@ export function AccommodationPanel({
     >
       {label}
       {badge != null && badge > 0 ? (
-        <span className="ml-1 rounded bg-[#F3F4F6] px-1.5 text-[11px] font-semibold text-[#525252]">
+        <span
+          className={cn(
+            'ml-1 rounded px-1.5 text-[11px] font-semibold',
+            accTab === key ? 'bg-[#DBEAFE] text-[#2563EB]' : 'bg-[#F3F4F6] text-[#525252]',
+          )}
+        >
           {badge}
         </span>
       ) : null}
@@ -238,7 +243,7 @@ export function AccommodationPanel({
       <div className="flex gap-1 border-b">
         {tabBtn('guests', 'Guests')}
         {tabBtn('extras', 'Extras', extras.length)}
-        {tabBtn('promotions', 'Special Offer(s)')}
+        {tabBtn('promotions', 'Special Offer(s)', PROMOTIONS.length)}
         {tabBtn('supplier', 'Supplier')}
         {tabBtn('notes', 'Supplier Notes')}
       </div>
@@ -682,19 +687,25 @@ export function AccommodationPanel({
       ) : null}
 
       {accTab === 'notes' ? (
-        <div className="space-y-3">
-          <textarea
-            readOnly
-            rows={3}
-            className="w-full resize-none rounded-lg border bg-[#FAFAFB] p-2.5 text-[13px] text-[#525252]"
-            value="Must include Park/Conservancy Fees as an extra. Families (5 pax or more) with children aged 5-12 years receive FOC exclusive use of vehicle."
-          />
-          <textarea
-            readOnly
-            rows={8}
-            className="w-full rounded-lg border-0 bg-[#F3F4F6] p-3 text-[12.5px] leading-relaxed text-[#525252]"
-            value="Rates confirmed subject to availability at time of booking. Peak-season surcharge (20 Dec - 5 Jan) applies automatically. Cancellations within 30 days of arrival are non-refundable."
-          />
+        <div className="space-y-4">
+          <div>
+            <p className="mb-2 text-[14px] font-bold text-[#171717]">Service Notes</p>
+            <textarea
+              readOnly
+              rows={3}
+              className="w-full resize-none rounded-lg border border-[#E5E7EB] bg-[#FAFAFB] p-2.5 text-[13px] text-[#525252]"
+              value="Must include Conservancy Fee as an extra. Families (5 pax or more) with children aged 5-12 years receive FOC exclusive use of vehicle."
+            />
+          </div>
+          <div>
+            <p className="mb-2 text-[14px] font-bold text-[#171717]">Supplier Notes</p>
+            <textarea
+              readOnly
+              rows={8}
+              className="w-full resize-y rounded-lg border border-[#E5E7EB] bg-white p-3 text-[12.5px] leading-relaxed text-[#525252]"
+              value="Rates confirmed subject to availability at time of booking. Peak-season surcharge (20 Dec - 5 Jan) applies automatically. Cancellations within 30 days of arrival are non-refundable."
+            />
+          </div>
           <div className="grid gap-1.5">
             <Label>Internal notes</Label>
             <textarea

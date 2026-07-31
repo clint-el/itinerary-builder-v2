@@ -95,6 +95,8 @@ export function FlightPanel({
   const extras = extraObjects(draft)
   const extraIds = asExtraIds(draft)
   const customExtras = asCustomExtras(draft)
+  const service = String(draft.service || '')
+  const isCharter = /charter/i.test(service)
 
   useEffect(() => {
     const current = (draft.pax || {}) as Record<string, number>
@@ -140,7 +142,14 @@ export function FlightPanel({
     >
       {label}
       {badge != null && badge > 0 ? (
-        <span className="ml-1 rounded bg-[#F3F4F6] px-1.5 text-[11px] font-semibold">{badge}</span>
+        <span
+          className={cn(
+            'ml-1 rounded px-1.5 text-[11px] font-semibold',
+            rightTab === key ? 'bg-[#DBEAFE] text-[#2563EB]' : 'bg-[#F3F4F6] text-[#525252]',
+          )}
+        >
+          {badge}
+        </span>
       ) : null}
     </button>
   )
@@ -159,7 +168,14 @@ export function FlightPanel({
             <LocationDropdown
               value={String(draft.location || draft.flightFrom || '')}
               onChange={(name) =>
-                patch({ location: name, flightFrom: name, flightTo: '', supplier: '', service: '' })
+                patch({
+                  location: name,
+                  flightFrom: name,
+                  flightTo: '',
+                  supplier: '',
+                  service: '',
+                  returnService: '',
+                })
               }
             />
           </div>
@@ -177,7 +193,7 @@ export function FlightPanel({
             />
           </div>
           <div className="grid gap-1.5 sm:col-span-2">
-            <Label>3. Service</Label>
+            <Label>{isReturn ? '3. Outbound service' : '3. Service'}</Label>
             <Select
               value={String(draft.service || '') || undefined}
               onValueChange={(value) =>
@@ -202,7 +218,7 @@ export function FlightPanel({
               <button
                 type="button"
                 className={modeBtn(!isReturn)}
-                onClick={() => patch({ flightMode: 'oneway' })}
+                onClick={() => patch({ flightMode: 'oneway', returnService: '' })}
               >
                 One-way
               </button>
@@ -215,6 +231,26 @@ export function FlightPanel({
               </button>
             </div>
           </div>
+          {isReturn ? (
+            <div className="grid gap-1.5 sm:col-span-2">
+              <Label>4. Return service</Label>
+              <Select
+                value={String(draft.returnService || '') || undefined}
+                onValueChange={(value) => patch({ returnService: value })}
+              >
+                <SelectTrigger className="bg-white">
+                  <SelectValue placeholder="Select a return service" />
+                </SelectTrigger>
+                <SelectContent>
+                  {FLIGHT_SERVICES.map((s) => (
+                    <SelectItem key={`return-${s}`} value={s}>
+                      {s}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
         </div>
       </section>
 
@@ -311,6 +347,7 @@ export function FlightPanel({
         ) : null}
       </section>
 
+      {isCharter ? (
       <section className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-4 shadow-sm">
         <PanelHeading icon={UsersRound} title="Charter & capacity" description="Capacity is set by the supplier" />
         <div className="mb-3 flex flex-wrap gap-2.5">
@@ -403,11 +440,12 @@ export function FlightPanel({
           </span>
         </div>
       </section>
+      ) : null}
 
       <div className="flex gap-1 border-b">
         {tabBtn('policy', 'Policy')}
         {tabBtn('extras', 'Extras', extras.length)}
-        {tabBtn('promotions', 'Special Offer(s)')}
+        {tabBtn('promotions', 'Special Offer(s)', PROMOTIONS.length)}
       </div>
 
       {rightTab === 'policy' ? (

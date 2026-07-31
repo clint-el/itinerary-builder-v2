@@ -597,7 +597,7 @@ export function defaultDraft(tab: ServiceTab): Record<string, unknown> {
   }
   if (tab === 'flight') {
     return {
-      location: '', supplier: '', service: '', flightMode: 'oneway',
+      location: '', supplier: '', service: '', returnService: '', flightMode: 'oneway',
       departDate: '', returnDate: '', departTime: '', returnTime: '',
       capacity: 5, capMin: 2, capMax: 5, overflowMode: 'split', qty: 1, discount: 0,
       pax: { adult: 2, youth: 0, child: 0, infant: 0 },

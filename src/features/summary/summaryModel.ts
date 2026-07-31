@@ -576,11 +576,12 @@ function priceCells(l: SummaryLine): string[] {
 }
 
 function guestsCell(l: SummaryLine): string {
-  if (l.ad || l.ch) return [l.ad ? `${l.ad} ad` : null, l.ch ? `${l.ch} ch` : null].filter(Boolean).join(' · ')
+  if (l.ad || l.ch) return [l.ad ? `${l.ad} Ad` : null, l.ch ? `${l.ch} Ch` : null].filter(Boolean).join(' · ')
   return l.pax != null ? String(l.pax) : '—'
 }
 
-function perGuestPriceCell(l: SummaryLine): string {
+/** Per-person unit rates (not totals). Child unit = 60% of adult on mixed rows. */
+function perGuestPriceCell(l: SummaryLine, mode: PriceDisplayMode = 'all'): string {
   const costEff = costEffOf(l)
   const sellEff = sellEffOf(l)
   const adults = l.ad || 0
@@ -589,98 +590,144 @@ function perGuestPriceCell(l: SummaryLine): string {
   if (!weightedGuests) return '—'
   const costAdult = costEff / weightedGuests
   const sellAdult = sellEff / weightedGuests
+  const format = (cost: number, sell: number) => {
+    if (mode === 'cost') return wholeUsd(cost)
+    if (mode === 'sell') return wholeUsd(sell)
+    return `${wholeUsd(cost)} / ${wholeUsd(sell)}`
+  }
   const parts = []
-  if (adults) parts.push(`Ad ${wholeUsd(costAdult)} / ${wholeUsd(sellAdult)}`)
-  if (children) parts.push(`Ch ${wholeUsd(costAdult * 0.6)} / ${wholeUsd(sellAdult * 0.6)}`)
+  if (adults) parts.push(`Ad ${format(costAdult, sellAdult)}`)
+  if (children) parts.push(`Ch ${format(costAdult * 0.6, sellAdult * 0.6)}`)
   return parts.join(' · ')
 }
 
-function combinedPriceCell(l: SummaryLine): string {
+function combinedPriceCell(l: SummaryLine, mode: PriceDisplayMode = 'all'): string {
   const costEff = costEffOf(l)
   const sellEff = sellEffOf(l)
   const margin = mgnPct(costEff, sellEff)
   const discount = l.discount && l.rack > 0 ? ` · ↓${Math.round((l.discount.sellDelta / l.rack) * 100)}%` : ''
+  if (mode === 'cost') return `${wholeUsd(costEff)}${discount}`
+  if (mode === 'sell') return `${wholeUsd(sellEff)}${discount}`
   return `${wholeUsd(costEff)} / ${wholeUsd(sellEff)} · ${margin}%${discount}`
 }
 
-export const GRID: Record<SummaryServiceType, string> = {
-  accommodation:
-    '76px minmax(180px,1.8fr) minmax(200px,2fr) 56px 62px 54px 62px 78px 176px 168px',
-  flight:
-    '76px minmax(180px,1.7fr) 104px minmax(132px,1.2fr) minmax(150px,1.4fr) 54px 78px 176px 168px',
+export type PriceDisplayMode = 'cost' | 'sell' | 'all'
+
+const GRID_BASE: Record<SummaryServiceType, string> = {
+  accommodation: '76px minmax(160px,1.5fr) minmax(170px,1.7fr) 56px 58px 88px 58px 78px',
+  flight: '76px minmax(160px,1.5fr) 104px minmax(132px,1.2fr) minmax(150px,1.4fr) 88px 78px',
   transportation:
-    '76px minmax(180px,1.5fr) minmax(90px,1fr) minmax(140px,1.4fr) minmax(130px,1.3fr) 58px 58px 54px 78px 176px 168px',
-  activity: '76px minmax(180px,1.5fr) minmax(200px,2fr) 54px 78px 176px 168px',
-  other:
-    '76px minmax(180px,1.5fr) minmax(200px,1.9fr) 54px 58px minmax(120px,1fr) 78px 176px 168px',
-  extra: '76px minmax(180px,1.6fr) minmax(220px,2.2fr) 54px 84px 78px 176px 168px',
+    '76px minmax(160px,1.4fr) minmax(90px,1fr) minmax(130px,1.3fr) minmax(120px,1.2fr) 58px 58px 72px 78px',
+  activity: '76px minmax(160px,1.5fr) minmax(200px,2fr) 88px 78px',
+  other: '76px minmax(160px,1.5fr) minmax(180px,1.8fr) 72px 58px minmax(110px,1fr) 78px',
+  extra: '76px minmax(160px,1.5fr) minmax(200px,2fr) 72px 84px 78px',
 }
 
-const HOLD_COL: SummaryCell = { label: 'Hold', align: 'c' }
-const PRICE_COLS: SummaryCell[] = [
-  HOLD_COL,
-  { label: 'Per Adult / Child (USD)', align: 'r' },
-  { label: 'Cost / Sell · Margin (USD)', align: 'r' },
-]
-
-const HEADERS: Record<SummaryServiceType, SummaryCell[]> = {
-  accommodation: [
-    { label: 'Date', align: 'l' },
-    { label: 'Supplier', align: 'l' },
-    { label: 'Room Type', align: 'l' },
-    { label: 'Basis', align: 'c' },
-    { label: 'Rooms', align: 'c' },
-    { label: 'Pax', align: 'c' },
-    { label: 'Nights', align: 'c' },
-    ...PRICE_COLS,
-  ],
-  flight: [
-    { label: 'Date', align: 'l' },
-    { label: 'Supplier', align: 'l' },
-    { label: 'Charter / Schedule', align: 'c' },
-    { label: 'Route', align: 'l' },
-    { label: 'Flight Date & Time', align: 'l' },
-    { label: 'Pax', align: 'c' },
-    ...PRICE_COLS,
-  ],
-  transportation: [
-    { label: 'Date', align: 'l' },
-    { label: 'Supplier', align: 'l' },
-    { label: 'V. Type', align: 'l' },
-    { label: 'Pick Up / At Disposal In', align: 'l' },
-    { label: 'Drop off', align: 'l' },
-    { label: 'Veh.', align: 'c' },
-    { label: 'Days', align: 'c' },
-    { label: 'Pax', align: 'c' },
-    ...PRICE_COLS,
-  ],
-  activity: [
-    { label: 'Date', align: 'l' },
-    { label: 'Supplier', align: 'l' },
-    { label: 'Service', align: 'l' },
-    { label: 'Pax', align: 'c' },
-    ...PRICE_COLS,
-  ],
-  other: [
-    { label: 'Date', align: 'l' },
-    { label: 'Supplier', align: 'l' },
-    { label: 'Service', align: 'l' },
-    { label: 'Pax', align: 'c' },
-    { label: 'Days', align: 'c' },
-    { label: 'Allocation', align: 'l' },
-    ...PRICE_COLS,
-  ],
-  extra: [
-    { label: 'Date', align: 'l' },
-    { label: 'Supplier', align: 'l' },
-    { label: 'Extra', align: 'l' },
-    { label: 'Pax', align: 'c' },
-    { label: 'Qty', align: 'c' },
-    ...PRICE_COLS,
-  ],
+export function gridForMode(type: SummaryServiceType, mode: PriceDisplayMode): string {
+  const priceTracks = mode === 'all' ? '220px 240px' : '140px 150px'
+  return `${GRID_BASE[type]} ${priceTracks}`
 }
 
-function rowCells(type: SummaryServiceType, l: SummaryLine): string[] {
+/** @deprecated Prefer gridForMode — kept for callers that expect a static map. */
+export const GRID: Record<SummaryServiceType, string> = {
+  accommodation: gridForMode('accommodation', 'all'),
+  flight: gridForMode('flight', 'all'),
+  transportation: gridForMode('transportation', 'all'),
+  activity: gridForMode('activity', 'all'),
+  other: gridForMode('other', 'all'),
+  extra: gridForMode('extra', 'all'),
+}
+
+function priceColHeaders(mode: PriceDisplayMode): SummaryCell[] {
+  const perPerson =
+    mode === 'cost'
+      ? 'Per person cost'
+      : mode === 'sell'
+        ? 'Per person sell'
+        : 'Per person cost / sell'
+  const total =
+    mode === 'cost'
+      ? 'Cost (USD)'
+      : mode === 'sell'
+        ? 'Sell (USD)'
+        : 'Cost / Sell · Margin (USD)'
+  return [
+    { label: 'Hold', align: 'c' },
+    { label: perPerson, align: 'r' },
+    { label: total, align: 'r' },
+  ]
+}
+
+function headersFor(type: SummaryServiceType, mode: PriceDisplayMode): SummaryCell[] {
+  const price = priceColHeaders(mode)
+  switch (type) {
+    case 'accommodation':
+      return [
+        { label: 'Date', align: 'l' },
+        { label: 'Supplier', align: 'l' },
+        { label: 'Room Type', align: 'l' },
+        { label: 'Basis', align: 'c' },
+        { label: 'Rooms', align: 'c' },
+        { label: 'Pax', align: 'c' },
+        { label: 'Nights', align: 'c' },
+        ...price,
+      ]
+    case 'flight':
+      return [
+        { label: 'Date', align: 'l' },
+        { label: 'Supplier', align: 'l' },
+        { label: 'Charter / Schedule', align: 'c' },
+        { label: 'Route', align: 'l' },
+        { label: 'Flight Date & Time', align: 'l' },
+        { label: 'Pax', align: 'c' },
+        ...price,
+      ]
+    case 'transportation':
+      return [
+        { label: 'Date', align: 'l' },
+        { label: 'Supplier', align: 'l' },
+        { label: 'V. Type', align: 'l' },
+        { label: 'Pick Up / At Disposal In', align: 'l' },
+        { label: 'Drop off', align: 'l' },
+        { label: 'Veh.', align: 'c' },
+        { label: 'Days', align: 'c' },
+        { label: 'Pax', align: 'c' },
+        ...price,
+      ]
+    case 'activity':
+      return [
+        { label: 'Date', align: 'l' },
+        { label: 'Supplier', align: 'l' },
+        { label: 'Service', align: 'l' },
+        { label: 'Pax', align: 'c' },
+        ...price,
+      ]
+    case 'other':
+      return [
+        { label: 'Date', align: 'l' },
+        { label: 'Supplier', align: 'l' },
+        { label: 'Service', align: 'l' },
+        { label: 'Pax', align: 'c' },
+        { label: 'Days', align: 'c' },
+        { label: 'Allocation', align: 'l' },
+        ...price,
+      ]
+    case 'extra':
+      return [
+        { label: 'Date', align: 'l' },
+        { label: 'Supplier', align: 'l' },
+        { label: 'Extra', align: 'l' },
+        { label: 'Pax', align: 'c' },
+        { label: 'Qty', align: 'c' },
+        ...price,
+      ]
+  }
+}
+
+function rowCells(type: SummaryServiceType, l: SummaryLine, mode: PriceDisplayMode = 'all'): string[] {
+  const hold = priceCells(l)[0]
+  const perPerson = perGuestPriceCell(l, mode)
+  const total = combinedPriceCell(l, mode)
   switch (type) {
     case 'accommodation':
       return [
@@ -689,11 +736,11 @@ function rowCells(type: SummaryServiceType, l: SummaryLine): string[] {
         l.roomType || '—',
         l.basis || '—',
         String(l.rooms ?? '—'),
-        String(l.pax ?? ((l.ad || 0) + (l.ch || 0) || '—')),
+        guestsCell(l),
         String(l.nights ?? '—'),
-        priceCells(l)[0],
-        perGuestPriceCell(l),
-        combinedPriceCell(l),
+        hold,
+        perPerson,
+        total,
       ]
     case 'flight':
       return [
@@ -702,10 +749,10 @@ function rowCells(type: SummaryServiceType, l: SummaryLine): string[] {
         l.charter || '—',
         l.route || '—',
         `${fmtShortDate(l.date)} · ${l.depart || '—'} → ${l.arrive || '—'}`,
-        String(l.pax ?? ((l.ad || 0) + (l.ch || 0) || '—')),
-        priceCells(l)[0],
-        perGuestPriceCell(l),
-        combinedPriceCell(l),
+        guestsCell(l),
+        hold,
+        perPerson,
+        total,
       ]
     case 'transportation':
       return [
@@ -716,43 +763,43 @@ function rowCells(type: SummaryServiceType, l: SummaryLine): string[] {
         l.kind === 'disposal' ? '—' : l.dropoff || '—',
         String(l.veh ?? '—'),
         String(l.days ?? '—'),
-        String(l.pax ?? '—'),
-        priceCells(l)[0],
-        perGuestPriceCell(l),
-        combinedPriceCell(l),
+        guestsCell(l),
+        hold,
+        perPerson,
+        total,
       ]
     case 'activity':
       return [
         fmtShortDate(l.date),
         l.supplier,
         l.service || '—',
-        String(l.pax ?? ((l.ad || 0) + (l.ch || 0) || '—')),
-        priceCells(l)[0],
-        perGuestPriceCell(l),
-        combinedPriceCell(l),
+        guestsCell(l),
+        hold,
+        perPerson,
+        total,
       ]
     case 'other':
       return [
         fmtShortDate(l.date),
         l.supplier,
         l.service || '—',
-        String(l.pax ?? '—'),
+        guestsCell(l),
         String(l.days ?? '—'),
         l.alloc || 'All guests',
-        priceCells(l)[0],
-        perGuestPriceCell(l),
-        combinedPriceCell(l),
+        hold,
+        perPerson,
+        total,
       ]
     case 'extra':
       return [
         fmtShortDate(l.date),
         l.supplier,
         l.service || '—',
-        String(l.pax ?? '—'),
+        guestsCell(l),
         l.qty || '—',
-        priceCells(l)[0],
-        perGuestPriceCell(l),
-        combinedPriceCell(l),
+        hold,
+        perPerson,
+        total,
       ]
   }
 }
@@ -782,16 +829,16 @@ function blockMeta(type: SummaryServiceType, group: SummaryLine[]): string {
   return dates[0] === dates[dates.length - 1] ? fmtShortDate(dates[0]) : `${fmtShortDate(dates[0])} – ${fmtShortDate(dates[dates.length - 1])}`
 }
 
-function extraChildRow(e: SummaryLine): SummaryRow {
+function extraChildRow(e: SummaryLine, mode: PriceDisplayMode = 'all'): SummaryRow {
   return {
     isChild: true,
     kind: e.extraKind || 'service',
     meta: `${e.pax ?? 0} pax${e.qty ? `  ·  ${e.qty}` : ''}`,
-    cells: [e.service || 'Extra', combinedPriceCell(e)],
+    cells: [e.service || 'Extra', combinedPriceCell(e, mode)],
   }
 }
 
-export function buildSummaryCards(lines: SummaryLine[]): SummaryCard[] {
+export function buildSummaryCards(lines: SummaryLine[], mode: PriceDisplayMode = 'all'): SummaryCard[] {
   const extrasByService = new Map<string, SummaryLine[]>()
   for (const l of lines.filter((s) => s.type === 'extra')) {
     const arr = extrasByService.get(l.serviceId) || []
@@ -822,7 +869,7 @@ export function buildSummaryCards(lines: SummaryLine[]): SummaryCard[] {
       const rows: SummaryRow[] = []
       let blockSell = 0
       for (const [index, l] of group.entries()) {
-        const cells = rowCells(type, l)
+        const cells = rowCells(type, l, mode)
         const previous = group[index - 1]
         if (previous?.date === l.date) cells[0] = ''
         if (previous?.supplier === l.supplier) cells[1] = ''
@@ -833,7 +880,7 @@ export function buildSummaryCards(lines: SummaryLine[]): SummaryCard[] {
         if (emittedExtras.has(l.serviceId)) continue
         emittedExtras.add(l.serviceId)
         for (const extra of extrasByService.get(l.serviceId) || []) {
-          rows.push(extraChildRow(extra))
+          rows.push(extraChildRow(extra, mode))
           blockSell += sellEffOf(extra)
         }
       }
@@ -864,7 +911,7 @@ export function buildSummaryCards(lines: SummaryLine[]): SummaryCard[] {
       iconFg: m.iconFg,
       countLabel,
       subtotal: wholeUsd(cardSell),
-      headers: HEADERS[type],
+      headers: headersFor(type, mode),
       blocks,
     }
   }).filter(Boolean) as SummaryCard[]
