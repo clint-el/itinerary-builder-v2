@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { CalendarDays, ChevronLeft, ChevronRight, FileText, List } from 'lucide-react'
+import { CalendarDays, ChevronLeft, ChevronRight, FileText, List, Ticket } from 'lucide-react'
 import { useStore } from '@/app/store'
 import { Button } from '@/components/ui/button'
 import {
@@ -14,9 +14,11 @@ import type { LifecycleTransition } from '@/shared/lib/types'
 import { cn, formatDay } from '@/shared/lib/utils'
 import { StatusChip } from '@/shared/ui/StatusChip'
 import {
+  buildDepositSummary,
   buildSummaryCards,
   buildSummaryDays,
   buildSummaryPricing,
+  buildVouchers,
   GRID,
   holdsSummaryOf,
   linesFromQuoteGroups,
@@ -24,6 +26,8 @@ import {
   type SummaryBlock,
   type SummaryCard,
   type SummaryCell,
+  type VoucherCard,
+  type VoucherValueMode,
 } from './summaryModel'
 
 function transitionButtonClass(t: LifecycleTransition) {
@@ -44,7 +48,7 @@ function cellClass(align: 'l' | 'c' | 'r', dense: boolean, label: string) {
     dense ? 'py-1.5' : 'py-2',
     'px-3.5',
     align === 'c' && 'justify-center text-center',
-    align === 'r' && 'justify-end text-right tabular-nums',
+    align === 'r' && 'justify-end pr-5 text-right tabular-nums',
   )
   if (label === 'Hold') return cn(base, 'text-[11.5px] font-semibold')
   if (label === 'Supplier') return cn(base, 'font-semibold')
@@ -59,7 +63,7 @@ function headerClass(align: 'l' | 'c' | 'r', dense: boolean) {
     'flex items-center bg-[#FCFCFD] px-3.5 text-[10.5px] font-bold uppercase tracking-wide text-[#B4B4BA]',
     dense ? 'py-[7px]' : 'py-[9px]',
     align === 'c' && 'justify-center',
-    align === 'r' && 'justify-end',
+    align === 'r' && 'justify-end pr-5',
   )
 }
 
@@ -70,9 +74,20 @@ export function SummaryPage() {
   const itinerary = itineraries.find((it) => it.id === id)
   const services = getServices(id)
   const quoteGroups = getQuoteGroups(id)
-  const [view, setView] = useState<'summary' | 'byday'>('summary')
+  const [view, setView] = useState<'summary' | 'byday' | 'vouchers'>('summary')
   const [openPriceGroups, setOpenPriceGroups] = useState<Record<string, boolean>>({})
   const [depositsOpen, setDepositsOpen] = useState(false)
+  const [voucherMode, setVoucherMode] = useState<VoucherValueMode>('cost')
+  const [issued, setIssued] = useState<Record<string, boolean>>({})
+  const [flash, setFlash] = useState<string | null>(null)
+  const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(
+    () => () => {
+      if (flashTimerRef.current) clearTimeout(flashTimerRef.current)
+    },
+    [],
+  )
 
   const guests = useMemo(
     () => (itinerary ? partyGuests(itinerary, getGuestDetails(id)) : []),
@@ -95,6 +110,17 @@ export function SummaryPage() {
   const totalGuests =
     guests.length || (itinerary ? (itinerary.adults || 0) + (itinerary.children || 0) + (itinerary.infants || 0) : 0)
   const pricing = useMemo(() => buildSummaryPricing(lines, totalGuests), [lines, totalGuests])
+  const deposits = useMemo(
+    () => buildDepositSummary(lines, pricing.sellNumber),
+    [lines, pricing.sellNumber],
+  )
+  const vouchers = useMemo(
+    () =>
+      view === 'vouchers'
+        ? buildVouchers(lines, voucherMode, itinerary?.reference || itinerary?.id || 'CPS', issued)
+        : [],
+    [view, lines, voucherMode, itinerary?.reference, itinerary?.id, issued],
+  )
   const holdRollup = useMemo(() => holdsSummaryOf(lines), [lines])
   const byDaySections = useMemo(() => {
     const keys = [...new Set(lines.map((line) => line.date || 'undated'))].sort()
@@ -167,10 +193,27 @@ export function SummaryPage() {
     if (isBuilderStatus(t.to)) navigate(`/build/${id}`)
   }
 
+  function showFlash(message: string) {
+    if (flashTimerRef.current) clearTimeout(flashTimerRef.current)
+    setFlash(message)
+    flashTimerRef.current = setTimeout(() => setFlash(null), 2800)
+  }
+
+  function issueVoucher(card: VoucherCard) {
+    setIssued((current) => ({ ...current, [card.supplier]: true }))
+    showFlash(`Voucher ${card.ref} issued to ${card.supplier}`)
+  }
+
   const tabClass = (active: boolean) =>
     cn(
       'inline-flex h-8 items-center gap-2 rounded-lg px-3.5 text-[13px] font-semibold',
       active ? 'bg-[#931115] text-white' : 'bg-transparent text-[#71717A]',
+    )
+
+  const valueModeClass = (active: boolean) =>
+    cn(
+      'h-7 rounded-md px-3 text-[12px] font-semibold',
+      active ? 'bg-white text-[#171717] shadow-sm' : 'bg-transparent text-[#737373]',
     )
 
   return (
@@ -233,6 +276,10 @@ export function SummaryPage() {
             <CalendarDays className="size-3.5" />
             By Day
           </button>
+          <button type="button" className={tabClass(view === 'vouchers')} onClick={() => setView('vouchers')}>
+            <Ticket className="size-3.5" />
+            Vouchers
+          </button>
         </div>
 
         <div className="flex items-start gap-4">
@@ -241,6 +288,15 @@ export function SummaryPage() {
               <div className="rounded-[14px] border border-[#E5E7EB] bg-white p-8 text-center text-sm text-muted-foreground">
                 No services added yet.
               </div>
+            ) : view === 'vouchers' ? (
+              <VouchersView
+                vouchers={vouchers}
+                mode={voucherMode}
+                setMode={setVoucherMode}
+                depositTotal={deposits.depositTotal}
+                valueModeClass={valueModeClass}
+                onIssue={issueVoucher}
+              />
             ) : view === 'summary' ? (
               cards.map((c) => <ServiceCard key={c.type} card={c} />)
             ) : (
@@ -268,6 +324,7 @@ export function SummaryPage() {
             )}
           </main>
 
+          {view !== 'vouchers' ? (
           <aside className="sticky top-4 w-[330px] shrink-0">
             <section className="rounded-[14px] border border-[#E5E7EB] bg-white px-[22px] py-5">
               <h2 className="mb-3.5 text-[16px] font-bold text-[#171717]">Pricing</h2>
@@ -357,28 +414,33 @@ export function SummaryPage() {
                   className={cn('size-3 shrink-0 text-[#A1A1A1] transition-transform', depositsOpen && 'rotate-90')}
                 />
                 <span className="min-w-0 flex-1 text-[14px] font-bold text-[#171717]">Total deposit</span>
-                <span className="text-[15px] font-bold text-[#931115]">
-                  {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(
-                    pricing.sellNumber * 0.3,
-                  )}
-                </span>
+                <span className="text-[15px] font-bold text-[#931115]">{deposits.depositTotal}</span>
               </button>
               <div className="mt-1 flex justify-between pl-5 text-[11.5px] text-[#A1A1A1]">
-                <span>30% · due on confirmation</span>
                 <span>
-                  Balance{' '}
-                  {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(
-                    pricing.sellNumber * 0.7,
-                  )}
+                  {deposits.depositPctLabel} · {deposits.depositCountLabel}
                 </span>
+                <span>Balance {deposits.depositBalance}</span>
               </div>
               {depositsOpen ? (
-                <div className="mt-2 border-t border-[#F3F4F6] pt-2 pl-5 text-[11.5px] text-[#525252]">
-                  Supplier deposits are calculated from the applicable contract terms.
+                <div className="mt-2 flex flex-col border-t border-[#F3F4F6] pl-5 pt-2">
+                  {deposits.depositRows.map((row) => (
+                    <div
+                      key={row.supplier}
+                      title={row.rule}
+                      className="flex items-baseline justify-between gap-2 border-t border-[#F3F4F6] py-1.5 first:border-t-0"
+                    >
+                      <span className="min-w-0 text-[11.5px] text-[#525252]">
+                        {row.supplier} <span className="text-[#A1A1A1]">{row.terms}</span>
+                      </span>
+                      <span className="shrink-0 text-[11.5px] font-semibold text-[#171717]">{row.amount}</span>
+                    </div>
+                  ))}
                 </div>
               ) : null}
             </section>
           </aside>
+          ) : null}
         </div>
       </div>
 
@@ -414,6 +476,211 @@ export function SummaryPage() {
           )}
         </div>
       </div>
+
+      {flash ? (
+        <div className="fixed bottom-6 right-6 z-[95] flex items-center gap-2.5 rounded-lg bg-[#171717] px-[18px] py-3 text-[13.5px] font-semibold text-white shadow-2xl">
+          <span className="text-[#00D492]">✓</span>
+          {flash}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function VouchersView({
+  vouchers,
+  mode,
+  setMode,
+  depositTotal,
+  valueModeClass,
+  onIssue,
+}: {
+  vouchers: VoucherCard[]
+  mode: VoucherValueMode
+  setMode: (mode: VoucherValueMode) => void
+  depositTotal: string
+  valueModeClass: (active: boolean) => string
+  onIssue: (card: VoucherCard) => void
+}) {
+  const totalLabel = mode === 'sell' ? 'Total sell value' : 'Total payable to suppliers'
+  const totalValue =
+    mode === 'none'
+      ? '—'
+      : `$${Math.round(vouchers.reduce((a, v) => a + v.totalNum, 0)).toLocaleString('en-US')}`
+  const gridCols = mode === 'none'
+    ? '92px 132px minmax(220px,2.2fr) minmax(170px,1.6fr) 92px'
+    : '92px 132px minmax(220px,2.2fr) minmax(170px,1.6fr) 92px 128px'
+  const headers = [
+    { label: 'Date', align: 'l' as const },
+    { label: 'Type', align: 'l' as const },
+    { label: 'Service', align: 'l' as const },
+    { label: 'Detail', align: 'l' as const },
+    { label: 'Pax', align: 'c' as const },
+    ...(mode === 'none' ? [] : [{ label: mode === 'cost' ? 'Cost' : 'Sell', align: 'r' as const }]),
+  ]
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-5 rounded-[14px] border border-[#E5E7EB] bg-white px-5 py-3.5">
+        <div className="flex flex-wrap items-center gap-5">
+          <div>
+            <div className="text-[11px] font-bold uppercase tracking-[0.3px] text-[#A1A1A1]">
+              Invoiceable suppliers
+            </div>
+            <div className="mt-0.5 text-[15px] font-bold text-[#171717]">
+              {vouchers.length} supplier{vouchers.length === 1 ? '' : 's'}
+            </div>
+          </div>
+          <div>
+            <div className="text-[11px] font-bold uppercase tracking-[0.3px] text-[#A1A1A1]">{totalLabel}</div>
+            <div className="mt-0.5 text-[15px] font-bold text-[#171717]">{totalValue}</div>
+          </div>
+          <div>
+            <div className="text-[11px] font-bold uppercase tracking-[0.3px] text-[#A1A1A1]">
+              Deposit payable now
+            </div>
+            <div className="mt-0.5 text-[15px] font-bold text-[#931115]">{depositTotal}</div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2.5">
+          <span className="text-[11.5px] font-semibold text-[#A1A1A1]">Values shown</span>
+          <div className="flex gap-0.5 rounded-[9px] bg-[#F3F4F6] p-0.5">
+            <button type="button" className={valueModeClass(mode === 'cost')} onClick={() => setMode('cost')}>
+              Cost
+            </button>
+            <button type="button" className={valueModeClass(mode === 'sell')} onClick={() => setMode('sell')}>
+              Sell
+            </button>
+            <button type="button" className={valueModeClass(mode === 'none')} onClick={() => setMode('none')}>
+              Hidden
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {vouchers.map((v) => (
+        <section key={v.supplier} className="overflow-hidden rounded-[14px] border border-[#E5E7EB] bg-white">
+          <div className="flex items-start justify-between gap-4 border-b border-[#EDEFF2] px-5 py-[15px]">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="flex size-[34px] shrink-0 items-center justify-center rounded-[10px] bg-[#F1F5F9] text-[13px] font-bold text-[#475569]">
+                {v.initials}
+              </span>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[15px] font-bold text-[#171717]">{v.supplier}</span>
+                  <span
+                    className="inline-flex h-[21px] items-center rounded-full px-2.5 text-[11px] font-bold"
+                    style={{ background: v.holdBg, color: v.holdFg }}
+                  >
+                    {v.holdLabel}
+                  </span>
+                </div>
+                <div className="mt-0.5 text-[12px] font-medium text-[#A1A1A1]">
+                  {v.ref} · {v.dateRange} · {v.countLabel}
+                </div>
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-3.5">
+              {v.showValue ? (
+                <div className="text-right">
+                  <div className="text-[10.5px] font-bold uppercase tracking-[0.3px] text-[#A1A1A1]">
+                    {v.totalLabel}
+                  </div>
+                  <div className="text-[16px] font-bold text-[#171717]">{v.total}</div>
+                </div>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => onIssue(v)}
+                className={cn(
+                  'h-[34px] rounded-lg px-3.5 text-[13px] font-semibold',
+                  v.issued
+                    ? 'border border-[#E5E7EB] bg-white text-[#737373]'
+                    : 'border border-[#931115] bg-[#931115] text-white',
+                )}
+              >
+                {v.issued ? 'Re-issue voucher' : 'Issue voucher'}
+              </button>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <div style={{ minWidth: mode === 'none' ? 720 : 860 }}>
+              <div
+                className="grid border-b border-[#EDEFF2] bg-[#FBFBFC]"
+                style={{ gridTemplateColumns: gridCols }}
+              >
+                {headers.map((h) => (
+                  <div
+                    key={h.label}
+                    className={cn(
+                      'flex items-center px-3.5 py-2 text-[10.5px] font-bold uppercase tracking-[0.4px] text-[#94A3B8]',
+                      h.align === 'c' && 'justify-center',
+                      h.align === 'r' && 'justify-end',
+                    )}
+                  >
+                    {h.label}
+                  </div>
+                ))}
+              </div>
+              {v.rows.map((row, index) => (
+                <div
+                  key={`${row.date}-${row.service}-${index}`}
+                  className="grid"
+                  style={{
+                    gridTemplateColumns: gridCols,
+                    background: row.isExtra ? '#FCFCFD' : '#FFFFFF',
+                  }}
+                >
+                  <div className="flex items-center whitespace-nowrap border-b border-[#F3F4F6] px-3.5 py-[11px] text-[13px] text-[#737373]">
+                    {row.date}
+                  </div>
+                  <div
+                    className={cn(
+                      'flex items-center border-b border-[#F3F4F6] px-3.5 py-[11px] text-[11px] font-bold uppercase tracking-[0.3px]',
+                      row.isExtra ? 'text-[#0369A1]' : 'text-[#94A3B8]',
+                    )}
+                  >
+                    {row.typeLabel}
+                  </div>
+                  <div
+                    className={cn(
+                      'flex min-w-0 items-center truncate border-b border-[#F3F4F6] py-[11px] pr-3.5 text-[13px] font-semibold text-[#171717]',
+                      row.isExtra ? 'border-l border-[#CBD5E1] pl-[30px]' : 'pl-3.5',
+                    )}
+                  >
+                    {row.service}
+                  </div>
+                  <div className="flex min-w-0 items-center truncate border-b border-[#F3F4F6] px-3.5 py-[11px] text-[13px] text-[#737373]">
+                    {row.detail}
+                  </div>
+                  <div className="flex items-center justify-center border-b border-[#F3F4F6] px-3.5 py-[11px] text-[13px] text-[#171717]">
+                    {row.pax}
+                  </div>
+                  {mode !== 'none' ? (
+                    <div className="flex items-center justify-end whitespace-nowrap border-b border-[#F3F4F6] px-3.5 py-[11px] text-[13px] text-[#171717]">
+                      {row.value}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-4 bg-[#FAFAFB] px-5 py-3.5">
+            <div className="min-w-0">
+              <div className="text-[11px] font-bold uppercase tracking-[0.3px] text-[#A1A1A1]">Payment terms</div>
+              <div className="mt-0.5 text-[12.5px] font-medium text-[#525252]">{v.depositRule}</div>
+            </div>
+            <div className="flex shrink-0 items-baseline gap-[18px]">
+              <span className="text-[12px] text-[#A1A1A1]">
+                Deposit <span className="text-[13.5px] font-bold text-[#931115]">{v.deposit}</span>
+              </span>
+              <span className="text-[12px] text-[#A1A1A1]">{v.depositDue}</span>
+            </div>
+          </div>
+        </section>
+      ))}
     </div>
   )
 }
@@ -507,7 +774,7 @@ function ServiceBlock({
               <span className="flex-none whitespace-nowrap text-[10.5px] font-medium text-[#B4B4BA]">{r.meta}</span>
             </div>
             <div
-              className="flex items-center justify-end whitespace-nowrap px-3.5 text-[11.5px] font-medium tabular-nums text-[#737373]"
+              className="flex items-center justify-end whitespace-nowrap px-3.5 pr-5 text-[11.5px] font-medium tabular-nums text-[#737373]"
               style={{ gridColumn: '-2 / -1' }}
             >
               {r.cells[1]}

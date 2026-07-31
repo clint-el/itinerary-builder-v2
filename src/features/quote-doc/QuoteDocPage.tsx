@@ -17,6 +17,8 @@ import plainsMajestyImg from '@/assets/Plains-Majesty.webp'
 import totallyFocusedImg from '@/assets/totally-focused.webp'
 import { Button } from '@/components/ui/button'
 import {
+  buildDepositSummary,
+  buildInclusions,
   buildSummaryCards,
   buildSummaryDays,
   buildSummaryPricing,
@@ -29,40 +31,22 @@ import { nightsBetween, partyGuests } from '@/shared/lib/helpers'
 import type { AddedService, Hold, Itinerary } from '@/shared/lib/types'
 import { cn, formatDay, formatUsd } from '@/shared/lib/utils'
 
-const INCLUDED = [
-  'All accommodation on the basis shown',
-  'All meals as indicated in the itinerary',
-  'Included activities and guiding',
-  'Internal flights and road transfers listed',
-  'Park, conservancy and concession fees where listed',
-  'Government taxes and levies applicable at time of quoting',
-]
-
-const EXCLUDED = [
-  'International flights and visas',
-  'Travel and cancellation insurance',
-  'Premium wines, champagne and spirits',
-  'Additional activities and private guiding',
-  'Gratuities for guides and lodge staff',
-  'Items of a personal nature',
-]
-
 const TERMS = [
   {
     title: 'Provisional holds',
-    body: 'Rooms and flights are held provisionally and may be released if the deposit is not received by the date shown. Availability cannot be guaranteed after release.',
+    body: 'Rooms and flights are held provisionally and are released automatically if the deposit is not received by the date shown. Availability cannot be guaranteed after release.',
   },
   {
     title: 'Cancellation',
-    body: 'Cancellation more than 60 days before travel forfeits the deposit. Within 60 days, supplier-specific charges may apply up to 100% of the total.',
+    body: 'Cancellation more than 60 days before travel forfeits the deposit. Within 60 days, 100% of the total is payable. Individual properties may apply stricter terms in peak season.',
   },
   {
     title: 'Rates and currency',
-    body: 'Rates are quoted in US dollars and may change if government fees, taxes or fuel levies increase before the deposit is received.',
+    body: 'Rates are quoted in US dollars and are subject to change in the event of government-imposed increases in park fees, taxes or fuel levies before the deposit is received.',
   },
   {
     title: 'Children',
-    body: 'Child rates depend on age, room sharing and individual property policies. Some properties have minimum-age restrictions for game activities.',
+    body: 'Child rates apply to guests aged 12 and under sharing with two adults. Some properties operate minimum-age policies on game activities.',
   },
 ]
 
@@ -218,6 +202,11 @@ export function QuoteDocPage() {
     () => buildSummaryPricing(lines, totalGuestsForPricing),
     [lines, totalGuestsForPricing],
   )
+  const deposits = useMemo(
+    () => buildDepositSummary(lines, pricing.sellNumber),
+    [lines, pricing.sellNumber],
+  )
+  const { inclusions, exclusionsBody } = useMemo(() => buildInclusions(lines), [lines])
   const sortedLines = useMemo(
     () => [...lines].sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999')),
     [lines],
@@ -350,6 +339,7 @@ export function QuoteDocPage() {
     { key: 4, label: 'Investment' },
     { key: 42, label: 'Investment 2' },
     { key: 41, label: 'Totals' },
+    { key: 43, label: 'Inclusions' },
     ...(showTerms ? [{ key: 5, label: 'Terms' }] : []),
   ]
   const pageNumber = (key: number) => pageDefs.findIndex((page) => page.key === key) + 1
@@ -664,19 +654,70 @@ export function QuoteDocPage() {
                   ))}
                 </>
               ) : null}
-              <div className="mt-8 grid grid-cols-2 gap-7">
-                <InclusionList title="Included" items={INCLUDED} included />
-                <InclusionList title="Not included" items={EXCLUDED} />
-              </div>
               <div className="flex-1" />
               <PageFooter left={`${itinerary.reference} · ${versionLabel}`} right={`Page ${pageNumber(41)}`} />
+            </section>
+
+            <section data-qd-page="43" className={PAGE_CLASS}>
+              <PageHeading title="What is included" right={itinerary.reference} />
+              <p className="mb-3.5 text-[10.5px] font-bold uppercase tracking-wide text-[#A1A1A1]">
+                What each supplier includes
+              </p>
+              <div className="flex flex-col gap-3">
+                {inclusions.length ? (
+                  inclusions.map((item) => (
+                    <p key={item.supplier} className="m-0 text-[12.5px] leading-relaxed text-[#525252]">
+                      <span className="font-bold text-[#171717]">{item.supplier}.</span> {item.body}
+                    </p>
+                  ))
+                ) : (
+                  <EmptyCopy text="No services have been added to describe inclusions." />
+                )}
+              </div>
+              <p className="mb-2 mt-[30px] text-[10.5px] font-bold uppercase tracking-wide text-[#A1A1A1]">
+                Not included
+              </p>
+              <p className="m-0 text-[12.5px] leading-relaxed text-[#525252]">{exclusionsBody}</p>
+              <div className="flex-1" />
+              <PageFooter left={`${itinerary.reference} · ${versionLabel}`} right={`Page ${pageNumber(43)}`} />
             </section>
 
             {showTerms ? (
               <section data-qd-page="5" className={PAGE_CLASS}>
                 <PageHeading title="Payment & booking terms" right={itinerary.reference} />
-                <ScheduleRow label="Deposit — 30%" due="Due within 14 days of acceptance" amount={formatUsd(pricing.sellNumber * 0.3)} />
-                <ScheduleRow label="Balance — 70%" due={`Due 60 days before travel · ${balanceDue}`} amount={formatUsd(pricing.sellNumber * 0.7)} />
+                <ScheduleRow
+                  label="Deposit on acceptance"
+                  due={`Calculated from each supplier’s own payment terms · ${deposits.depositPctOfSell}% of total`}
+                  amount={deposits.depositTotal}
+                />
+                <ScheduleRow
+                  label="Balance"
+                  due={`Due 60 days before travel · ${balanceDue}`}
+                  amount={deposits.depositBalance}
+                />
+                <p className="mb-2 mt-[18px] text-[10.5px] font-bold uppercase tracking-wide text-[#A1A1A1]">
+                  How the deposit is calculated
+                </p>
+                <p className="mb-2.5 text-[12px] leading-relaxed text-[#525252]">
+                  Deposits are not a flat percentage. Each supplier on this itinerary applies its own terms, and the
+                  amount below is the sum of those individual requirements.
+                </p>
+                <div className="overflow-hidden rounded-[10px] border border-[#E5E7EB]">
+                  {deposits.depositRows.map((row) => (
+                    <div
+                      key={row.supplier}
+                      className="grid grid-cols-[1fr_96px_84px] items-baseline gap-2.5 border-b border-[#F3F4F6] px-3.5 py-[7px] last:border-b-0"
+                    >
+                      <span className="truncate text-[12px] font-semibold text-[#171717]">{row.supplier}</span>
+                      <span className="text-[11px] text-[#A1A1A1]">{row.shortRule}</span>
+                      <span className="text-right text-[12px] font-semibold text-[#171717]">{row.amount}</span>
+                    </div>
+                  ))}
+                  <div className="grid grid-cols-[1fr_84px] gap-2.5 bg-[#F9FAFB] px-3.5 py-2.5">
+                    <span className="text-[12px] font-bold text-[#171717]">Total deposit payable on acceptance</span>
+                    <span className="text-right text-[12.5px] font-bold text-[#931115]">{deposits.depositTotal}</span>
+                  </div>
+                </div>
                 <div className="mt-7 flex flex-col gap-4">
                   {TERMS.map((term) => (
                     <div key={term.title}>
@@ -868,20 +909,6 @@ function PriceTile({ label, value }: { label: string; value: string }) {
     <div className="flex-1 rounded-xl border border-[#E5E7EB] px-[18px] py-4">
       <span className="block text-[11.5px] font-bold uppercase tracking-wide text-[#A1A1A1]">{label}</span>
       <span className="mt-1.5 block text-[20px] font-bold text-[#171717]">{value}</span>
-    </div>
-  )
-}
-
-function InclusionList({ title, items, included }: { title: string; items: string[]; included?: boolean }) {
-  return (
-    <div>
-      <p className="mb-2.5 text-[11px] font-bold uppercase tracking-wide text-[#171717]">{title}</p>
-      {items.map((item) => (
-        <div key={item} className="flex gap-2 py-1">
-          <span className={cn('mt-0.5', included ? 'text-[#067A55]' : 'text-[#C4C4C6]')}>{included ? '✓' : '✕'}</span>
-          <span className="text-[12.5px] leading-relaxed text-[#525252]">{item}</span>
-        </div>
-      ))}
     </div>
   )
 }

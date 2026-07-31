@@ -1078,3 +1078,434 @@ export function holdsSummaryOf(lines: SummaryLine[]): HoldRollup {
     'No holds'
   return { chip, summary, fg, bg }
 }
+
+// ---------------------------------------------------------------------------
+// Per-supplier deposit rules (contract terms) + vouchers view.
+// ---------------------------------------------------------------------------
+
+export type DepositRule = {
+  match: string
+  pct: number
+  /** Days before first service date that the deposit is due; 0 = on confirmation / at booking. */
+  days: number
+  /** Short client-facing rule, e.g. "25% · 7 days". */
+  shortLabel: string
+  /** Longer internal label for summary / voucher footers. */
+  label: string
+}
+
+const DEPOSIT_RULES: DepositRule[] = [
+  {
+    match: 'Hemingways',
+    pct: 30,
+    days: 14,
+    shortLabel: '30% · 14 days',
+    label: '30% on confirmation · balance 30 days before arrival',
+  },
+  {
+    match: 'Elewana',
+    pct: 25,
+    days: 7,
+    shortLabel: '25% · 7 days',
+    label: '25% on confirmation · balance 45 days before arrival',
+  },
+  {
+    match: 'AirKenya',
+    pct: 100,
+    days: 0,
+    shortLabel: '100% at booking',
+    label: '100% at time of booking (non-refundable)',
+  },
+  {
+    match: 'Auric',
+    pct: 100,
+    days: 0,
+    shortLabel: '100% at booking',
+    label: '100% at time of booking (non-refundable)',
+  },
+  {
+    match: 'Cheli',
+    pct: 20,
+    days: 14,
+    shortLabel: '20% · 14 days',
+    label: '20% on confirmation · balance 14 days before service',
+  },
+  {
+    match: 'Balloon',
+    pct: 50,
+    days: 21,
+    shortLabel: '50% · 21 days',
+    label: '50% on confirmation · balance 21 days before flight',
+  },
+  {
+    match: 'Amref',
+    pct: 100,
+    days: 0,
+    shortLabel: '100% at booking',
+    label: '100% at time of booking',
+  },
+  {
+    match: 'AMREF',
+    pct: 100,
+    days: 0,
+    shortLabel: '100% at booking',
+    label: '100% at time of booking',
+  },
+  {
+    match: 'Umbato',
+    pct: 0,
+    days: 0,
+    shortLabel: 'On completion',
+    label: 'Payable on completion',
+  },
+  {
+    match: 'Meet and Assist',
+    pct: 0,
+    days: 0,
+    shortLabel: 'On completion',
+    label: 'Payable on completion',
+  },
+  {
+    match: '*',
+    pct: 50,
+    days: 14,
+    shortLabel: '50% · 14 days',
+    label: '50% on confirmation · balance 14 days before service',
+  },
+]
+
+export function depositRuleFor(supplier: string): DepositRule {
+  return (
+    DEPOSIT_RULES.find((r) => r.match !== '*' && supplier.includes(r.match)) ||
+    DEPOSIT_RULES[DEPOSIT_RULES.length - 1]
+  )
+}
+
+function isoAddDaysLocal(iso: string, days: number) {
+  const [y, m, d] = iso.split('-').map(Number)
+  const dt = new Date(y, (m || 1) - 1, d || 1)
+  dt.setDate(dt.getDate() + days)
+  const month = String(dt.getMonth() + 1).padStart(2, '0')
+  const day = String(dt.getDate()).padStart(2, '0')
+  return `${dt.getFullYear()}-${month}-${day}`
+}
+
+function fmtDepositDue(iso: string, rule: DepositRule) {
+  if (!rule.days || !iso) return 'Due on confirmation'
+  const dueIso = isoAddDaysLocal(iso, -rule.days)
+  return `Due ${fmtShortDate(dueIso)} ${dueIso.slice(0, 4)}`
+}
+
+export type DepositRow = {
+  supplier: string
+  rule: string
+  shortRule: string
+  terms: string
+  amount: string
+  amountNum: number
+  due: string
+}
+
+export type DepositSummary = {
+  depositRows: DepositRow[]
+  depositTotal: string
+  depositTotalNum: number
+  depositPctLabel: string
+  depositPctOfSell: number
+  depositBalance: string
+  depositBalanceNum: number
+  depositCountLabel: string
+}
+
+/** Aggregate deposit requirements by supplier from cost (what we owe). */
+export function buildDepositSummary(lines: SummaryLine[], sellTotal?: number): DepositSummary {
+  const bySup = new Map<string, { cost: number; first: string }>()
+  for (const l of lines) {
+    const cost = costEffOf(l)
+    const cur = bySup.get(l.supplier) || { cost: 0, first: l.date || '' }
+    cur.cost += cost
+    if (l.date && (!cur.first || l.date < cur.first)) cur.first = l.date
+    bySup.set(l.supplier, cur)
+  }
+
+  const rows: DepositRow[] = [...bySup.entries()]
+    .map(([supplier, g]) => {
+      const rule = depositRuleFor(supplier)
+      const amountNum = Math.round(g.cost * (rule.pct / 100))
+      const due = fmtDepositDue(g.first, rule)
+      return {
+        supplier,
+        rule: rule.label,
+        shortRule: rule.shortLabel,
+        terms: `${rule.pct}% of ${wholeUsd(g.cost)}  ·  ${rule.days ? `due ${fmtShortDate(isoAddDaysLocal(g.first, -rule.days))}` : 'due on confirmation'}`,
+        amount: wholeUsd(amountNum),
+        amountNum,
+        due,
+      }
+    })
+    .sort((a, b) => b.amountNum - a.amountNum)
+
+  const depositTotalNum = rows.reduce((a, r) => a + r.amountNum, 0)
+  const totalCost = lines.reduce((a, l) => a + costEffOf(l), 0)
+  const sell = sellTotal ?? lines.reduce((a, l) => a + sellEffOf(l), 0)
+  const depositPctOfSell = sell ? Math.round((depositTotalNum / sell) * 100) : 0
+
+  return {
+    depositRows: rows,
+    depositTotal: wholeUsd(depositTotalNum),
+    depositTotalNum,
+    depositPctLabel: (totalCost ? Math.round((depositTotalNum / totalCost) * 100) : 0) + '% of total cost',
+    depositPctOfSell,
+    depositBalance: wholeUsd(Math.max(0, sell - depositTotalNum)),
+    depositBalanceNum: Math.max(0, sell - depositTotalNum),
+    depositCountLabel: `${rows.length} supplier${rows.length === 1 ? '' : 's'}`,
+  }
+}
+
+export type VoucherValueMode = 'cost' | 'sell' | 'none'
+
+export type VoucherRow = {
+  date: string
+  typeLabel: string
+  service: string
+  detail: string
+  pax: string
+  value: string
+  isExtra: boolean
+}
+
+export type VoucherCard = {
+  supplier: string
+  initials: string
+  ref: string
+  dateRange: string
+  countLabel: string
+  holdLabel: string
+  holdFg: string
+  holdBg: string
+  showValue: boolean
+  totalLabel: string
+  total: string
+  totalNum: number
+  rows: VoucherRow[]
+  deposit: string
+  depositRule: string
+  depositDue: string
+  issued: boolean
+}
+
+function voucherDesc(l: SummaryLine) {
+  switch (l.type) {
+    case 'accommodation':
+      return l.roomType || 'Room'
+    case 'flight':
+      return l.route || '—'
+    case 'transportation':
+      return l.kind === 'disposal'
+        ? `${l.vType || 'Vehicle'} at disposal · ${l.location || '—'}`
+        : `${l.pickup || '—'} → ${l.dropoff || '—'}`
+    default:
+      return l.service || '—'
+  }
+}
+
+function voucherDetail(l: SummaryLine) {
+  if (l.type === 'accommodation') {
+    return [l.rooms ? `${l.rooms} room${l.rooms === 1 ? '' : 's'}` : null, l.nights ? `${l.nights} nights` : null, l.basis]
+      .filter(Boolean)
+      .join('  ·  ')
+  }
+  if (l.type === 'flight') {
+    return [l.depart && l.arrive ? `${l.depart} → ${l.arrive}` : l.depart || l.arrive || null, l.charter]
+      .filter(Boolean)
+      .join('  ·  ')
+  }
+  if (l.type === 'transportation') {
+    if (l.kind === 'disposal') {
+      return [l.veh ? `${l.veh} vehicle` : null, l.days ? `${l.days} days` : null].filter(Boolean).join('  ·  ')
+    }
+    return l.vType || ''
+  }
+  return l.qty || l.alloc || ''
+}
+
+function voucherTypeLabel(l: SummaryLine) {
+  if (l.type === 'transportation') return l.kind === 'disposal' ? 'Vehicle disposal' : 'Transfer'
+  if (l.type === 'extra') return 'Extra'
+  if (l.type === 'other') return 'Service'
+  if (l.type === 'accommodation') return 'Accommodation'
+  if (l.type === 'flight') return 'Flight'
+  return 'Activity'
+}
+
+function supplierInitials(name: string) {
+  const cleaned = name.replace(/^Elewana\s+/i, '')
+  return cleaned
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join('')
+    .toUpperCase()
+}
+
+/** One voucher per invoiceable supplier, cutting across the whole itinerary. */
+export function buildVouchers(
+  lines: SummaryLine[],
+  mode: VoucherValueMode,
+  metaRef: string,
+  issued: Record<string, boolean> = {},
+): VoucherCard[] {
+  const show = mode !== 'none'
+  const bySup = new Map<string, SummaryLine[]>()
+  for (const l of lines) {
+    const arr = bySup.get(l.supplier) || []
+    arr.push(l)
+    bySup.set(l.supplier, arr)
+  }
+
+  const cards = [...bySup.entries()].map(([name, items]) => {
+    const sorted = items.slice().sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+    const valueOf = (l: SummaryLine) => (mode === 'sell' ? sellEffOf(l) : costEffOf(l))
+    const cost = sorted.reduce((a, l) => a + costEffOf(l), 0)
+    const totalNum = sorted.reduce((a, l) => a + valueOf(l), 0)
+    const rule = depositRuleFor(name)
+    const first = sorted.find((l) => l.date)?.date || ''
+    const last = [...sorted].reverse().find((l) => l.date)?.date || first
+    const isIssued = !!issued[name]
+    const holds = sorted.map((l) => l.hold)
+    const [holdLabel, holdFg, holdBg] = isIssued
+      ? (['Voucher issued', '#15803D', '#DCFCE7'] as const)
+      : holds.includes('requested')
+        ? (['Hold requested', '#B45309', '#FEF3C7'] as const)
+        : holds.includes('held')
+          ? (['On hold', '#0369A1', '#E0F2FE'] as const)
+          : (['No hold', '#A1A1A1', '#F1F5F9'] as const)
+
+    const year = (last || first || '').slice(0, 4) || ''
+    const dateRange =
+      first && last
+        ? `${fmtShortDate(first)} – ${fmtShortDate(last)}${year ? ` ${year}` : ''}`
+        : 'Dates TBC'
+
+    return {
+      supplier: name,
+      initials: supplierInitials(name),
+      first,
+      dateRange,
+      countLabel: `${sorted.length} service line${sorted.length === 1 ? '' : 's'}`,
+      holdLabel,
+      holdFg,
+      holdBg,
+      showValue: show,
+      totalLabel: mode === 'sell' ? 'Sell total' : 'Cost total',
+      total: wholeUsd(totalNum),
+      totalNum,
+      rows: sorted.map((l) => ({
+        date: fmtShortDate(l.date),
+        typeLabel: voucherTypeLabel(l),
+        service: voucherDesc(l),
+        detail: voucherDetail(l) || '—',
+        pax: l.pax != null ? String(l.pax) : '—',
+        value: wholeUsd(valueOf(l)),
+        isExtra: l.type === 'extra',
+      })),
+      deposit: wholeUsd(Math.round(cost * (rule.pct / 100))),
+      depositRule: rule.label,
+      depositDue: fmtDepositDue(first, rule),
+      issued: isIssued,
+    }
+  })
+
+  return cards
+    .sort((a, b) => (a.first || '').localeCompare(b.first || ''))
+    .map((card, index) => ({
+      supplier: card.supplier,
+      initials: card.initials,
+      ref: `${metaRef} / V${String(index + 1).padStart(2, '0')}`,
+      dateRange: card.dateRange,
+      countLabel: card.countLabel,
+      holdLabel: card.holdLabel,
+      holdFg: card.holdFg,
+      holdBg: card.holdBg,
+      showValue: card.showValue,
+      totalLabel: card.totalLabel,
+      total: card.total,
+      totalNum: card.totalNum,
+      rows: card.rows,
+      deposit: card.deposit,
+      depositRule: card.depositRule,
+      depositDue: card.depositDue,
+      issued: card.issued,
+    }))
+}
+
+export type InclusionParagraph = { supplier: string; body: string }
+
+const EXCLUSIONS_BODY =
+  'International flights, visas and airport departure taxes; travel and cancellation insurance; premium wines, champagne and imported spirits; spa treatments and any additional private guiding not listed above; gratuities for guides, drivers and lodge staff; and all items of a personal nature.'
+
+function basisPhrase(basis?: string) {
+  const b = (basis || '').toUpperCase()
+  if (b.includes('FI') || b === 'AI') return 'fully inclusive of all meals, house drinks'
+  if (b.includes('FB')) return 'on full board with house drinks'
+  if (b.includes('HB')) return 'on half board'
+  if (b.includes('BB')) return 'on bed and breakfast'
+  return basis ? `on a ${basis} basis` : 'on the meal basis shown'
+}
+
+/** Client-facing inclusion prose grouped per supplier, plus a single exclusions paragraph. */
+export function buildInclusions(lines: SummaryLine[]): {
+  inclusions: InclusionParagraph[]
+  exclusionsBody: string
+} {
+  const inclusions: InclusionParagraph[] = []
+
+  const stays = new Map<string, SummaryLine[]>()
+  for (const l of lines.filter((x) => x.type === 'accommodation')) {
+    const arr = stays.get(l.supplier) || []
+    arr.push(l)
+    stays.set(l.supplier, arr)
+  }
+  for (const [supplier, group] of stays) {
+    const nights = Math.max(...group.map((l) => l.nights || 0))
+    const basis = group[0].basis
+    const rooms = [...new Set(group.map((l) => l.roomType).filter(Boolean))].join(' and ')
+    const nightLabel = nights ? `${nights} night${nights === 1 ? '' : 's'}` : 'Your stay'
+    inclusions.push({
+      supplier,
+      body: `${nightLabel}${rooms ? ` in ${rooms}` : ''} ${basisPhrase(basis)}, including statutory taxes and applicable park or conservancy fees where listed.`,
+    })
+  }
+
+  const flights = lines.filter((l) => l.type === 'flight')
+  const transfers = lines.filter((l) => l.type === 'transportation')
+  if (flights.length || transfers.length) {
+    const flightBits = flights.length
+      ? `${flights.length} light-aircraft sector${flights.length === 1 ? '' : 's'}${
+          flights[0]?.supplier ? ` with ${[...new Set(flights.map((f) => f.supplier))].join(' and ')}` : ''
+        }`
+      : null
+    const transferBits = transfers.length
+      ? `${transfers.length} private road transfer${transfers.length === 1 ? '' : 's'} and vehicle services`
+      : null
+    inclusions.push({
+      supplier: 'Flights and ground transport',
+      body: [flightBits, transferBits].filter(Boolean).join(', ') + ', as listed in this itinerary.',
+    })
+  }
+
+  const services = lines.filter((l) => l.type === 'activity' || l.type === 'other')
+  if (services.length) {
+    const names = [...new Set(services.map((l) => l.service || l.supplier).filter(Boolean))]
+    inclusions.push({
+      supplier: 'Travel services',
+      body:
+        names.length <= 3
+          ? `${names.join(', ')}, as arranged for this journey.`
+          : `${names.slice(0, 2).join(', ')} and ${names.length - 2} further arranged services.`,
+    })
+  }
+
+  return { inclusions, exclusionsBody: EXCLUSIONS_BODY }
+}
