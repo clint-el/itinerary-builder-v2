@@ -45,10 +45,13 @@ export interface Itinerary {
   adults?: number
   children?: number
   infants?: number
+  adultsCitizen?: number
   adultsRes?: number
   adultsNonRes?: number
+  childrenCitizen?: number
   childrenRes?: number
   childrenNonRes?: number
+  infantsCitizen?: number
   infantsRes?: number
   infantsNonRes?: number
   childAges?: number[]
@@ -227,10 +230,13 @@ export interface CreateItineraryInput {
   destinations: string[]
   travelDateFrom: string
   travelDateTo: string
+  adultsCitizen: number
   adultsRes: number
   adultsNonRes: number
+  childrenCitizen: number
   childrenRes: number
   childrenNonRes: number
+  infantsCitizen: number
   infantsRes: number
   infantsNonRes: number
   childAges: number[]

@@ -279,6 +279,8 @@ export interface TreeRow {
   itinerary: Itinerary
   depth: number
   hasChildren: boolean
+  /** Direct children one level down (options under inquiry, or sub-quotes under an option). */
+  childCount: number
   collapsed: boolean
   canSplit: boolean
   isSubquote: boolean
@@ -338,6 +340,7 @@ export function buildItineraryRows(
         itinerary: it,
         depth,
         hasChildren: children.length > 0,
+        childCount: children.length,
         collapsed,
         canSplit: depth < 2,
         isSubquote: depth === 2,
@@ -532,39 +535,75 @@ export function partyGuests(it: Itinerary, details?: GuestDetail[]): Guest[] {
 
   const guests: Guest[] = []
   let id = 1
-  const adultsRes = it.adultsRes ?? adults
+  const adultsCitizen = it.adultsCitizen ?? 0
+  const adultsRes = it.adultsRes ?? Math.max(0, adults - adultsCitizen)
   const adultsNonRes = it.adultsNonRes ?? 0
+  const childrenCitizen = it.childrenCitizen ?? 0
   const childrenRes = it.childrenRes ?? 0
-  const childrenNonRes = it.childrenNonRes ?? children
+  const childrenNonRes = it.childrenNonRes ?? Math.max(0, children - childrenCitizen - childrenRes)
+  const infantsCitizen = it.infantsCitizen ?? 0
   const infantsRes = it.infantsRes ?? 0
-  const infantsNonRes = it.infantsNonRes ?? infants
+  const infantsNonRes = it.infantsNonRes ?? Math.max(0, infants - infantsCitizen - infantsRes)
   const ages = it.childAges || []
 
+  let adultIdx = 0
+  for (let i = 0; i < adultsCitizen; i++) {
+    guests.push({
+      id: id++,
+      name: adultIdx === 0 && (it.leadFirst || it.leadLast)
+        ? [it.leadFirst, it.leadLast].filter(Boolean).join(' ')
+        : adultIdx === 0
+          ? 'Lead traveler'
+          : `Adult ${adultIdx + 1}`,
+      type: 'adult',
+      age: 34,
+      lead: adultIdx === 0,
+      resident: true,
+    })
+    adultIdx++
+  }
   for (let i = 0; i < adultsRes; i++) {
     guests.push({
       id: id++,
-      name: i === 0 && (it.leadFirst || it.leadLast)
+      name: adultIdx === 0 && (it.leadFirst || it.leadLast)
         ? [it.leadFirst, it.leadLast].filter(Boolean).join(' ')
-        : i === 0
+        : adultIdx === 0
           ? 'Lead traveler'
-          : `Adult ${i + 1}`,
+          : `Adult ${adultIdx + 1}`,
       type: 'adult',
       age: 34,
-      lead: i === 0,
+      lead: adultIdx === 0,
       resident: true,
     })
+    adultIdx++
   }
   for (let i = 0; i < adultsNonRes; i++) {
     guests.push({
       id: id++,
-      name: `Adult ${adultsRes + i + 1}`,
+      name: adultIdx === 0 && (it.leadFirst || it.leadLast)
+        ? [it.leadFirst, it.leadLast].filter(Boolean).join(' ')
+        : adultIdx === 0
+          ? 'Lead traveler'
+          : `Adult ${adultIdx + 1}`,
       type: 'adult',
       age: 32,
+      lead: adultIdx === 0,
       resident: false,
     })
+    adultIdx++
   }
 
   let childIdx = 0
+  for (let i = 0; i < childrenCitizen; i++) {
+    const age = ages[childIdx++] ?? 8
+    guests.push({
+      id: id++,
+      name: `Child ${childIdx}`,
+      type: age >= 12 ? 'youth' : 'child',
+      age,
+      resident: true,
+    })
+  }
   for (let i = 0; i < childrenRes; i++) {
     const age = ages[childIdx++] ?? 8
     guests.push({
@@ -585,13 +624,30 @@ export function partyGuests(it: Itinerary, details?: GuestDetail[]): Guest[] {
       resident: false,
     })
   }
+
+  let infantIdx = 0
+  for (let i = 0; i < infantsCitizen; i++) {
+    guests.push({
+      id: id++,
+      name: `Infant ${++infantIdx}`,
+      type: 'infant',
+      age: 1,
+      resident: true,
+    })
+  }
   for (let i = 0; i < infantsRes; i++) {
-    guests.push({ id: id++, name: `Infant ${i + 1}`, type: 'infant', age: 1, resident: true })
+    guests.push({
+      id: id++,
+      name: `Infant ${++infantIdx}`,
+      type: 'infant',
+      age: 1,
+      resident: true,
+    })
   }
   for (let i = 0; i < infantsNonRes; i++) {
     guests.push({
       id: id++,
-      name: `Infant ${infantsRes + i + 1}`,
+      name: `Infant ${++infantIdx}`,
       type: 'infant',
       age: 1,
       resident: false,

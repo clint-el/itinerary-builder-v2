@@ -296,12 +296,14 @@ export function QuoteDocPage() {
   const adults =
     itinerary.adults ??
     itinerary.paxAdults ??
-    (itinerary.adultsRes || 0) + (itinerary.adultsNonRes || 0)
+    (itinerary.adultsCitizen || 0) + (itinerary.adultsRes || 0) + (itinerary.adultsNonRes || 0)
   const children =
     itinerary.children ??
     itinerary.paxChildren ??
-    (itinerary.childrenRes || 0) + (itinerary.childrenNonRes || 0)
-  const infants = itinerary.infants ?? (itinerary.infantsRes || 0) + (itinerary.infantsNonRes || 0)
+    (itinerary.childrenCitizen || 0) + (itinerary.childrenRes || 0) + (itinerary.childrenNonRes || 0)
+  const infants =
+    itinerary.infants ??
+    (itinerary.infantsCitizen || 0) + (itinerary.infantsRes || 0) + (itinerary.infantsNonRes || 0)
   const nightsCount =
     nightsBetween(itinerary.travelDateFrom, itinerary.travelDateTo) ||
     accommodationLines.reduce((sum, line) => sum + (line.nights || 0), 0)

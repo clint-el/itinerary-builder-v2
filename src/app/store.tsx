@@ -77,9 +77,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     (input: CreateItineraryInput) => {
       const id = nextInquiryId()
       const now = new Date().toISOString()
-      const adults = input.adultsRes + input.adultsNonRes
-      const children = input.childrenRes + input.childrenNonRes
-      const infants = input.infantsRes + input.infantsNonRes
+      const adults = input.adultsCitizen + input.adultsRes + input.adultsNonRes
+      const children = input.childrenCitizen + input.childrenRes + input.childrenNonRes
+      const infants = input.infantsCitizen + input.infantsRes + input.infantsNonRes
       const itinerary: Itinerary = {
         id,
         reference: input.inquiryRef?.trim() || id,
@@ -103,10 +103,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         adults,
         children,
         infants,
+        adultsCitizen: input.adultsCitizen,
         adultsRes: input.adultsRes,
         adultsNonRes: input.adultsNonRes,
+        childrenCitizen: input.childrenCitizen,
         childrenRes: input.childrenRes,
         childrenNonRes: input.childrenNonRes,
+        infantsCitizen: input.infantsCitizen,
         infantsRes: input.infantsRes,
         infantsNonRes: input.infantsNonRes,
         childAges: input.childAges,

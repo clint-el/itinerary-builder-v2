@@ -91,10 +91,13 @@ export function CreateItineraryDialog({ open, onOpenChange, seedTitle = '' }: Pr
   const [travelDateFrom, setTravelDateFrom] = useState('')
   const [travelDateTo, setTravelDateTo] = useState('')
 
-  const [adultsRes, setAdultsRes] = useState(2)
-  const [adultsNonRes, setAdultsNonRes] = useState(0)
+  const [adultsCitizen, setAdultsCitizen] = useState(0)
+  const [adultsRes, setAdultsRes] = useState(0)
+  const [adultsNonRes, setAdultsNonRes] = useState(2)
+  const [childrenCitizen, setChildrenCitizen] = useState(0)
   const [childrenRes, setChildrenRes] = useState(0)
   const [childrenNonRes, setChildrenNonRes] = useState(0)
+  const [infantsCitizen, setInfantsCitizen] = useState(0)
   const [infantsRes, setInfantsRes] = useState(0)
   const [infantsNonRes, setInfantsNonRes] = useState(0)
   const [childAges, setChildAges] = useState<number[]>([])
@@ -103,9 +106,9 @@ export function CreateItineraryDialog({ open, onOpenChange, seedTitle = '' }: Pr
 
   const agencyBoxRef = useRef<HTMLDivElement>(null)
 
-  const childrenTotal = childrenRes + childrenNonRes
-  const adultsTotal = adultsRes + adultsNonRes
-  const infantsTotal = infantsRes + infantsNonRes
+  const childrenTotal = childrenCitizen + childrenRes + childrenNonRes
+  const adultsTotal = adultsCitizen + adultsRes + adultsNonRes
+  const infantsTotal = infantsCitizen + infantsRes + infantsNonRes
 
   useEffect(() => {
     if (!open) return
@@ -121,10 +124,13 @@ export function CreateItineraryDialog({ open, onOpenChange, seedTitle = '' }: Pr
     setLeadLast('')
     setTravelDateFrom('')
     setTravelDateTo('')
+    setAdultsCitizen(0)
     setAdultsRes(0)
     setAdultsNonRes(2)
+    setChildrenCitizen(0)
     setChildrenRes(0)
     setChildrenNonRes(0)
+    setInfantsCitizen(0)
     setInfantsRes(0)
     setInfantsNonRes(0)
     setChildAges([])
@@ -223,10 +229,13 @@ export function CreateItineraryDialog({ open, onOpenChange, seedTitle = '' }: Pr
       destinations: [],
       travelDateFrom,
       travelDateTo: travelDateTo || travelDateFrom,
+      adultsCitizen,
       adultsRes,
       adultsNonRes,
+      childrenCitizen,
       childrenRes,
       childrenNonRes,
+      infantsCitizen,
       infantsRes,
       infantsNonRes,
       childAges: childAges.slice(0, childrenTotal),
@@ -412,7 +421,8 @@ export function CreateItineraryDialog({ open, onOpenChange, seedTitle = '' }: Pr
                   </Label>
                   <span className="text-[12.5px] font-semibold text-neutral-500">Total: {adultsTotal}</span>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-4">
+                  <Counter label="Citizen" value={adultsCitizen} onChange={setAdultsCitizen} />
                   <Counter label="Resident" value={adultsRes} onChange={setAdultsRes} />
                   <Counter label="Non-Resident" value={adultsNonRes} onChange={setAdultsNonRes} />
                 </div>
@@ -423,7 +433,8 @@ export function CreateItineraryDialog({ open, onOpenChange, seedTitle = '' }: Pr
                   <Label>Children (2-17 y.o.)</Label>
                   <span className="text-[12.5px] font-semibold text-neutral-500">Total: {childrenTotal}</span>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-4">
+                  <Counter label="Citizen" value={childrenCitizen} onChange={setChildrenCitizen} />
                   <Counter label="Resident" value={childrenRes} onChange={setChildrenRes} />
                   <Counter label="Non-Resident" value={childrenNonRes} onChange={setChildrenNonRes} />
                 </div>
@@ -434,7 +445,8 @@ export function CreateItineraryDialog({ open, onOpenChange, seedTitle = '' }: Pr
                   <Label>Infants (0-1 y.o.)</Label>
                   <span className="text-[12.5px] font-semibold text-neutral-500">Total: {infantsTotal}</span>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-4">
+                  <Counter label="Citizen" value={infantsCitizen} onChange={setInfantsCitizen} />
                   <Counter label="Resident" value={infantsRes} onChange={setInfantsRes} />
                   <Counter label="Non-Resident" value={infantsNonRes} onChange={setInfantsNonRes} />
                 </div>

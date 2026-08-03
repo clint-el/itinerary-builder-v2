@@ -46,6 +46,10 @@ describe('helpers', () => {
     expect(rows.some((r) => r.itinerary.reference === 'CPS5687' && r.collapsed)).toBe(true)
     expect(rows.some((r) => r.itinerary.reference === 'CPS5687-1')).toBe(false)
     expect(rows.some((r) => r.itinerary.reference === 'CPS5678-1-1' && r.isSubquote)).toBe(true)
+    const root = rows.find((r) => r.itinerary.reference === 'CPS5678')
+    expect(root?.childCount).toBe(2)
+    const option = rows.find((r) => r.itinerary.reference === 'CPS5678-1')
+    expect(option?.childCount).toBe(2)
   })
 
   it('routes Draft/Prepared to the Builder and everything else to Summary', () => {

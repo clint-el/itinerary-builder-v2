@@ -498,6 +498,18 @@ export function InquiriesPage() {
                               >
                                 {it.reference}
                               </button>
+                              {row.childCount > 0 ? (
+                                <span
+                                  className="inline-flex size-4 shrink-0 items-center justify-center rounded-full bg-[#E5E7EB] text-[10px] font-bold leading-none text-[#525252]"
+                                  title={
+                                    row.depth === 0
+                                      ? `${row.childCount} option${row.childCount === 1 ? '' : 's'}`
+                                      : `${row.childCount} sub-quote${row.childCount === 1 ? '' : 's'}`
+                                  }
+                                >
+                                  {row.childCount}
+                                </span>
+                              ) : null}
                               {row.isSubquote ? (
                                 <span className="inline-flex h-4 shrink-0 items-center rounded border border-[#FDE68A] bg-[#FEF3C7] px-1.5 text-[9px] font-bold uppercase tracking-[0.3px] text-[#92400E]">
                                   Sub-quote
