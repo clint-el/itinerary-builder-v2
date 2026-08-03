@@ -241,14 +241,30 @@ export function TransportationPanel({
             )
           })}
         </div>
+      </section>
 
-        <div className="mb-3 mt-3">
+      <section className="mt-4 space-y-4">
+        <div>
           <h3 className="mb-2 text-[14px] font-semibold text-[#171717]">Service Notes</h3>
           <textarea
             readOnly
             rows={3}
             className="w-full resize-none rounded-lg border border-[#E5E7EB] bg-[#FAFAFB] px-2.5 py-2 text-[13px] text-[#525252] outline-none"
             value="Rates include fuel and driver-guide. Vehicle capacity excludes driver."
+          />
+        </div>
+
+        <div>
+          <div className="mb-2 flex items-baseline gap-2">
+            <h3 className="text-[14px] font-semibold text-[#171717]">Internal notes</h3>
+            <span className="text-[12px] font-medium text-[#94A3B8]">Not shown to the client</span>
+          </div>
+          <textarea
+            rows={3}
+            value={String(draft.notes || '')}
+            onChange={(e) => patch({ notes: e.target.value })}
+            className="w-full resize-y rounded-lg border border-[#E5E7EB] bg-[#FAFAFB] px-2.5 py-2 text-[13px] text-[#171717] outline-none placeholder:text-[#A1A1AA]"
+            placeholder="Anything the ops team should know about this service…"
           />
         </div>
       </section>

@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { Info } from 'lucide-react'
 import { liveSystemPrice, roomTypeLabel } from '@/shared/lib/catalogs'
 import { rackOf } from '@/shared/lib/helpers'
 import { Button } from '@/components/ui/button'
@@ -9,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import type { ServiceTab } from '@/shared/lib/types'
 import { formatUsd } from '@/shared/lib/utils'
 import type { AuditEntry, PricingRow } from './builderUtils'
@@ -19,6 +21,105 @@ import {
   computeDraftTotals,
   roomPriceBreakdown,
 } from './builderUtils'
+
+function AuditTrailTooltip({ auditLog }: { auditLog: AuditEntry[] }) {
+  const [open, setOpen] = useState(false)
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function clearCloseTimer() {
+    if (closeTimer.current) {
+      clearTimeout(closeTimer.current)
+      closeTimer.current = null
+    }
+  }
+
+  function show() {
+    clearCloseTimer()
+    setOpen(true)
+  }
+
+  function hide() {
+    clearCloseTimer()
+    closeTimer.current = setTimeout(() => setOpen(false), 120)
+  }
+
+  useEffect(() => () => clearCloseTimer(), [])
+
+  if (auditLog.length === 0) return null
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex size-3.5 shrink-0 items-center justify-center rounded-full text-[#B45309] hover:bg-[#FEF3C7]"
+          aria-label="Price override audit trail"
+          onMouseEnter={show}
+          onMouseLeave={hide}
+          onFocus={show}
+          onBlur={hide}
+        >
+          <Info className="size-3" strokeWidth={2.5} />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        side="bottom"
+        className="w-72 border-[#FCD34D] bg-white p-3 shadow-md"
+        onMouseEnter={show}
+        onMouseLeave={hide}
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
+        <div className="mb-2 text-[10.5px] font-bold uppercase tracking-[0.04em] text-[#92400E]">
+          Price override audit trail
+        </div>
+        <div className="space-y-1.5">
+          {auditLog.map((a, i) => (
+            <p key={i} className="text-[12px] leading-snug text-[#92400E]">
+              &ldquo;{a.reason}&rdquo; by {a.user} · {a.at}
+            </p>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+function OverrideAmountField({
+  value,
+  original,
+  onChange,
+  auditLog,
+}: {
+  value: number
+  original?: number
+  onChange: (n: number) => void
+  auditLog: AuditEntry[]
+}) {
+  const changed = original !== undefined && original !== value
+  return (
+    <div className="text-right">
+      <input
+        type="number"
+        min={0}
+        value={value || ''}
+        onChange={(e) => onChange(Number(e.target.value) || 0)}
+        className={
+          changed
+            ? 'ml-auto h-8 w-[84px] rounded-md border border-[#F59E0B] bg-white px-2 text-right text-[14px] font-semibold outline-none ring-1 ring-[#FDE68A]'
+            : 'ml-auto h-8 w-[84px] rounded-md border px-2 text-right text-[14px] font-semibold'
+        }
+      />
+      {changed ? (
+        <div className="mt-0.5 flex items-center justify-end gap-1">
+          <span className="text-[10.5px] text-[#94A3B8] line-through">
+            {formatUsd(original)} (Original Rate)
+          </span>
+          <AuditTrailTooltip auditLog={auditLog} />
+        </div>
+      ) : null}
+    </div>
+  )
+}
 
 export function PricingSection({
   tab,
@@ -187,22 +288,6 @@ export function PricingSection({
         </button>
       </div>
 
-      {auditLog.length > 0 ? (
-        <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
-          <div className="mb-2 text-[12px] font-bold uppercase tracking-wide text-amber-800">
-            Price override audit trail
-          </div>
-          {auditLog.map((a, i) => (
-            <div key={i} className="mb-1.5 last:mb-0">
-              <div className="text-[13px] font-semibold text-[#171717]">{a.reason}</div>
-              <div className="text-[11.5px] text-[#737373]">
-                by {a.user} · {a.at}
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : null}
-
       <div className="mb-3 overflow-hidden rounded-lg border">
         <div
           className={`grid ${gridCols} gap-2 bg-[#4B4B4B] px-3 py-2.5 text-[11px] font-bold uppercase tracking-wide text-white`}
@@ -218,54 +303,34 @@ export function PricingSection({
         {liveRows.map((r, i) => {
           const original = originalRatesRef.current[r.type]
           return (
-          <div
-            key={`${r.type}-${i}`}
-            className={`grid ${gridCols} items-center gap-2 border-b px-3 py-2 last:border-0`}
-            style={{ background: i % 2 === 1 ? '#F9FAFB' : '#FFFFFF' }}
-          >
-            <span className="truncate text-[13px] font-semibold">{r.type}</span>
-            {!isTransport ? <span className="text-[12px] text-[#737373]">{r.charge}</span> : null}
-            <div className="text-right">
+            <div
+              key={`${r.type}-${i}`}
+              className={`grid ${gridCols} items-center gap-2 border-b px-3 py-2 last:border-0`}
+              style={{ background: i % 2 === 1 ? '#F9FAFB' : '#FFFFFF' }}
+            >
+              <span className="truncate text-[13px] font-semibold">{r.type}</span>
+              {!isTransport ? <span className="text-[12px] text-[#737373]">{r.charge}</span> : null}
               {overrideOn && r.onNet ? (
-                <>
-                  <input
-                    type="number"
-                    min={0}
-                    value={r.net || ''}
-                    onChange={(e) => r.onNet?.(Number(e.target.value) || 0)}
-                    className="ml-auto h-8 w-[84px] rounded-md border px-2 text-right text-[14px] font-semibold"
-                  />
-                  {original && original.net !== r.net ? (
-                    <div className="mt-0.5 text-[10.5px] text-[#94A3B8]">
-                      was {formatUsd(original.net)}
-                    </div>
-                  ) : null}
-                </>
+                <OverrideAmountField
+                  value={r.net}
+                  original={original?.net}
+                  onChange={r.onNet}
+                  auditLog={auditLog}
+                />
               ) : (
-                <span className="text-[15px] font-bold">{formatUsd(r.net)}</span>
+                <span className="text-right text-[15px] font-bold">{formatUsd(r.net)}</span>
               )}
-            </div>
-            <div className="text-right">
               {overrideOn && r.onRack ? (
-                <>
-                  <input
-                    type="number"
-                    min={0}
-                    value={r.rack || ''}
-                    onChange={(e) => r.onRack?.(Number(e.target.value) || 0)}
-                    className="ml-auto h-8 w-[84px] rounded-md border px-2 text-right text-[14px] font-semibold"
-                  />
-                  {original && original.rack !== r.rack ? (
-                    <div className="mt-0.5 text-[10.5px] text-[#94A3B8]">
-                      was {formatUsd(original.rack)}
-                    </div>
-                  ) : null}
-                </>
+                <OverrideAmountField
+                  value={r.rack}
+                  original={original?.rack}
+                  onChange={r.onRack}
+                  auditLog={auditLog}
+                />
               ) : (
-                <span className="text-[15px] font-bold">{formatUsd(r.rack)}</span>
+                <span className="text-right text-[15px] font-bold">{formatUsd(r.rack)}</span>
               )}
             </div>
-          </div>
           )
         })}
       </div>

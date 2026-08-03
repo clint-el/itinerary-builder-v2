@@ -193,24 +193,26 @@ export function AccommodationPanel({
               onPick={(item: CatalogItem) => patch({ supplier: item.name, service: item.service })}
             />
           </div>
-          <div className="grid gap-1.5">
-            <Label>Start Date</Label>
-            <DatePickerGridInput
-              value={start}
-              onChange={(value) => patch({ start: value })}
-              className="bg-white"
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-1.5">
+              <Label>Start Date</Label>
+              <DatePickerGridInput
+                value={start}
+                onChange={(value) => patch({ start: value })}
+                className="bg-white"
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label>End Date</Label>
+              <DatePickerGridInput
+                value={end}
+                onChange={(value) => patch({ end: value })}
+                referenceValue={start}
+                className="bg-white"
+              />
+            </div>
           </div>
-          <div className="grid gap-1.5">
-            <Label>End Date</Label>
-            <DatePickerGridInput
-              value={end}
-              onChange={(value) => patch({ end: value })}
-              referenceValue={start}
-              className="bg-white"
-            />
-          </div>
-          <div className="grid gap-1.5">
+          <div className="grid content-start gap-1.5">
             <Label>Nights</Label>
             <div className="flex h-9 items-center rounded-md bg-[#F3F4F6] px-3 shadow-[inset_0_0_0_1px_#E5E7EB]">
               <span className="text-[13px] font-semibold text-[#171717]">
@@ -224,7 +226,7 @@ export function AccommodationPanel({
           longer or shorter.
         </p>
         {overrideCount > 0 ? (
-          <span className="mt-2 inline-flex h-[18px] items-center rounded bg-[#FEF3C7] px-1.5 text-[9px] font-bold text-[#92400E]">
+          <span className="mt-2 inline-flex h-4.5 items-center rounded bg-[#FEF3C7] px-1.5 text-[9px] font-bold text-[#92400E]">
             CUSTOM dates · {overrideCount}
           </span>
         ) : null}
@@ -272,7 +274,7 @@ export function AccommodationPanel({
         {tabBtn('guests', 'Guests')}
         {tabBtn('extras', 'Extras', extras.length)}
         {tabBtn('promotions', 'Special Offer(s)', PROMOTIONS.length)}
-        {tabBtn('supplier', 'Supplier')}
+        {tabBtn('supplier', 'Holds')}
         {tabBtn('notes', 'Supplier Notes')}
       </div>
 
