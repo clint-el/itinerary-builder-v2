@@ -65,14 +65,14 @@ export function ActivityOtherPanel({
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="grid gap-1.5">
-            <Label>1. Location</Label>
+            <Label>Location</Label>
             <LocationDropdown
               value={String(draft.location || '')}
               onChange={(name) => patch({ location: name, supplier: '', service: '' })}
             />
           </div>
           <div className="grid gap-1.5">
-            <Label>2. Supplier</Label>
+            <Label>Supplier</Label>
             <SupplierPicker
               tab={tab}
               value={String(draft.supplier || '')}
@@ -81,7 +81,7 @@ export function ActivityOtherPanel({
           </div>
           {tab === 'activity' ? (
             <div className="grid gap-1.5 sm:col-span-2">
-              <Label>3. Service</Label>
+              <Label>Service</Label>
               <Select
                 value={String(draft.service || '') || undefined}
                 onValueChange={(value) => patch({ service: value })}

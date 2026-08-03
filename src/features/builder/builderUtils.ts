@@ -201,10 +201,6 @@ export function extraObjects(draft: Record<string, unknown>) {
   }[]
 }
 
-export function roomQty(room: Room) {
-  return Math.max(1, Number(room.qty) || 1)
-}
-
 export function flightAutoQty(draft: Record<string, unknown>) {
   const pax = (draft.pax || { adult: 0, youth: 0, child: 0, infant: 0 }) as Record<string, number>
   const totalPax =
@@ -245,7 +241,7 @@ export function roomPriceBreakdown(
   })
   const netTotal = priceRows.reduce((sum, x) => sum + x.net, 0)
   const rackTotal = priceRows.reduce((sum, x) => sum + x.rack, 0)
-  return { priceRows, netTotal, rackTotal, rStart, rEnd, rNights, roomCount: roomQty(room) }
+  return { priceRows, netTotal, rackTotal, rStart, rEnd, rNights, roomCount: 1 }
 }
 
 export function computeDraftTotals(
@@ -343,7 +339,7 @@ export function buildAddedService(
   const eligible = totalPax > 0 && totalPax <= totalCapacity
   const accNightsN = nights(String(draft.start || ''), String(draft.end || ''))
   const basisKey = String(draft.basis || 'bb') as keyof typeof BASIS
-  const roomCount = rooms.reduce((sum, r) => sum + roomQty(r), 0)
+  const roomCount = rooms.length
 
   let title = String(draft.supplier || meta.label)
   let subtitle = meta.label
@@ -352,17 +348,16 @@ export function buildAddedService(
 
   if (tab === 'accommodation') {
     title = String(draft.supplier || 'Accommodation')
-    subtitle = `${roomCount || rooms.length} room(s) · ${BASIS[basisKey] || basisKey}`
+    subtitle = `${roomCount} room(s) · ${BASIS[basisKey] || basisKey}`
     dateMeta = `${accNightsN} night(s)`
     details = [
       { label: 'Location', value: String(draft.location || '—') },
-      { label: 'Rooms', value: String(roomCount || rooms.length) },
+      { label: 'Rooms', value: String(roomCount) },
       { label: 'Basis', value: BASIS[basisKey] || basisKey },
       { label: 'Dates', value: `${draft.start || 'TBD'} – ${draft.end || 'TBD'}` },
       { label: 'Guests', value: `${accUsed.length} pax` },
     ]
   } else if (tab === 'transportation') {
-    const transDays = transportDays(draft)
     const transExtras = extraObjects(draft)
     title = String(draft.supplier || 'Transportation')
     subtitle = `${vehicles.length} vehicle(s)`
@@ -370,20 +365,7 @@ export function buildAddedService(
     details = [
       { label: 'Service', value: String(draft.service || '—') },
       { label: 'Vehicles', value: vehicles.map((v) => v.type).join(', ') || '—' },
-      {
-        label: 'Dates',
-        value:
-          draft.transMode === 'hire'
-            ? `${draft.hireStart || 'TBD'} – ${draft.hireEnd || 'TBD'}`
-            : String(draft.transDate || 'TBD'),
-      },
-      ...(draft.transMode === 'hire'
-        ? [{ label: 'Duration', value: `${transDays} day(s)` }]
-        : []),
       { label: 'Location', value: String(draft.location || '—') },
-      { label: 'Pickup', value: String(draft.pickup || '—') },
-      { label: 'Drop-off', value: String(draft.dropoff || '—') },
-      { label: 'Time', value: `${draft.timeFrom || 'TBD'} – ${draft.timeTo || 'TBD'}` },
       ...(transExtras.length ? [{ label: 'Extras', value: String(transExtras.length) }] : []),
     ]
   } else if (tab === 'flight') {
@@ -396,8 +378,8 @@ export function buildAddedService(
       { label: 'Qty', value: String(autoQty) },
       { label: 'Capacity', value: String(draft.capacity) },
       {
-        label: 'Depart / Return',
-        value: `${draft.departDate || 'TBD'}${draft.flightMode === 'return' ? ` / ${draft.returnDate || 'TBD'}` : ''}`,
+        label: 'Depart',
+        value: [draft.departDate, draft.departTime].filter(Boolean).join(' · ') || 'TBD',
       },
     ]
   } else if (tab === 'activity') {
@@ -481,16 +463,6 @@ export function draftMissingRequirements(
     if (missing(draft.location)) needed.push('Location')
     if (missing(draft.supplier)) needed.push('Supplier')
     if (missing(draft.service)) needed.push('Service')
-    if (draft.transMode === 'hire') {
-      if (missing(draft.hireStart)) needed.push('Start date')
-      if (missing(draft.hireEnd)) needed.push('End date')
-      if (asVehicles(draft).length === 0) needed.push('At least one vehicle')
-      if (asHireRoutes(draft).length === 0) needed.push('At least one route')
-    } else {
-      if (missing(draft.transDate)) needed.push('Transfer date')
-      if (missing(draft.pickup)) needed.push('Pickup')
-      if (missing(draft.dropoff)) needed.push('Drop-off')
-    }
     return needed
   }
 
@@ -500,7 +472,6 @@ export function draftMissingRequirements(
     if (missing(draft.supplier)) needed.push('Supplier')
     if (missing(draft.service)) needed.push('Service')
     if (missing(draft.departDate)) needed.push('Departure date')
-    if (draft.flightMode === 'return' && missing(draft.returnDate)) needed.push('Return date')
     return needed
   }
 

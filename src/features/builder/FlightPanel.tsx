@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, CalendarDays, Check, Clock3, Info, Plus, Search, Trash2, UsersRound } from 'lucide-react'
+import { AlertTriangle, CalendarDays, Check, Info, Plus, Search, Trash2, UsersRound } from 'lucide-react'
 import { PROMOTIONS, extrasForTab } from '@/shared/lib/catalogs'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -22,12 +23,6 @@ const PAX_BANDS: { key: 'adult' | 'youth' | 'child' | 'infant'; label: string }[
   { key: 'youth', label: 'Youth' },
   { key: 'child', label: 'Child' },
   { key: 'infant', label: 'Infant' },
-]
-const FLIGHT_TIMES = [
-  '7:15 AM → 8:30 AM',
-  '10:30 AM → 11:45 AM',
-  '1:00 PM → 2:20 PM',
-  '3:45 PM → 5:00 PM',
 ]
 
 function PanelHeading({
@@ -69,7 +64,6 @@ export function FlightPanel({
   guests?: Guest[]
 }) {
   const [rightTab, setRightTab] = useState<FlightTab>('extras')
-  const isReturn = draft.flightMode === 'return'
   const partyPax = useMemo(() => {
     const next = { adult: 0, youth: 0, child: 0, infant: 0 }
     for (const guest of guests) {
@@ -123,14 +117,6 @@ export function FlightPanel({
   const eligibilityColor =
     totalPax === 0 ? '#525252' : eligible ? '#059669' : squeeze ? '#B45309' : '#DC2626'
 
-  const modeBtn = (on: boolean) =>
-    cn(
-      'h-[30px] rounded-[7px] border px-3.5 text-[12.5px] font-semibold',
-      on
-        ? 'border-[#931115] bg-[#FBEBEC] text-[#931115]'
-        : 'border-[#E5E7EB] bg-white text-[#525252]',
-    )
-
   const tabBtn = (key: FlightTab, label: string, badge?: number) => (
     <button
       type="button"
@@ -160,11 +146,11 @@ export function FlightPanel({
         <PanelHeading
           icon={Search}
           title="Supplier & flight details"
-          description="Pick the location, supplier, aircraft capacity and charter quantity"
+          description="Pick the location, supplier and service"
         />
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="grid gap-1.5">
-            <Label>1. Location</Label>
+            <Label>Location</Label>
             <LocationDropdown
               value={String(draft.location || draft.flightFrom || '')}
               onChange={(name) =>
@@ -174,13 +160,12 @@ export function FlightPanel({
                   flightTo: '',
                   supplier: '',
                   service: '',
-                  returnService: '',
                 })
               }
             />
           </div>
           <div className="grid gap-1.5">
-            <Label>2. Supplier</Label>
+            <Label>Supplier</Label>
             <SupplierPicker
               tab="flight"
               value={String(draft.supplier || '')}
@@ -193,7 +178,7 @@ export function FlightPanel({
             />
           </div>
           <div className="grid gap-1.5 sm:col-span-2">
-            <Label>{isReturn ? '3. Outbound service' : '3. Service'}</Label>
+            <Label>Service</Label>
             <Select
               value={String(draft.service || '') || undefined}
               onValueChange={(value) =>
@@ -212,56 +197,17 @@ export function FlightPanel({
               </SelectContent>
             </Select>
           </div>
-          <div className="flex items-center gap-2 sm:col-span-2">
-            <Label className="mr-1">Trip type</Label>
-            <div className="flex gap-1.5">
-              <button
-                type="button"
-                className={modeBtn(!isReturn)}
-                onClick={() => patch({ flightMode: 'oneway', returnService: '' })}
-              >
-                One-way
-              </button>
-              <button
-                type="button"
-                className={modeBtn(isReturn)}
-                onClick={() => patch({ flightMode: 'return' })}
-              >
-                Return
-              </button>
-            </div>
-          </div>
-          {isReturn ? (
-            <div className="grid gap-1.5 sm:col-span-2">
-              <Label>4. Return service</Label>
-              <Select
-                value={String(draft.returnService || '') || undefined}
-                onValueChange={(value) => patch({ returnService: value })}
-              >
-                <SelectTrigger className="bg-white">
-                  <SelectValue placeholder="Select a return service" />
-                </SelectTrigger>
-                <SelectContent>
-                  {FLIGHT_SERVICES.map((s) => (
-                    <SelectItem key={`return-${s}`} value={s}>
-                      {s}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          ) : null}
         </div>
       </section>
 
       <section className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-4 shadow-sm">
         <PanelHeading
           icon={CalendarDays}
-          title="Travel dates"
-          description={isReturn ? 'Return — set the departure and return dates' : 'One-way — set the departure date'}
+          title="Departure"
+          description="Set the departure date and time"
         />
-        <div className="flex flex-wrap gap-3">
-          <div className="grid w-[170px] gap-1.5">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-1.5">
             <Label>Departure date</Label>
             <DatePickerGridInput
               value={String(draft.departDate || '')}
@@ -269,82 +215,16 @@ export function FlightPanel({
               className="bg-white"
             />
           </div>
-          {isReturn ? (
-            <div className="grid w-[170px] gap-1.5">
-              <Label>Return date</Label>
-              <DatePickerGridInput
-                value={String(draft.returnDate || '')}
-                onChange={(value) => patch({ returnDate: value })}
-                referenceValue={String(draft.departDate || '')}
-                className="bg-white"
-              />
-            </div>
-          ) : null}
+          <div className="grid gap-1.5">
+            <Label>Departure time</Label>
+            <Input
+              type="time"
+              value={String(draft.departTime || '')}
+              onChange={(e) => patch({ departTime: e.target.value })}
+              className="bg-white"
+            />
+          </div>
         </div>
-        <div className="my-3.5 h-px bg-[#E2E8F0]" />
-        <PanelHeading icon={Clock3} title="Flight timing" description="" />
-        <div className="mb-1 text-[11.5px] font-semibold text-[#64748B]">
-          Outbound <span className="font-normal text-[#94A3B8]">(Departure time → Arrival time)</span>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {FLIGHT_TIMES.map((time) => {
-            const selected = draft.departTime === time
-            return (
-              <button
-                key={time}
-                type="button"
-                onClick={() => patch({ departTime: selected ? '' : time })}
-                className={cn(
-                  'flex h-9 items-center gap-2 rounded-lg border bg-white px-2.5 text-[12.5px] font-semibold text-[#334155]',
-                  selected ? 'border-[#931115] ring-1 ring-[#931115]/15' : 'border-[#E2E8F0]',
-                )}
-              >
-                <span
-                  className={cn(
-                    'flex size-4 items-center justify-center rounded border',
-                    selected ? 'border-[#931115] bg-[#931115] text-white' : 'border-[#CBD5E1] bg-white',
-                  )}
-                >
-                  {selected ? <Check className="size-3" /> : null}
-                </span>
-                {time}
-              </button>
-            )
-          })}
-        </div>
-        {isReturn ? (
-          <>
-            <div className="mb-1 mt-3 text-[11.5px] font-semibold text-[#64748B]">
-              Return <span className="font-normal text-[#94A3B8]">(Departure time → Arrival time)</span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {FLIGHT_TIMES.map((time) => {
-                const selected = draft.returnTime === time
-                return (
-                  <button
-                    key={time}
-                    type="button"
-                    onClick={() => patch({ returnTime: selected ? '' : time })}
-                    className={cn(
-                      'flex h-9 items-center gap-2 rounded-lg border bg-white px-2.5 text-[12.5px] font-semibold text-[#334155]',
-                      selected ? 'border-[#931115] ring-1 ring-[#931115]/15' : 'border-[#E2E8F0]',
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        'flex size-4 items-center justify-center rounded border',
-                        selected ? 'border-[#931115] bg-[#931115] text-white' : 'border-[#CBD5E1] bg-white',
-                      )}
-                    >
-                      {selected ? <Check className="size-3" /> : null}
-                    </span>
-                    {time}
-                  </button>
-                )
-              })}
-            </div>
-          </>
-        ) : null}
       </section>
 
       {isCharter ? (

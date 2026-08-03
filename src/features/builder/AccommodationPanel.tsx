@@ -1,4 +1,4 @@
-import { Plus, Trash2 } from 'lucide-react'
+import { Copy, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import {
   BASIS,
   BASIS_DETAILS,
@@ -38,7 +38,6 @@ import {
   guestChipStyle,
   nights,
   roomPriceBreakdown,
-  roomQty,
   usedGuestIds,
 } from './builderUtils'
 import type { CatalogItem } from '@/shared/lib/types'
@@ -70,6 +69,7 @@ export function AccommodationPanel({
   const details = BASIS_DETAILS[basis]
   const start = String(draft.start || '')
   const end = String(draft.end || '')
+  const nightCount = nights(start, end)
   const overrideCount = rooms.filter(
     (r) => (r.start && r.start !== start) || (r.end && r.end !== end),
   ).length
@@ -113,13 +113,39 @@ export function AccommodationPanel({
     )
   }
 
+  function duplicateRoom(index: number) {
+    const source = rooms[index]
+    if (!source) return
+    const copy: Room = {
+      ...source,
+      id: `r${Date.now()}`,
+      qty: 1,
+      guestIds: [],
+    }
+    const next = rooms.slice()
+    next.splice(index + 1, 0, copy)
+    setRooms(next)
+  }
+
+  function autoAssignRooms() {
+    const pool = guests.map((g) => g.id)
+    const next = rooms.map((x) => ({ ...x, guestIds: [] as number[] }))
+    next.forEach((x) => {
+      const cap = roomTypeCapacity(x.type)
+      while (pool.length && x.guestIds.length < cap) {
+        x.guestIds.push(pool.shift()!)
+      }
+    })
+    setRooms(next)
+  }
+
   const tabBtn = (key: AccTab, label: string, badge?: number) => (
     <button
       key={key}
       type="button"
       onClick={() => setAccTab(key)}
       className={cn(
-        'h-[38px] border-b-2 px-3 text-[12.5px] font-semibold',
+        'h-9.5 border-b-2 px-3 text-[12.5px] font-semibold',
         accTab === key
           ? 'border-[#931115] text-[#931115]'
           : 'border-transparent text-[#525252]',
@@ -152,7 +178,7 @@ export function AccommodationPanel({
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="grid gap-1.5">
-            <Label>1. Location</Label>
+            <Label>Location</Label>
             <LocationDropdown
               value={String(draft.location || '')}
               onChange={(name) => patch({ location: name, supplier: '', service: '' })}
@@ -160,7 +186,7 @@ export function AccommodationPanel({
             />
           </div>
           <div className="grid gap-1.5">
-            <Label>2. Supplier</Label>
+            <Label>Supplier</Label>
             <SupplierPicker
               tab="accommodation"
               value={String(draft.supplier || '')}
@@ -186,8 +212,10 @@ export function AccommodationPanel({
           </div>
           <div className="grid gap-1.5">
             <Label>Nights</Label>
-            <div className="flex h-9 items-center rounded-md border border-[#E5E7EB] bg-white px-3 text-[13px] font-semibold text-[#171717]">
-              {nights(start, end)}
+            <div className="flex h-9 items-center rounded-md bg-[#F3F4F6] px-3 shadow-[inset_0_0_0_1px_#E5E7EB]">
+              <span className="text-[13px] font-semibold text-[#171717]">
+                {nightCount} {nightCount === 1 ? 'night' : 'nights'}
+              </span>
             </div>
           </div>
         </div>
@@ -250,14 +278,18 @@ export function AccommodationPanel({
 
       {accTab === 'guests' ? (
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-[13.5px] font-bold text-[#171717]">Rooms & Guests</span>
-            <span
-              className="text-[12px] font-semibold"
-              style={{ color: unassigned.length ? '#D97706' : '#16A34A' }}
+          <div className="mb-2.5 flex items-center justify-between gap-2.5">
+            <span className="text-[13.5px] font-bold text-[#171717]">Rooms &amp; guests</span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={autoAssignRooms}
+              className="h-7 border-[#931115] text-xs font-semibold text-[#931115]"
             >
-              {unassigned.length ? `${unassigned.length} guests to place` : 'Everyone has a room'}
-            </span>
+              <RefreshCw className="size-3.5" />
+              Auto-assign
+            </Button>
           </div>
 
           <div className="rounded-lg bg-[#E0F2FE] p-2.5">
@@ -313,8 +345,7 @@ export function AccommodationPanel({
           ) : null}
 
           {rooms.map((room, i) => {
-            const qty = roomQty(room)
-            const cap = roomTypeCapacity(room.type) * qty
+            const cap = roomTypeCapacity(room.type)
             const over = room.guestIds.length > cap
             const br = roomPriceBreakdown(room, start, end, guests)
             const datesDiffer =
@@ -331,7 +362,7 @@ export function AccommodationPanel({
                 }}
               >
                 <div className="flex flex-wrap items-center gap-2 border-b border-[#E5E7EB] bg-[#F9FAFB] px-2.5 py-1.5">
-                  <span className="flex size-5 items-center justify-center rounded border bg-white text-[11px] font-bold">
+                  <span className="flex size-5 shrink-0 items-center justify-center rounded-[5px] border border-[#E5E7EB] bg-white text-[11px] font-bold text-[#525252]">
                     {i + 1}
                   </span>
                   <Select
@@ -340,7 +371,7 @@ export function AccommodationPanel({
                       setRooms(rooms.map((x) => (x.id === room.id ? { ...x, type: value } : x)))
                     }
                   >
-                    <SelectTrigger className="h-7 w-auto bg-white text-[12.5px] font-semibold">
+                    <SelectTrigger className="h-7 min-w-0 flex-1 bg-white text-[12.5px] font-semibold">
                       <SelectValue placeholder="Select room type" />
                     </SelectTrigger>
                     <SelectContent>
@@ -358,39 +389,20 @@ export function AccommodationPanel({
                     {room.guestIds.length} / {cap} guests
                   </span>
                   <div className="flex-1" />
-                  <div className="flex items-center" title="Number of rooms of this type">
-                    <button
-                      type="button"
-                      disabled={qty <= 1}
-                      onClick={() =>
-                        setRooms(
-                          rooms.map((x) =>
-                            x.id === room.id ? { ...x, qty: Math.max(1, qty - 1) } : x,
-                          ),
-                        )
-                      }
-                      className="flex size-6 items-center justify-center rounded-l-md border border-[#E5E7EB] bg-white text-[#525252] disabled:opacity-40"
-                    >
-                      −
-                    </button>
-                    <span className="flex h-6 min-w-6 items-center justify-center border-y border-[#E5E7EB] bg-white text-[12px] font-bold">
-                      ×{qty}
-                    </span>
-                    <button
-                      type="button"
-                      title="Add another room of this type"
-                      onClick={() =>
-                        setRooms(rooms.map((x) => (x.id === room.id ? { ...x, qty: qty + 1 } : x)))
-                      }
-                      className="flex size-6 items-center justify-center rounded-r-md border border-[#E5E7EB] bg-white text-[#931115]"
-                    >
-                      +
-                    </button>
-                  </div>
                   <button
                     type="button"
+                    title="Add another room of this type"
+                    onClick={() => duplicateRoom(i)}
+                    className="flex h-[26px] shrink-0 items-center gap-1.5 rounded-md border border-[#E5E7EB] bg-white px-2.5 text-[11.5px] font-semibold text-[#931115]"
+                  >
+                    <Copy className="size-3" />
+                    Duplicate
+                  </button>
+                  <button
+                    type="button"
+                    title="Remove room"
                     onClick={() => setRooms(rooms.filter((x) => x.id !== room.id))}
-                    className="flex size-[26px] items-center justify-center rounded-md border bg-white text-[#931115]"
+                    className="flex size-[26px] shrink-0 items-center justify-center rounded-md border border-[#E5E7EB] bg-white text-[#931115]"
                   >
                     <Trash2 className="size-3.5" />
                   </button>
@@ -501,7 +513,7 @@ export function AccommodationPanel({
                       <button
                         type="button"
                         onClick={() => addAllRemainingToRoom(room.id)}
-                        className="text-[12.5px] font-semibold text-[#931115]"
+                        className="flex h-7 items-center rounded-lg border border-[#E5E7EB] bg-white px-2.5 text-xs font-semibold text-[#931115]"
                       >
                         Add all remaining
                       </button>

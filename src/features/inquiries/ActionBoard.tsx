@@ -19,7 +19,7 @@ interface Props {
   itineraries: Itinerary[]
 }
 
-export function StatusDashboard({ itineraries }: Props) {
+export function ActionBoard({ itineraries }: Props) {
   const navigate = useNavigate()
   const data = useMemo(() => dashboardData(itineraries), [itineraries])
 

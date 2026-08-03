@@ -10,7 +10,6 @@ import {
   extraObjects,
   flightAutoQty,
   nights,
-  roomQty,
   transportDays,
   usedGuestIds,
 } from '@/features/builder/builderUtils'
@@ -218,7 +217,7 @@ export function linesFromServices(services: AddedService[], guests: Guest[]): Su
       } else {
         const weights = rooms.map((r) => {
           const rn = nights(r.start || start, r.end || end) || 1
-          return Math.max(0.01, (Number(r.rate) || 0) * roomQty(r) * rn)
+          return Math.max(0.01, (Number(r.rate) || 0) * rn)
         })
         const totalW = weights.reduce((a, b) => a + b, 0)
         rooms.forEach((room, i) => {
@@ -234,7 +233,7 @@ export function linesFromServices(services: AddedService[], guests: Guest[]): Su
             supplier,
             roomType: roomTypeLabel(room.type),
             basis: String(room.basis || defaultBasis).toUpperCase(),
-            rooms: roomQty(room),
+            rooms: 1,
             pax: room.guestIds.length,
             ad: mix.ad,
             ch: mix.ch,
@@ -1108,6 +1107,89 @@ export function buildSummaryPricing(lines: SummaryLine[], totalGuests: number): 
       { label: `Margin (${marginPct}%)`, value: wholeUsd(margin), color: '#059669' },
       { label: 'Agent commission (10%)', value: wholeUsd(commission), color: '#171717' },
     ],
+  }
+}
+
+export type PaymentHistoryRow = {
+  date: string
+  label: string
+  method: string
+  amount: string
+  status: 'Paid' | 'Due' | 'Overdue'
+  statusBg: string
+  statusFg: string
+}
+
+export type PaymentHistory = {
+  sellTotal: string
+  paid: string
+  outstanding: string
+  paidPct: number
+  paidPctLabel: string
+  finalDue: string
+  finalDueNote: string
+  finalDueColor: string
+  arrivalNote: string
+  rows: PaymentHistoryRow[]
+}
+
+function fmtPayDate(iso: string) {
+  const [y, m, d] = iso.split('-').map(Number)
+  if (!y || !m || !d) return iso
+  const mon = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][m - 1]
+  return `${String(d).padStart(2, '0')} ${mon} ${y}`
+}
+
+function isoFromDate(dt: Date) {
+  const month = String(dt.getMonth() + 1).padStart(2, '0')
+  const day = String(dt.getDate()).padStart(2, '0')
+  return `${dt.getFullYear()}-${month}-${day}`
+}
+
+/** Client payment schedule against sell total — prototype instalments for the summary card. */
+export function buildPaymentHistory(sellTotal: number, arrivalIso?: string): PaymentHistory {
+  const arrival = arrivalIso || '2026-09-01'
+  const arrivalD = new Date(`${arrival}T00:00:00`)
+  const dayMs = 86400000
+  const minus = (days: number) => new Date(arrivalD.getTime() - days * dayMs)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  const schedule = [
+    { label: 'Deposit (25%)', pct: 0.25, due: minus(81), method: 'Bank transfer · PMT-1041', paid: true },
+    { label: 'Second instalment (35%)', pct: 0.35, due: minus(53), method: 'Bank transfer · PMT-1102', paid: true },
+    { label: 'Final balance (40%)', pct: 0.4, due: minus(14), method: 'Awaiting payment', paid: false },
+  ]
+
+  const rows: PaymentHistoryRow[] = schedule.map((x) => {
+    const overdue = !x.paid && x.due < today
+    return {
+      date: fmtPayDate(isoFromDate(x.due)),
+      label: x.label,
+      method: x.method,
+      amount: wholeUsd(sellTotal * x.pct),
+      status: x.paid ? 'Paid' : overdue ? 'Overdue' : 'Due',
+      statusBg: x.paid ? '#ECFDF5' : overdue ? '#FEF2F2' : '#FFFBEB',
+      statusFg: x.paid ? '#059669' : overdue ? '#B91C1C' : '#B45309',
+    }
+  })
+
+  const paid = schedule.filter((x) => x.paid).reduce((a, x) => a + sellTotal * x.pct, 0)
+  const finalDue = schedule[schedule.length - 1].due
+  const daysToFinal = Math.round((finalDue.getTime() - today.getTime()) / dayMs)
+  const paidPct = sellTotal ? Math.round((paid / sellTotal) * 100) : 0
+
+  return {
+    sellTotal: wholeUsd(sellTotal),
+    paid: wholeUsd(paid),
+    outstanding: wholeUsd(Math.max(0, sellTotal - paid)),
+    paidPct,
+    paidPctLabel: `${paidPct}% of sell total`,
+    finalDue: fmtPayDate(isoFromDate(finalDue)),
+    finalDueNote: daysToFinal >= 0 ? `Due in ${daysToFinal} days` : `${Math.abs(daysToFinal)} days overdue`,
+    finalDueColor: daysToFinal >= 0 ? '#B45309' : '#B91C1C',
+    arrivalNote: `Full payment required before arrival · ${fmtPayDate(arrival)}`,
+    rows,
   }
 }
 

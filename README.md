@@ -25,7 +25,7 @@ Open the URL Vite prints (usually http://localhost:5173).
 
 ## Flows (parity with HTML prototype)
 
-1. **Inquiries** — hierarchical table, search, full filters drawer, status dashboard, split/copy, sidebar collapse
+1. **Inquiries** — hierarchical table, search, full filters drawer, action board, split/copy, sidebar collapse
 2. **Create** — inquiry ref, agency/agent tree, dual-month calendar, destinations, resident/non-resident pax, child ages
 3. **Builder** (`/build/:id`) — Stay / Transport / Flight / Activity / Other, rooms & guest DnD, holds, extras, promotions, pricing override, resizable right pane, service reorder
 4. **Quote** (`/quote/:id`) — supplier groups, DnD, Add Service overlay, guest drawer, price modal

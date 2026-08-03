@@ -1,7 +1,6 @@
 import { Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { VEHICLE_TYPES } from '@/shared/lib/catalogs'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -11,14 +10,12 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import type { CatalogItem, Guest, Vehicle } from '@/shared/lib/types'
-import { cn, formatUsd } from '@/shared/lib/utils'
-import { DatePickerGridInput } from '@/shared/ui/date-picker'
+import { formatUsd } from '@/shared/lib/utils'
 import { GuestChip } from './BuilderModals'
 import { LocationDropdown } from './LocationDropdown'
 import { SupplierPicker } from './SupplierPicker'
 import {
   TRANS_SERVICES,
-  asHireRoutes,
   asVehicles,
   findGuest,
   guestChipStyle,
@@ -36,16 +33,6 @@ export function TransportationPanel({
 }) {
   const vehicles = asVehicles(draft)
   const used = usedGuestIds(vehicles)
-  const isHire = draft.transMode === 'hire'
-  const hireRoutes = asHireRoutes(draft)
-
-  const modeBtn = (on: boolean) =>
-    cn(
-      'h-[38px] rounded-lg border px-5 text-[14.5px] font-semibold',
-      on
-        ? 'border-[#931115] bg-[#FBEBEC] text-[#931115]'
-        : 'border-[#E5E7EB] bg-white text-[#171717]',
-    )
 
   function setVehicles(next: Vehicle[]) {
     patch({ vehicles: next })
@@ -67,19 +54,11 @@ export function TransportationPanel({
       <section className="mb-5 rounded-xl border border-[#E5E7EB] bg-white px-5 pb-5 pt-[18px] shadow-sm">
         <div className="mb-3">
           <h3 className="text-[12.5px] font-bold uppercase tracking-[0.06em] text-[#334155]">
-            Supplier & route
+            Supplier & service
           </h3>
           <p className="mt-1 text-[13.5px] font-medium text-[#64748B]">
-            Pick location, supplier and transfer details
+            Pick location, supplier and service
           </p>
-        </div>
-        <div className="mb-[18px] mt-4 flex gap-2.5">
-          <button type="button" className={modeBtn(!isHire)} onClick={() => patch({ transMode: 'transfer' })}>
-            Transfer
-          </button>
-          <button type="button" className={modeBtn(isHire)} onClick={() => patch({ transMode: 'hire' })}>
-            Vehicle Disposal
-          </button>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="grid gap-1.5">
@@ -107,235 +86,21 @@ export function TransportationPanel({
                 <SelectValue placeholder="Select a service" />
               </SelectTrigger>
               <SelectContent>
-              {TRANS_SERVICES.map((s) => (
-                <SelectItem key={s.title} value={s.title}>
-                  <span className="flex w-full items-center justify-between gap-3">
-                    <span>{s.title}</span>
-                    <span className="text-[11px] text-[#A1A1A1]">
-                      {formatUsd(s.price)} · {s.unit}
+                {TRANS_SERVICES.map((s) => (
+                  <SelectItem key={s.title} value={s.title}>
+                    <span className="flex w-full items-center justify-between gap-3">
+                      <span>{s.title}</span>
+                      <span className="text-[11px] text-[#A1A1A1]">
+                        {formatUsd(s.price)} · {s.unit}
+                      </span>
                     </span>
-                  </span>
-                </SelectItem>
-              ))}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
-          {isHire ? (
-            <>
-              <div className="grid gap-1.5">
-                <Label>Start</Label>
-                <DatePickerGridInput
-                  value={String(draft.hireStart || '')}
-                  onChange={(value) => patch({ hireStart: value })}
-                  className="bg-white"
-                />
-              </div>
-              <div className="grid gap-1.5">
-                <Label>End</Label>
-                <DatePickerGridInput
-                  value={String(draft.hireEnd || '')}
-                  onChange={(value) => patch({ hireEnd: value })}
-                  referenceValue={String(draft.hireStart || '')}
-                  className="bg-white"
-                />
-              </div>
-            </>
-          ) : (
-            <div className="grid gap-1.5 sm:col-span-2">
-              <Label>Transfer date</Label>
-              <DatePickerGridInput
-                value={String(draft.transDate || '')}
-                onChange={(value) => patch({ transDate: value })}
-                className="bg-white"
-              />
-            </div>
-          )}
-          {!isHire ? (
-            <>
-              <div className="grid gap-1.5">
-                <Label>Pickup</Label>
-                <LocationDropdown
-                  value={String(draft.pickup || '')}
-                  onChange={(v) => patch({ pickup: v })}
-                  placeholder="Select pickup"
-                />
-              </div>
-              <div className="grid gap-1.5">
-                <Label>Drop-off</Label>
-                <LocationDropdown
-                  value={String(draft.dropoff || '')}
-                  onChange={(v) => patch({ dropoff: v })}
-                  placeholder="Select drop-off"
-                />
-              </div>
-              <div className="grid gap-1.5">
-                <Label>Time from</Label>
-                <Input
-                  type="time"
-                  value={String(draft.timeFrom || '')}
-                  onChange={(e) => patch({ timeFrom: e.target.value })}
-                />
-              </div>
-              <div className="grid gap-1.5">
-                <Label>Time to</Label>
-                <Input
-                  type="time"
-                  value={String(draft.timeTo || '')}
-                  onChange={(e) => patch({ timeTo: e.target.value })}
-                />
-              </div>
-            </>
-          ) : null}
         </div>
       </section>
-
-      {isHire ? (
-        <section className="rounded-xl border bg-white p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <div>
-              <h3 className="text-[13px] font-bold uppercase tracking-wide text-[#475569]">
-                Routes
-              </h3>
-              <p className="text-[11.5px] text-[#94A3B8]">
-                Key in each leg — date, route and times
-              </p>
-            </div>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() =>
-                patch({
-                  hireRoutes: [
-                    ...hireRoutes,
-                    {
-                      id: `r${Date.now()}`,
-                      date: '',
-                      pickup: '',
-                      dropoff: '',
-                      timeFrom: '',
-                      timeTo: '',
-                    },
-                  ],
-                })
-              }
-            >
-              <Plus className="size-3.5" />
-              Add route
-            </Button>
-          </div>
-
-          {hireRoutes.length === 0 ? (
-            <p className="text-[12.5px] text-[#A1A1A1]">No routes yet — add the first leg.</p>
-          ) : (
-            <div className="space-y-3">
-              {hireRoutes.map((r, i) => (
-                <div key={r.id} className="rounded-xl border bg-[#F9FAFB] p-3">
-                  <div className="mb-2 flex items-center gap-2">
-                    <span className="flex size-5 items-center justify-center rounded border bg-white text-[11px] font-bold">
-                      {i + 1}
-                    </span>
-                    <span className="text-[12px] font-semibold text-[#525252]">Leg {i + 1}</span>
-                    <div className="flex-1" />
-                    <button
-                      type="button"
-                      onClick={() =>
-                        patch({ hireRoutes: hireRoutes.filter((x) => x.id !== r.id) })
-                      }
-                      className="flex size-[26px] items-center justify-center rounded-md border bg-white text-[#931115]"
-                    >
-                      <Trash2 className="size-3.5" />
-                    </button>
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="grid gap-1.5 sm:col-span-2">
-                      <Label>Date</Label>
-                      <DatePickerGridInput
-                        value={r.date}
-                        onChange={(value) =>
-                          patch({
-                            hireRoutes: hireRoutes.map((x) =>
-                              x.id === r.id ? { ...x, date: value } : x,
-                            ),
-                          })
-                        }
-                        className="bg-white"
-                      />
-                    </div>
-                    <div className="grid gap-1.5">
-                      <Label>Pickup</Label>
-                      <LocationDropdown
-                        value={r.pickup}
-                        onChange={(v) =>
-                          patch({
-                            hireRoutes: hireRoutes.map((x) =>
-                              x.id === r.id ? { ...x, pickup: v } : x,
-                            ),
-                          })
-                        }
-                        placeholder="Select pickup"
-                      />
-                    </div>
-                    <div className="grid gap-1.5">
-                      <Label>Drop-off</Label>
-                      <LocationDropdown
-                        value={r.dropoff}
-                        onChange={(v) =>
-                          patch({
-                            hireRoutes: hireRoutes.map((x) =>
-                              x.id === r.id ? { ...x, dropoff: v } : x,
-                            ),
-                          })
-                        }
-                        placeholder="Select drop-off"
-                      />
-                    </div>
-                    <div className="grid gap-1.5">
-                      <Label>Time from</Label>
-                      <Input
-                        type="time"
-                        value={r.timeFrom}
-                        onChange={(e) =>
-                          patch({
-                            hireRoutes: hireRoutes.map((x) =>
-                              x.id === r.id ? { ...x, timeFrom: e.target.value } : x,
-                            ),
-                          })
-                        }
-                      />
-                    </div>
-                    <div className="grid gap-1.5">
-                      <Label>Time to</Label>
-                      <Input
-                        type="time"
-                        value={r.timeTo}
-                        onChange={(e) =>
-                          patch({
-                            hireRoutes: hireRoutes.map((x) =>
-                              x.id === r.id ? { ...x, timeTo: e.target.value } : x,
-                            ),
-                          })
-                        }
-                      />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="mt-4 border-t border-dashed pt-3">
-            <h3 className="text-[13px] font-bold uppercase tracking-wide text-[#475569]">
-              Service lines
-            </h3>
-            <p className="text-[11.5px] text-[#94A3B8]">
-              Consecutive days on the same route bill as one line
-            </p>
-            <p className="mt-2 text-[12.5px] text-[#525252]">
-              Routes are tracked per leg and shown on the itinerary day-by-day.
-            </p>
-          </div>
-        </section>
-      ) : null}
 
       <section>
         <div className="mb-2.5 flex items-center justify-between">

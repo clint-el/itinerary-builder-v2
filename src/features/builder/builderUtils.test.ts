@@ -43,49 +43,37 @@ describe('draftMissingRequirements', () => {
     expect(canAddDraft('accommodation', draft)).toBe(true)
   })
 
-  it('requires transfer date and pickup/drop-off for transfers', () => {
+  it('requires location, supplier and service for transportation', () => {
+    const draft = {
+      ...defaultDraft('transportation'),
+    }
+    expect(draftMissingRequirements('transportation', draft)).toEqual([
+      'Location',
+      'Supplier',
+      'Service',
+    ])
+  })
+
+  it('accepts transportation with location, supplier and service', () => {
     const draft = {
       ...defaultDraft('transportation'),
       location: 'Nairobi',
       supplier: 'Hemingways Transfers',
       service: 'JKIA to Hemingways Nairobi (3-pax)',
-      transMode: 'transfer',
     }
-    expect(draftMissingRequirements('transportation', draft)).toEqual([
-      'Transfer date',
-      'Pickup',
-      'Drop-off',
-    ])
+    expect(draftMissingRequirements('transportation', draft)).toEqual([])
+    expect(canAddDraft('transportation', draft)).toBe(true)
   })
 
-  it('requires start/end, vehicle and route for vehicle disposal', () => {
-    const draft = {
-      ...defaultDraft('transportation'),
-      location: 'Nairobi',
-      supplier: 'Hemingways Transfers',
-      service: 'Nairobi Full Day Car Hire and Driver',
-      transMode: 'hire',
-      vehicles: [],
-    }
-    expect(draftMissingRequirements('transportation', draft)).toEqual([
-      'Start date',
-      'End date',
-      'At least one vehicle',
-      'At least one route',
-    ])
-  })
-
-  it('requires departure and return dates for return flights', () => {
+  it('requires departure date for flights', () => {
     const draft = {
       ...defaultDraft('flight'),
       flightFrom: 'Wilson',
       flightTo: 'Loisaba',
       supplier: 'AirKenya',
       service: 'WILSON TO LOISABA OW',
-      flightMode: 'return',
-      departDate: '2026-09-01',
     }
-    expect(draftMissingRequirements('flight', draft)).toEqual(['Return date'])
+    expect(draftMissingRequirements('flight', draft)).toEqual(['Departure date'])
   })
 })
 

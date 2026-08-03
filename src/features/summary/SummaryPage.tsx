@@ -15,6 +15,7 @@ import { cn, formatDay } from '@/shared/lib/utils'
 import { StatusChip } from '@/shared/ui/StatusChip'
 import {
   buildDepositSummary,
+  buildPaymentHistory,
   buildSummaryCards,
   buildSummaryDays,
   buildSummaryPricing,
@@ -115,6 +116,14 @@ export function SummaryPage() {
   const deposits = useMemo(
     () => buildDepositSummary(lines, pricing.sellNumber),
     [lines, pricing.sellNumber],
+  )
+  const arrivalIso = useMemo(() => {
+    const dates = lines.map((l) => l.date).filter(Boolean).sort()
+    return dates[0] || itinerary?.travelDateFrom || ''
+  }, [lines, itinerary?.travelDateFrom])
+  const payments = useMemo(
+    () => buildPaymentHistory(pricing.sellNumber, arrivalIso),
+    [pricing.sellNumber, arrivalIso],
   )
   const vouchers = useMemo(
     () =>
@@ -472,6 +481,96 @@ export function SummaryPage() {
           </aside>
           ) : null}
         </div>
+
+        {view !== 'vouchers' && lines.length > 0 ? (
+          <aside className="w-full">
+            <section className="rounded-[14px] border border-[#E5E7EB] bg-white px-[22px] py-5">
+              <div className="mb-3.5 flex items-baseline justify-between gap-3">
+                <h2 className="text-[16px] font-bold text-[#171717]">Payment history</h2>
+                <span className="text-[11.5px] text-[#A1A1A1]">{payments.arrivalNote}</span>
+              </div>
+              <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-[10px] border border-[#E5E7EB] px-3.5 py-2.5">
+                  <div className="text-[10.5px] font-bold uppercase tracking-[0.4px] text-[#94A3B8]">
+                    Sell total
+                  </div>
+                  <div className="mt-1 text-[17px] font-bold text-[#171717]">{payments.sellTotal}</div>
+                </div>
+                <div className="rounded-[10px] border border-[#E5E7EB] px-3.5 py-2.5">
+                  <div className="text-[10.5px] font-bold uppercase tracking-[0.4px] text-[#94A3B8]">
+                    Paid to date
+                  </div>
+                  <div className="mt-1 text-[17px] font-bold text-[#059669]">{payments.paid}</div>
+                  <div className="mt-0.5 text-[11px] text-[#A1A1A1]">{payments.paidPctLabel}</div>
+                </div>
+                <div className="rounded-[10px] border border-[#E5E7EB] px-3.5 py-2.5">
+                  <div className="text-[10.5px] font-bold uppercase tracking-[0.4px] text-[#94A3B8]">
+                    Outstanding
+                  </div>
+                  <div className="mt-1 text-[17px] font-bold text-[#931115]">{payments.outstanding}</div>
+                </div>
+                <div className="rounded-[10px] border border-[#E5E7EB] px-3.5 py-2.5">
+                  <div className="text-[10.5px] font-bold uppercase tracking-[0.4px] text-[#94A3B8]">
+                    Full payment due
+                  </div>
+                  <div className="mt-1 text-[17px] font-bold text-[#171717]">{payments.finalDue}</div>
+                  <div
+                    className="mt-0.5 text-[11px] font-semibold"
+                    style={{ color: payments.finalDueColor }}
+                  >
+                    {payments.finalDueNote}
+                  </div>
+                </div>
+              </div>
+              <div className="mb-4 h-1.5 overflow-hidden rounded-full bg-[#F3F4F6]">
+                <div
+                  className="h-1.5 rounded-full bg-[#059669]"
+                  style={{ width: `${payments.paidPct}%` }}
+                />
+              </div>
+              <div className="overflow-x-auto">
+                <div className="min-w-[640px]">
+                  <div className="grid grid-cols-[96px_minmax(0,1fr)_176px_108px_110px] gap-2.5 border-b border-[#E5E7EB] pb-1.5">
+                    <span className="text-[10.5px] font-bold uppercase tracking-[0.4px] text-[#94A3B8]">
+                      Date
+                    </span>
+                    <span className="text-[10.5px] font-bold uppercase tracking-[0.4px] text-[#94A3B8]">
+                      Instalment
+                    </span>
+                    <span className="text-[10.5px] font-bold uppercase tracking-[0.4px] text-[#94A3B8]">
+                      Method / ref
+                    </span>
+                    <span className="text-[10.5px] font-bold uppercase tracking-[0.4px] text-[#94A3B8]">
+                      Status
+                    </span>
+                    <span className="text-right text-[10.5px] font-bold uppercase tracking-[0.4px] text-[#94A3B8]">
+                      Amount
+                    </span>
+                  </div>
+                  {payments.rows.map((pm) => (
+                    <div
+                      key={pm.label}
+                      className="grid grid-cols-[96px_minmax(0,1fr)_176px_108px_110px] items-center gap-2.5 border-b border-[#F3F4F6] py-2.5 last:border-0"
+                    >
+                      <span className="whitespace-nowrap text-[12.5px] text-[#525252]">{pm.date}</span>
+                      <span className="min-w-0 text-[12.5px] font-semibold text-[#171717]">{pm.label}</span>
+                      <span className="min-w-0 truncate text-[11.5px] text-[#A1A1A1]">{pm.method}</span>
+                      <span
+                        className="inline-flex h-[22px] w-fit items-center justify-center whitespace-nowrap rounded-md px-2.5 text-[11px] font-bold"
+                        style={{ background: pm.statusBg, color: pm.statusFg }}
+                      >
+                        {pm.status}
+                      </span>
+                      <span className="whitespace-nowrap text-right text-[13px] font-bold text-[#171717]">
+                        {pm.amount}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+          </aside>
+        ) : null}
       </div>
 
       <div className="flex shrink-0 items-center justify-between gap-4 border-t border-[#E7E7EA] bg-white px-6 py-3">

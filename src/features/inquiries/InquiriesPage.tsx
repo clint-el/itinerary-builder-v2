@@ -24,7 +24,7 @@ import { Input } from '@/components/ui/input'
 import { CreateItineraryDialog } from '@/features/inquiries/CreateItineraryDialog'
 import { FiltersDrawer } from '@/features/inquiries/FiltersDrawer'
 import { SplitItineraryDialog } from '@/features/inquiries/SplitItineraryDialog'
-import { StatusDashboard } from '@/features/inquiries/StatusDashboard'
+import { ActionBoard } from '@/features/inquiries/ActionBoard'
 import { PAYMENT_META, SEED_COLLAPSED_REFS, STATUS_META } from '@/shared/lib/catalogs'
 import {
   _itinVM,
@@ -303,12 +303,12 @@ export function InquiriesPage() {
               : 'border-transparent text-[#A1A1A1]',
           )}
         >
-          Status dashboard
+          Action board
         </button>
       </div>
 
       {tab === 'dashboard' ? (
-        <StatusDashboard itineraries={itineraries} />
+        <ActionBoard itineraries={itineraries} />
       ) : (
         <>
           <div className="flex shrink-0 items-center gap-3 px-7 pt-4">

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { ChevronDown, X } from 'lucide-react'
+import { ChevronDown } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '@/app/store'
 import { Button } from '@/components/ui/button'
@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { AGENCIES, DESTINATIONS } from '@/shared/lib/catalogs'
+import { AGENCIES } from '@/shared/lib/catalogs'
 import { nextInquiryId } from '@/shared/lib/storage'
 import { cn } from '@/shared/lib/utils'
 import { DateRangePickerInput } from '@/shared/ui/date-picker'
@@ -87,8 +87,6 @@ export function CreateItineraryDialog({ open, onOpenChange, seedTitle = '' }: Pr
   const [title, setTitle] = useState('')
   const [leadFirst, setLeadFirst] = useState('')
   const [leadLast, setLeadLast] = useState('')
-  const [destinations, setDestinations] = useState<string[]>([])
-  const [destOpen, setDestOpen] = useState(false)
 
   const [travelDateFrom, setTravelDateFrom] = useState('')
   const [travelDateTo, setTravelDateTo] = useState('')
@@ -104,7 +102,6 @@ export function CreateItineraryDialog({ open, onOpenChange, seedTitle = '' }: Pr
   const [errors, setErrors] = useState<string[]>([])
 
   const agencyBoxRef = useRef<HTMLDivElement>(null)
-  const destBoxRef = useRef<HTMLDivElement>(null)
 
   const childrenTotal = childrenRes + childrenNonRes
   const adultsTotal = adultsRes + adultsNonRes
@@ -122,12 +119,10 @@ export function CreateItineraryDialog({ open, onOpenChange, seedTitle = '' }: Pr
     setTitle(seedTitle || '')
     setLeadFirst('')
     setLeadLast('')
-    setDestinations([])
-    setDestOpen(false)
     setTravelDateFrom('')
     setTravelDateTo('')
-    setAdultsRes(2)
-    setAdultsNonRes(0)
+    setAdultsRes(0)
+    setAdultsNonRes(2)
     setChildrenRes(0)
     setChildrenNonRes(0)
     setInfantsRes(0)
@@ -147,21 +142,15 @@ export function CreateItineraryDialog({ open, onOpenChange, seedTitle = '' }: Pr
   }, [childrenTotal])
 
   useEffect(() => {
-    if (!agencyOpen && !destOpen) return
+    if (!agencyOpen) return
     function onPointerDown(e: MouseEvent) {
       const t = e.target as Node
-      if (agencyOpen && agencyBoxRef.current && !agencyBoxRef.current.contains(t)) {
+      if (agencyBoxRef.current && !agencyBoxRef.current.contains(t)) {
         setAgencyOpen(false)
-      }
-      if (destOpen && destBoxRef.current && !destBoxRef.current.contains(t)) {
-        setDestOpen(false)
       }
     }
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') {
-        setAgencyOpen(false)
-        setDestOpen(false)
-      }
+      if (e.key === 'Escape') setAgencyOpen(false)
     }
     document.addEventListener('mousedown', onPointerDown)
     document.addEventListener('keydown', onKey)
@@ -169,7 +158,7 @@ export function CreateItineraryDialog({ open, onOpenChange, seedTitle = '' }: Pr
       document.removeEventListener('mousedown', onPointerDown)
       document.removeEventListener('keydown', onKey)
     }
-  }, [agencyOpen, destOpen])
+  }, [agencyOpen])
 
   const filteredAgencies = useMemo(() => {
     const q = agencySearch.trim().toLowerCase()
@@ -196,10 +185,6 @@ export function CreateItineraryDialog({ open, onOpenChange, seedTitle = '' }: Pr
     setExpandedAgency(null)
   }
 
-  function toggleDestination(d: string) {
-    setDestinations((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]))
-  }
-
   function validate(): string[] {
     const msgs: string[] = []
     const ref = inquiryRef.trim()
@@ -215,7 +200,6 @@ export function CreateItineraryDialog({ open, onOpenChange, seedTitle = '' }: Pr
       msgs.push('End date must be on or after start date.')
     }
     if (adultsTotal < 1) msgs.push('At least one adult is required.')
-    if (destinations.length < 1) msgs.push('Select at least one destination.')
     if (childrenTotal > 0 && childAges.some((a) => a < 2 || a > 17)) {
       msgs.push('Child ages must be between 2 and 17.')
     }
@@ -236,7 +220,7 @@ export function CreateItineraryDialog({ open, onOpenChange, seedTitle = '' }: Pr
       agent,
       leadFirst: leadFirst.trim(),
       leadLast: leadLast.trim(),
-      destinations,
+      destinations: [],
       travelDateFrom,
       travelDateTo: travelDateTo || travelDateFrom,
       adultsRes,
@@ -285,10 +269,7 @@ export function CreateItineraryDialog({ open, onOpenChange, seedTitle = '' }: Pr
                 <button
                   type="button"
                   className="flex h-11 w-full items-center justify-between rounded-md border border-input bg-white px-3 text-left text-sm"
-                  onClick={() => {
-                    setDestOpen(false)
-                    setAgencyOpen((v) => !v)
-                  }}
+                  onClick={() => setAgencyOpen((v) => !v)}
                 >
                   <span className={agencyLabel ? 'text-foreground' : 'text-muted-foreground'}>
                     {agencyLabel || 'Select Agency or Agent'}
@@ -421,79 +402,6 @@ export function CreateItineraryDialog({ open, onOpenChange, seedTitle = '' }: Pr
                 hasError={errors.some((message) => message.includes('date'))}
                 className="h-10 bg-white"
               />
-            </div>
-
-            <div className="grid gap-2">
-              <Label>
-                Destinations <span className="text-sol-brand">*</span>
-              </Label>
-              <div className="relative" ref={destBoxRef}>
-                <button
-                  type="button"
-                  className="flex min-h-10 w-full flex-wrap items-center gap-1.5 rounded-md border border-input bg-white px-2 py-1.5 text-left text-sm"
-                  onClick={() => {
-                    setAgencyOpen(false)
-                    setDestOpen((v) => !v)
-                  }}
-                >
-                  {destinations.length === 0 ? (
-                    <span className="px-1 text-muted-foreground">Select destinations</span>
-                  ) : (
-                    destinations.map((d) => (
-                      <span
-                        key={d}
-                        className="inline-flex items-center gap-1 rounded-md bg-[#F4E2E3] px-2 py-0.5 text-xs font-semibold text-sol-brand"
-                      >
-                        {d}
-                        <span
-                          role="button"
-                          tabIndex={0}
-                          className="inline-flex"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            toggleDestination(d)
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault()
-                              e.stopPropagation()
-                              toggleDestination(d)
-                            }
-                          }}
-                        >
-                          <X className="size-3" />
-                        </span>
-                      </span>
-                    ))
-                  )}
-                  <ChevronDown className="ml-auto size-4 shrink-0 text-muted-foreground" />
-                </button>
-                {destOpen ? (
-                  <div className="absolute left-0 right-0 z-30 mt-1.5 overflow-hidden rounded-md border bg-white shadow-md">
-                    {DESTINATIONS.map((d) => {
-                      const selected = destinations.includes(d)
-                      return (
-                        <button
-                          key={d}
-                          type="button"
-                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-neutral-50"
-                          onClick={() => toggleDestination(d)}
-                        >
-                          <span
-                            className={cn(
-                              'flex size-4 items-center justify-center rounded border',
-                              selected ? 'border-sol-brand bg-sol-brand text-white' : 'border-neutral-300 bg-white',
-                            )}
-                          >
-                            {selected ? '✓' : null}
-                          </span>
-                          {d}
-                        </button>
-                      )
-                    })}
-                  </div>
-                ) : null}
-              </div>
             </div>
 
             <div className="flex flex-col gap-3">
