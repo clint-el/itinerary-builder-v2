@@ -228,6 +228,12 @@ export type ExtraCatalogItem = {
   mandatory?: boolean
   /** Service tabs that can pick this extra. Defaults to accommodation. */
   tabs?: ServiceTab[]
+  /**
+   * When set, only show this extra when the selected Catalog Service (or an
+   * activity item name) matches one of these names — mirrors Catalog
+   * `serviceExtras[].serviceName` linkage (e.g. Lunch → Game Drive).
+   */
+  serviceNames?: string[]
 }
 
 /** Hemingways extras portfolio — avg prices from live booking history. */
@@ -247,11 +253,60 @@ export const EXTRAS_CATALOG: ExtraCatalogItem[] = [
   { id: 'after-hours-transfer', title: 'After-hours Transfer Surcharge', price: 40, tabs: ['transportation'] },
   { id: 'exclusive-vehicle', title: 'Exclusive Use of Vehicle', price: 150, tabs: ['transportation'] },
   { id: 'child-seat', title: 'Child Seat', price: 15, tabs: ['transportation'] },
+  // Activity extras — linked to Catalog services via serviceNames (serviceExtras)
+  {
+    id: 'activity-lunch',
+    title: 'Lunch',
+    price: 45,
+    tabs: ['activity'],
+    serviceNames: ['Game drive', 'Game Drive'],
+  },
+  {
+    id: 'activity-bush-breakfast',
+    title: 'Bush Breakfast',
+    price: 55,
+    tabs: ['activity'],
+    serviceNames: ['Game drive', 'Game Drive', 'Hot air balloon safari'],
+  },
+  {
+    id: 'activity-binocular-hire',
+    title: 'Binocular Hire',
+    price: 15,
+    tabs: ['activity'],
+    serviceNames: ['Game drive', 'Game Drive', 'Guided nature walk'],
+  },
+  {
+    id: 'activity-park-fee',
+    title: 'Park Entry Fee',
+    price: 80,
+    tabs: ['activity'],
+  },
+  {
+    id: 'activity-champagne',
+    title: 'Champagne Breakfast Upgrade',
+    price: 35,
+    tabs: ['activity'],
+    serviceNames: ['Hot air balloon safari'],
+  },
 ]
 
 /** Catalog extras available for a given service tab. */
 export function extrasForTab(tab: ServiceTab): ExtraCatalogItem[] {
   return EXTRAS_CATALOG.filter((extra) => (extra.tabs ?? ['accommodation']).includes(tab))
+}
+
+/** Activity extras filtered by selected service / activity item names. */
+export function extrasForActivityService(
+  serviceName: string,
+  activityNames: string[] = [],
+): ExtraCatalogItem[] {
+  const names = [serviceName, ...activityNames]
+    .map((n) => n.trim().toLowerCase())
+    .filter(Boolean)
+  return extrasForTab('activity').filter((extra) => {
+    if (!extra.serviceNames?.length) return true
+    return extra.serviceNames.some((sn) => names.includes(sn.toLowerCase()))
+  })
 }
 
 export type RoomTypeOption = {
@@ -368,6 +423,12 @@ export const PROMOTIONS = [
   { id: 'early-bird', title: 'Early Bird 10%', desc: 'Book 90 days in advance', active: true },
   { id: 'stay-more', title: 'Stay 4 Pay 3', desc: 'Applies on bookings of 4+ nights' },
   { id: 'honeymoon', title: 'Honeymoon Package', desc: 'Complimentary bottle of wine & late checkout' },
+  {
+    id: 'free-lunch-game-drive',
+    title: 'Free Lunch on Game Drive',
+    desc: '40% off Lunch when booked with a Game Drive (travel window 2026–2027)',
+    active: true,
+  },
 ]
 
 export const ACTIVITY_TYPES = [
@@ -609,6 +670,7 @@ export function defaultDraft(tab: ServiceTab): Record<string, unknown> {
     return {
       location: '', supplier: '', service: '', startDate: '', endDate: '', discount: 0,
       days: [] as string[], activities: [] as unknown[],
+      extras: [] as string[], customExtras: [] as unknown[], customExtraSeq: 1, promotion: null,
     }
   }
   return {

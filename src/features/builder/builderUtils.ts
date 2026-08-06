@@ -294,8 +294,11 @@ export function computeDraftTotals(
   }
   if (tab === 'activity') {
     const activities = asActivities(draft)
+    const extras = extraObjects(draft)
+    const extrasNet = extras.reduce((sum, e) => sum + e.price * (e.qty || 1), 0)
     const net = activities.reduce((sum, a) => sum + a.rate * a.guestIds.length, 0)
-    return { net, rack: activities.reduce((sum, a) => sum + rackOf(a.rate * a.guestIds.length), 0) }
+    const rack = activities.reduce((sum, a) => sum + rackOf(a.rate * a.guestIds.length), 0)
+    return { net: net + extrasNet, rack: rack + rackOf(extrasNet) }
   }
   // Other: prefer line items (activities) when present; otherwise qty × unit price.
   const activities = asActivities(draft)

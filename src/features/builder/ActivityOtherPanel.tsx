@@ -1,6 +1,10 @@
 import { useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
-import { ACTIVITY_TYPES } from '@/shared/lib/catalogs'
+import {
+  ACTIVITY_TYPES,
+  PROMOTIONS,
+  extrasForActivityService,
+} from '@/shared/lib/catalogs'
 import { rackOf } from '@/shared/lib/helpers'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,12 +17,22 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import type { ActivityItem, CatalogItem, Guest, ServiceTab } from '@/shared/lib/types'
-import { formatDateRange, formatUsd } from '@/shared/lib/utils'
+import { cn, formatDateRange, formatUsd } from '@/shared/lib/utils'
 import { DatePickerGridInput } from '@/shared/ui/date-picker'
-import { ActivityTypeModal, GuestChip } from './BuilderModals'
+import { ActivityTypeModal, CustomExtraModal, GuestChip } from './BuilderModals'
 import { LocationDropdown } from './LocationDropdown'
 import { SupplierPicker } from './SupplierPicker'
-import { asActivities, findGuest, guestChipStyle, usedGuestIds } from './builderUtils'
+import {
+  asActivities,
+  asCustomExtras,
+  asExtraIds,
+  extraObjects,
+  findGuest,
+  guestChipStyle,
+  usedGuestIds,
+} from './builderUtils'
+
+type ActivitySideTab = 'extras' | 'promotions'
 
 export function ActivityOtherPanel({
   tab,
@@ -32,9 +46,21 @@ export function ActivityOtherPanel({
   guests: Guest[]
 }) {
   const [actOpen, setActOpen] = useState(false)
+  const [ceOpen, setCeOpen] = useState(false)
+  const [sideTab, setSideTab] = useState<ActivitySideTab>('extras')
   const activities = asActivities(draft)
   const used = usedGuestIds(activities)
   const itemLabel = tab === 'other' ? 'item' : 'activity'
+  const isActivity = tab === 'activity'
+  const extras = extraObjects(draft)
+  const extraIds = asExtraIds(draft)
+  const customExtras = asCustomExtras(draft)
+  const catalogExtras = isActivity
+    ? extrasForActivityService(
+        String(draft.service || ''),
+        activities.map((a) => a.name),
+      )
+    : []
 
   function setActivities(next: ActivityItem[]) {
     patch({ activities: next })
@@ -49,6 +75,29 @@ export function ActivityOtherPanel({
       ),
     )
   }
+
+  const tabBtn = (key: ActivitySideTab, label: string, badge?: number) => (
+    <button
+      type="button"
+      onClick={() => setSideTab(key)}
+      className={cn(
+        'h-[38px] border-b-2 px-3 text-[13px] font-semibold',
+        sideTab === key ? 'border-[#931115] text-[#931115]' : 'border-transparent text-[#525252]',
+      )}
+    >
+      {label}
+      {badge != null && badge > 0 ? (
+        <span
+          className={cn(
+            'ml-1 rounded px-1.5 text-[11px] font-semibold',
+            sideTab === key ? 'bg-[#FCE7F3] text-[#DB2777]' : 'bg-[#F3F4F6] text-[#525252]',
+          )}
+        >
+          {badge}
+        </span>
+      ) : null}
+    </button>
+  )
 
   return (
     <div className="space-y-4">
@@ -255,6 +304,131 @@ export function ActivityOtherPanel({
         </div>
       </section>
 
+      {isActivity ? (
+        <>
+          <div className="flex gap-1 border-b">
+            {tabBtn('extras', 'Extras', extras.length)}
+            {tabBtn('promotions', 'Special Offer(s)', PROMOTIONS.length)}
+          </div>
+
+          {sideTab === 'extras' ? (
+            <div className="space-y-3">
+              {extras.length === 0 ? (
+                <p className="text-[12.5px] text-[#A1A1A1]">No extras selected.</p>
+              ) : (
+                extras.map((ex) => (
+                  <div
+                    key={ex.id}
+                    className="flex items-center justify-between rounded-lg border bg-white px-3 py-2"
+                  >
+                    <div>
+                      <div className="text-[13px] font-semibold">{ex.title}</div>
+                      {ex.mandatory ? (
+                        <div className="text-[11px] text-[#A1A1A1]">Mandatory</div>
+                      ) : null}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[13px] font-semibold">
+                        {formatUsd(ex.price * (ex.qty || 1))}
+                      </span>
+                      {!ex.mandatory ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (ex.custom) {
+                              patch({ customExtras: customExtras.filter((x) => x.id !== ex.id) })
+                            } else {
+                              patch({ extras: extraIds.filter((id) => id !== ex.id) })
+                            }
+                          }}
+                          className="text-[#931115]"
+                        >
+                          <Trash2 className="size-3.5" />
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                ))
+              )}
+              <div>
+                <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-[#A1A1A1]">
+                  Catalog
+                  {draft.service || activities.length
+                    ? ' · linked to selected service'
+                    : ' · select a service to filter'}
+                </p>
+                <div className="space-y-1.5">
+                  {catalogExtras.filter((c) => !extraIds.includes(c.id)).length === 0 ? (
+                    <p className="text-[12.5px] text-[#A1A1A1]">
+                      {draft.service || activities.length
+                        ? 'No more catalog extras for this service.'
+                        : 'Select a Service or add an activity item to see linked extras (e.g. Lunch on Game Drive).'}
+                    </p>
+                  ) : (
+                    catalogExtras
+                      .filter((c) => !extraIds.includes(c.id))
+                      .map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => patch({ extras: [...extraIds, c.id] })}
+                          className="flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left hover:bg-[#F9FAFB]"
+                        >
+                          <span className="text-[13px] font-semibold">{c.title}</span>
+                          <span className="flex items-center gap-2 text-[12.5px] font-semibold text-[#525252]">
+                            {formatUsd(c.price)}
+                            <Plus className="size-3.5 text-[#931115]" />
+                          </span>
+                        </button>
+                      ))
+                  )}
+                </div>
+              </div>
+              <Button variant="outline" onClick={() => setCeOpen(true)}>
+                <Plus className="size-4" />
+                Custom extra
+              </Button>
+            </div>
+          ) : null}
+
+          {sideTab === 'promotions' ? (
+            <div className="space-y-2">
+              {PROMOTIONS.map((p) => {
+                const sel = draft.promotion === p.id
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => patch({ promotion: sel ? null : p.id })}
+                    className="flex w-full items-start gap-3 rounded-xl border p-3 text-left"
+                    style={{
+                      borderColor: sel ? '#DB2777' : '#E5E7EB',
+                      background: sel ? '#FDF2F8' : '#FFFFFF',
+                    }}
+                  >
+                    <span
+                      className="mt-1 flex size-4 items-center justify-center rounded-full border"
+                      style={{ borderColor: sel ? '#DB2777' : '#D4D4D4' }}
+                    >
+                      {sel ? <span className="size-2 rounded-full bg-[#DB2777]" /> : null}
+                    </span>
+                    <span>
+                      <span className="block text-[13.5px] font-semibold">{p.title}</span>
+                      <span className="text-[12px] text-[#737373]">{p.desc}</span>
+                      {p.active ? (
+                        <span className="mt-1 inline-block text-[11px] font-bold text-[#059669]">
+                          Active
+                        </span>
+                      ) : null}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          ) : null}
+        </>
+      ) : null}
+
       <section>
         <div className="mb-2 flex items-baseline gap-2">
           <h3 className="text-[14px] font-semibold text-[#171717]">Internal notes</h3>
@@ -289,6 +463,34 @@ export function ActivityOtherPanel({
           ])
         }
       />
+
+      {isActivity ? (
+        <CustomExtraModal
+          open={ceOpen}
+          onClose={() => setCeOpen(false)}
+          onSubmit={(extra) => {
+            const n = Number(draft.customExtraSeq) || 1
+            patch({
+              customExtras: [
+                ...customExtras,
+                {
+                  id: `custom-a${n}`,
+                  title: extra.title,
+                  serviceType: extra.serviceType,
+                  chargeType: extra.chargeType,
+                  timeUnit: extra.timeUnit,
+                  qty: extra.qty,
+                  price: extra.price,
+                  dateFrom: extra.dateFrom,
+                  dateTo: extra.dateTo,
+                  custom: true,
+                },
+              ],
+              customExtraSeq: n + 1,
+            })
+          }}
+        />
+      ) : null}
     </div>
   )
 }

@@ -135,7 +135,7 @@ export function BuilderPage() {
   function addToItinerary() {
     if (draftMissingRequirements(activeTab, draft).length > 0) return
     if (
-      activeTab === 'accommodation' &&
+      (activeTab === 'accommodation' || activeTab === 'activity' || activeTab === 'flight') &&
       PROMOTIONS.find((p) => p.id === draft.promotion && p.active)
     ) {
       setPromoPromptOpen(true)
