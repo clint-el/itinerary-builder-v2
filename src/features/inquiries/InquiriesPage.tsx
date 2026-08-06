@@ -3,10 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Check,
   ChevronRight,
-  Copy,
-  Eye,
   Filter,
-  MoreHorizontal,
   Plus,
   Search,
   SplitSquareVertical,
@@ -14,12 +11,6 @@ import {
 } from 'lucide-react'
 import { useStore } from '@/app/store'
 import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { CreateItineraryDialog } from '@/features/inquiries/CreateItineraryDialog'
 import { FiltersDrawer } from '@/features/inquiries/FiltersDrawer'
@@ -48,7 +39,7 @@ import { StatusChip } from '@/shared/ui/StatusChip'
 type ListTab = 'table' | 'dashboard'
 
 const GRID =
-  'grid min-w-[1410px] grid-cols-[minmax(240px,27fr)_minmax(130px,9fr)_minmax(200px,13fr)_minmax(170px,9fr)_minmax(120px,8fr)_minmax(130px,8fr)_minmax(110px,7fr)_minmax(90px,6fr)_minmax(130px,8fr)_minmax(90px,5fr)]'
+  'grid min-w-[1320px] grid-cols-[minmax(240px,27fr)_minmax(130px,9fr)_minmax(200px,13fr)_minmax(170px,9fr)_minmax(120px,8fr)_minmax(130px,8fr)_minmax(110px,7fr)_minmax(90px,6fr)_minmax(130px,8fr)]'
 
 function countActiveFilters(f: ListFilters): number {
   return [
@@ -64,7 +55,7 @@ function countActiveFilters(f: ListFilters): number {
 }
 
 export function InquiriesPage() {
-  const { itineraries, splitItinerary, acceptOption } = useStore()
+  const { itineraries, splitItinerary } = useStore()
   const navigate = useNavigate()
 
   const [tab, setTab] = useState<ListTab>('table')
@@ -216,12 +207,6 @@ export function InquiriesPage() {
     const created = splitItinerary(parentRef, form)
     setSplitFor(null)
     if (created) navigate(`/build/${created.id}`)
-  }
-
-  function handleCopy(id: string) {
-    const src = itineraries.find((it) => it.id === id)
-    setCreateSeedTitle(src?.title ? `${src.title} (copy)` : '')
-    setCreateOpen(true)
   }
 
   const SortHead = ({
@@ -422,7 +407,6 @@ export function InquiriesPage() {
                     <SortHead label="Total" k="total" align="right" />
                     <SortHead label="Margin" k="margin" align="right" />
                     <SortHead label="Payment" k="payment" />
-                    <SortHead label="Actions" align="center" />
                   </div>
 
                   {rows.map((row) => {
@@ -603,37 +587,8 @@ export function InquiriesPage() {
                           )}
                         </div>
 
-                        <div className="flex items-center overflow-hidden border-r border-[#F1F1F3] px-2">
-                          <PaymentChip status={it.paymentStatus} />
-                        </div>
-
-                        <div className="relative flex items-center justify-center px-2">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-7 w-7 text-[#A1A1A1]">
-                                <MoreHorizontal className="size-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-[180px]">
-                              <DropdownMenuItem onClick={() => navigate(openPath(it))}>
-                                <Eye className="size-3.5" />
-                                View Detail
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleCopy(it.id)}>
-                                <Copy className="size-3.5" />
-                                Copy Itinerary
-                              </DropdownMenuItem>
-                              {row.canAccept ? (
-                                <DropdownMenuItem
-                                  className="text-[#166534] focus:text-[#166534]"
-                                  onClick={() => acceptOption(it.reference)}
-                                >
-                                  <Check className="size-3.5" />
-                                  Accept &amp; make master
-                                </DropdownMenuItem>
-                              ) : null}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                        <div className="flex items-center overflow-hidden px-2">
+                          <PaymentChip status={it.paymentStatus} balanceUsd={it.balanceUsd} />
                         </div>
                       </div>
                     )
