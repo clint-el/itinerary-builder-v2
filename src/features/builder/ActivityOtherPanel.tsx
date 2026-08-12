@@ -56,10 +56,7 @@ export function ActivityOtherPanel({
   const extraIds = asExtraIds(draft)
   const customExtras = asCustomExtras(draft)
   const catalogExtras = isActivity
-    ? extrasForActivityService(
-        String(draft.service || ''),
-        activities.map((a) => a.name),
-      )
+    ? extrasForActivityService('', activities.map((a) => a.name))
     : []
 
   function setActivities(next: ActivityItem[]) {
@@ -108,7 +105,7 @@ export function ActivityOtherPanel({
           </h3>
           <p className="text-[11.5px] text-[#94A3B8]">
             {tab === 'activity'
-              ? 'Pick the location, supplier and the activity service'
+              ? 'Pick the location and supplier for this activity'
               : 'Pick the location and supplier for this line item'}
           </p>
         </div>
@@ -128,26 +125,6 @@ export function ActivityOtherPanel({
               onPick={(item: CatalogItem) => patch({ supplier: item.name, service: item.service })}
             />
           </div>
-          {tab === 'activity' ? (
-            <div className="grid gap-1.5 sm:col-span-2">
-              <Label>Service</Label>
-              <Select
-                value={String(draft.service || '') || undefined}
-                onValueChange={(value) => patch({ service: value })}
-              >
-                <SelectTrigger className="bg-white">
-                  <SelectValue placeholder="Select…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {ACTIVITY_TYPES.map((t) => (
-                    <SelectItem key={t.name} value={t.name}>
-                      {t.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          ) : null}
         </div>
       </section>
 
@@ -353,16 +330,16 @@ export function ActivityOtherPanel({
               <div>
                 <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-[#A1A1A1]">
                   Catalog
-                  {draft.service || activities.length
-                    ? ' · linked to selected service'
-                    : ' · select a service to filter'}
+                  {activities.length
+                    ? ' · linked to selected activities'
+                    : ' · add an activity to filter'}
                 </p>
                 <div className="space-y-1.5">
                   {catalogExtras.filter((c) => !extraIds.includes(c.id)).length === 0 ? (
                     <p className="text-[12.5px] text-[#A1A1A1]">
-                      {draft.service || activities.length
-                        ? 'No more catalog extras for this service.'
-                        : 'Select a Service or add an activity item to see linked extras (e.g. Lunch on Game Drive).'}
+                      {activities.length
+                        ? 'No more catalog extras for these activities.'
+                        : 'Add an activity item to see linked extras (e.g. Lunch on Game Drive).'}
                     </p>
                   ) : (
                     catalogExtras
@@ -449,6 +426,9 @@ export function ActivityOtherPanel({
         types={ACTIVITY_TYPES}
         defaultStart={String(draft.startDate || '')}
         defaultEnd={String(draft.endDate || '')}
+        title={isActivity ? 'Add activity' : 'Add Other'}
+        typeLabel={isActivity ? 'Activity type' : 'Other type'}
+        submitLabel={isActivity ? 'Add activity' : 'Add Other'}
         onSubmit={(payload) =>
           setActivities([
             ...activities,

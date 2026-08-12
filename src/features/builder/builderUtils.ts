@@ -481,7 +481,6 @@ export function draftMissingRequirements(
   if (tab === 'activity') {
     if (missing(draft.location)) needed.push('Location')
     if (missing(draft.supplier)) needed.push('Supplier')
-    if (missing(draft.service)) needed.push('Service')
     if (asActivities(draft).length === 0) needed.push('At least one activity')
     return needed
   }

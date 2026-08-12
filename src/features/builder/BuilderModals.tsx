@@ -305,6 +305,9 @@ export function ActivityTypeModal({
   defaultStart,
   defaultEnd,
   onSubmit,
+  title = 'Add activity',
+  typeLabel = 'Activity type',
+  submitLabel = 'Add activity',
 }: {
   open: boolean
   onClose: () => void
@@ -312,6 +315,9 @@ export function ActivityTypeModal({
   defaultStart: string
   defaultEnd: string
   onSubmit: (payload: { name: string; rate: number; start: string; end: string }) => void
+  title?: string
+  typeLabel?: string
+  submitLabel?: string
 }) {
   const [actType, setActType] = useState('')
   const [actStart, setActStart] = useState(defaultStart)
@@ -328,11 +334,11 @@ export function ActivityTypeModal({
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add activity</DialogTitle>
+          <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
         <div className="grid gap-3">
           <div className="grid gap-1.5">
-            <Label>Activity type</Label>
+            <Label>{typeLabel}</Label>
             <Select
               value={actType || undefined}
               onValueChange={setActType}
@@ -396,7 +402,7 @@ export function ActivityTypeModal({
               onClose()
             }}
           >
-            Add activity
+            {submitLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

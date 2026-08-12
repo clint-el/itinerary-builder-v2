@@ -417,7 +417,7 @@ export function CreateItineraryDialog({ open, onOpenChange, seedTitle = '' }: Pr
               <div className="rounded-lg border p-3.5">
                 <div className="mb-3 flex items-baseline justify-between">
                   <Label>
-                    Adults (18+ y.o.) <span className="text-sol-brand">*</span>
+                    Adults<span className="text-sol-brand">*</span>
                   </Label>
                   <span className="text-[12.5px] font-semibold text-neutral-500">Total: {adultsTotal}</span>
                 </div>
@@ -430,7 +430,7 @@ export function CreateItineraryDialog({ open, onOpenChange, seedTitle = '' }: Pr
 
               <div className="rounded-lg border p-3.5">
                 <div className="mb-3 flex items-baseline justify-between">
-                  <Label>Children (2-17 y.o.)</Label>
+                  <Label>Children</Label>
                   <span className="text-[12.5px] font-semibold text-neutral-500">Total: {childrenTotal}</span>
                 </div>
                 <div className="grid grid-cols-3 gap-4">
@@ -442,7 +442,7 @@ export function CreateItineraryDialog({ open, onOpenChange, seedTitle = '' }: Pr
 
               <div className="rounded-lg border p-3.5">
                 <div className="mb-3 flex items-baseline justify-between">
-                  <Label>Infants (0-1 y.o.)</Label>
+                  <Label>Infants</Label>
                   <span className="text-[12.5px] font-semibold text-neutral-500">Total: {infantsTotal}</span>
                 </div>
                 <div className="grid grid-cols-3 gap-4">
