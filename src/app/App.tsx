@@ -12,7 +12,7 @@ export function App() {
   return (
     <StoreProvider>
       <BrowserRouter>
-        <DevRoleBar />
+        {/* <DevRoleBar /> */}
         <Routes>
           <Route element={<AppShell />}>
             <Route path="/" element={<InquiriesPage />} />
