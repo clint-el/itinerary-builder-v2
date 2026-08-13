@@ -150,7 +150,7 @@ function dayItemDetail(line: SummaryLine) {
 export function QuoteDocPage() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
-  const { itineraries, getServices, getQuoteGroups, getGuestDetails } = useStore()
+  const { itineraries, getServices, getQuoteGroups, getGuestDetails, stampQuoteDoc } = useStore()
   const itinerary = itineraries.find((item) => item.id === id)
   const services = getServices(id)
   const quoteGroups = getQuoteGroups(id)
@@ -173,6 +173,10 @@ export function QuoteDocPage() {
   const viewportRef = useRef<HTMLDivElement>(null)
   const optionsRef = useRef<HTMLDivElement>(null)
   const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    if (id) stampQuoteDoc(id)
+  }, [id, stampQuoteDoc])
 
   useEffect(() => {
     if (!optionsOpen) return

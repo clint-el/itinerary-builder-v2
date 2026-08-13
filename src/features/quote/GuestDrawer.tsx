@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useStore } from '@/app/store'
-import type { GuestDetail, Itinerary } from '@/shared/lib/types'
+import { guestRoleLabel } from '@/shared/lib/helpers'
+import type { GuestDetail, GuestResidency, Itinerary } from '@/shared/lib/types'
 import { cn } from '@/shared/lib/utils'
 import { DatePickerGridInput } from '@/shared/ui/date-picker'
 import {
@@ -21,6 +22,40 @@ interface GuestDrawerProps {
 
 const AGE_OPTIONS = Array.from({ length: 16 }, (_, i) => i + 2)
 const SALUTATIONS = ['Mrs', 'Ms', 'Mr'] as const
+const RESIDENCY_OPTIONS: { id: GuestResidency; label: string }[] = [
+  { id: 'citizen', label: 'Citizen' },
+  { id: 'resident', label: 'Resident' },
+  { id: 'nonResident', label: 'Non-Resident' },
+]
+const ROLE_OPTIONS: { id: GuestDetail['ageBand']; label: string }[] = [
+  { id: 'adult', label: 'Adult' },
+  { id: 'child', label: 'Child' },
+  { id: 'infant', label: 'Infant' },
+]
+
+function residencyQuota(itinerary: Itinerary, band: 'adult' | 'child' | 'infant'): GuestResidency[] {
+  const list: GuestResidency[] = []
+  if (band === 'adult') {
+    for (let i = 0; i < (itinerary.adultsCitizen ?? 0); i++) list.push('citizen')
+    for (let i = 0; i < (itinerary.adultsRes ?? 0); i++) list.push('resident')
+    for (let i = 0; i < (itinerary.adultsNonRes ?? 0); i++) list.push('nonResident')
+  } else if (band === 'child') {
+    for (let i = 0; i < (itinerary.childrenCitizen ?? 0); i++) list.push('citizen')
+    for (let i = 0; i < (itinerary.childrenRes ?? 0); i++) list.push('resident')
+    for (let i = 0; i < (itinerary.childrenNonRes ?? 0); i++) list.push('nonResident')
+  } else {
+    for (let i = 0; i < (itinerary.infantsCitizen ?? 0); i++) list.push('citizen')
+    for (let i = 0; i < (itinerary.infantsRes ?? 0); i++) list.push('resident')
+    for (let i = 0; i < (itinerary.infantsNonRes ?? 0); i++) list.push('nonResident')
+  }
+  return list
+}
+
+function normalizeBand(band: GuestDetail['ageBand'] | 'youth' | undefined): GuestDetail['ageBand'] {
+  if (band === 'infant') return 'infant'
+  if (band === 'adult') return 'adult'
+  return 'child' // youth → child for Role column
+}
 
 function buildGuestSlots(
   adults: number,
@@ -28,22 +63,25 @@ function buildGuestSlots(
   infants: number,
   childAges: number[],
   existing: GuestDetail[],
-  leadFirst?: string,
-  leadLast?: string,
+  itinerary: Itinerary,
 ): GuestDetail[] {
   const slots: GuestDetail[] = []
   let idx = 0
+  const adultQuota = residencyQuota(itinerary, 'adult')
+  const childQuota = residencyQuota(itinerary, 'child')
+  const infantQuota = residencyQuota(itinerary, 'infant')
 
   for (let i = 0; i < adults; i++) {
     const prev = existing[idx]
     slots.push({
       id: prev?.id || `g-a-${i}`,
       salutation: prev?.salutation || (i === 0 ? 'Mrs' : 'Mr'),
-      firstName: prev?.firstName || (i === 0 ? leadFirst || '' : ''),
-      lastName: prev?.lastName || (i === 0 ? leadLast || '' : ''),
+      firstName: prev?.firstName || (i === 0 ? itinerary.leadFirst || '' : ''),
+      lastName: prev?.lastName || (i === 0 ? itinerary.leadLast || '' : ''),
       dob: prev?.dob || '',
       ageBand: 'adult',
       age: prev?.age,
+      residency: prev?.residency || adultQuota[i] || 'resident',
       flight: prev?.flight || '',
       dietary: prev?.dietary || '',
       preferences: prev?.preferences || '',
@@ -61,8 +99,9 @@ function buildGuestSlots(
       salutation: prev?.salutation || '',
       firstName: prev?.firstName || '',
       lastName: prev?.lastName || '',
-      ageBand: age != null && age >= 12 ? 'youth' : 'child',
+      ageBand: 'child',
       age,
+      residency: prev?.residency || childQuota[i] || 'resident',
       flight: prev?.flight || '',
       dietary: prev?.dietary || '',
       preferences: prev?.preferences || '',
@@ -81,13 +120,73 @@ function buildGuestSlots(
       lastName: prev?.lastName || '',
       ageBand: 'infant',
       age: prev?.age ?? 1,
+      residency: prev?.residency || infantQuota[i] || 'resident',
       note: prev?.note || '',
       lead: false,
     })
     idx++
   }
 
-  return slots
+  return slots.map((g) => ({ ...g, ageBand: normalizeBand(g.ageBand) }))
+}
+
+function guestDisplayName(g: GuestDetail, index: number) {
+  const named = [g.firstName, g.lastName].filter(Boolean).join(' ').trim()
+  if (named) return named
+  if (g.lead) return 'Lead Traveler'
+  return `${guestRoleLabel(g.ageBand)} ${index + 1}`
+}
+
+function describePendingChanges(
+  baseline: GuestDetail[],
+  current: GuestDetail[],
+  baseAdults: number,
+  adults: number,
+  baseChildren: number,
+  children: number,
+  baseInfants: number,
+  infants: number,
+): string[] {
+  const lines: string[] = []
+  if (adults !== baseAdults || children !== baseChildren || infants !== baseInfants) {
+    lines.push(
+      `Updated party size to ${adults} adult${adults === 1 ? '' : 's'} · ${children} child${children === 1 ? '' : 'ren'} · ${infants} infant${infants === 1 ? '' : 's'}`,
+    )
+  }
+  const byId = new Map(baseline.map((g) => [g.id, g]))
+  for (const g of current) {
+    const prev = byId.get(g.id)
+    if (!prev) {
+      lines.push(`Added ${guestDisplayName(g, 0)} (${guestRoleLabel(g.ageBand)})`)
+      continue
+    }
+    const prevName = [prev.firstName, prev.lastName].filter(Boolean).join(' ').trim()
+    const nextName = [g.firstName, g.lastName].filter(Boolean).join(' ').trim()
+    if (!prevName && nextName) {
+      lines.push(`Named placeholder as ${nextName}`)
+    } else if (prevName !== nextName && nextName) {
+      lines.push(`Updated name to ${nextName}`)
+    }
+    if (prev.residency !== g.residency) {
+      const label = RESIDENCY_OPTIONS.find((r) => r.id === g.residency)?.label || g.residency
+      lines.push(`Updated residency for ${guestDisplayName(g, 0)} → ${label}`)
+    }
+    if (normalizeBand(prev.ageBand) !== normalizeBand(g.ageBand)) {
+      lines.push(`Updated role for ${guestDisplayName(g, 0)} → ${guestRoleLabel(g.ageBand)}`)
+    }
+    if ((prev.age ?? null) !== (g.age ?? null) && g.age != null) {
+      lines.push(`Updated age for ${guestDisplayName(g, 0)} → ${g.age}`)
+    }
+    if ((prev.note || '') !== (g.note || '') || (prev.dietary || '') !== (g.dietary || '')) {
+      lines.push(`Updated notes for ${guestDisplayName(g, 0)}`)
+    }
+  }
+  for (const prev of baseline) {
+    if (!current.some((g) => g.id === prev.id)) {
+      lines.push(`Removed ${guestDisplayName(prev, 0)}`)
+    }
+  }
+  return lines
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
@@ -112,13 +211,18 @@ export function GuestDrawer({ open, onClose, itinerary }: GuestDrawerProps) {
   const [infants, setInfants] = useState(0)
   const [childAges, setChildAges] = useState<(number | '')[]>([])
   const [guests, setGuests] = useState<GuestDetail[]>([])
+  const [baseline, setBaseline] = useState<GuestDetail[]>([])
+  const [baseCounts, setBaseCounts] = useState({ adults: 1, children: 0, infants: 0 })
   const [expandedIdx, setExpandedIdx] = useState(0)
   const [adultsErr, setAdultsErr] = useState('')
   const [childAgesErr, setChildAgesErr] = useState('')
 
   useEffect(() => {
     if (!open) return
-    const saved = getGuestDetails(itinerary.id)
+    const saved = getGuestDetails(itinerary.id).map((g) => ({
+      ...g,
+      ageBand: normalizeBand(g.ageBand as GuestDetail['ageBand'] | 'youth'),
+    }))
     const ad = Math.max(1, itinerary.adults ?? itinerary.paxAdults ?? 1)
     const ch = itinerary.children ?? itinerary.paxChildren ?? 0
     const inf = itinerary.infants ?? 0
@@ -128,22 +232,37 @@ export function GuestDrawer({ open, onClose, itinerary }: GuestDrawerProps) {
     setChildren(ch)
     setInfants(inf)
     setChildAges(ages.map((a) => (a > 0 ? a : ('' as const))))
-    setGuests(
-      buildGuestSlots(
-        ad,
-        ch,
-        inf,
-        ages.filter((a) => a > 0),
-        saved,
-        itinerary.leadFirst,
-        itinerary.leadLast,
-      ),
+    const slots = buildGuestSlots(
+      ad,
+      ch,
+      inf,
+      ages.filter((a) => a > 0),
+      saved,
+      itinerary,
     )
+    setGuests(slots)
+    setBaseline(structuredClone(slots))
+    setBaseCounts({ adults: ad, children: ch, infants: inf })
     setMode('manage')
     setExpandedIdx(0)
     setAdultsErr('')
     setChildAgesErr('')
   }, [open, itinerary, getGuestDetails])
+
+  const pendingLines = useMemo(
+    () =>
+      describePendingChanges(
+        baseline,
+        guests,
+        baseCounts.adults,
+        adults,
+        baseCounts.children,
+        children,
+        baseCounts.infants,
+        infants,
+      ),
+    [baseline, guests, baseCounts, adults, children, infants],
+  )
 
   const childAgeRows = useMemo(
     () =>
@@ -164,15 +283,7 @@ export function GuestDrawer({ open, onClose, itinerary }: GuestDrawerProps) {
   ) {
     const numericAges = ages.map((a) => (typeof a === 'number' ? a : 0)).filter((a) => a > 0)
     setGuests((prev) =>
-      buildGuestSlots(
-        nextAdults,
-        nextChildren,
-        nextInfants,
-        numericAges,
-        prev,
-        itinerary.leadFirst,
-        itinerary.leadLast,
-      ),
+      buildGuestSlots(nextAdults, nextChildren, nextInfants, numericAges, prev, itinerary),
     )
   }
 
@@ -199,7 +310,26 @@ export function GuestDrawer({ open, onClose, itinerary }: GuestDrawerProps) {
   }
 
   function patchGuest(index: number, patch: Partial<GuestDetail>) {
-    setGuests((prev) => prev.map((g, i) => (i === index ? { ...g, ...patch } : g)))
+    setGuests((prev) =>
+      prev.map((g, i) => {
+        if (i !== index) return g
+        const next = { ...g, ...patch }
+        if (patch.ageBand) next.ageBand = normalizeBand(patch.ageBand)
+        return next
+      }),
+    )
+  }
+
+  function discardPending() {
+    setAdults(baseCounts.adults)
+    setChildren(baseCounts.children)
+    setInfants(baseCounts.infants)
+    const ages = (itinerary.childAges || []).slice(0, baseCounts.children)
+    while (ages.length < baseCounts.children) ages.push(0)
+    setChildAges(ages.map((a) => (a > 0 ? a : ('' as const))))
+    setGuests(structuredClone(baseline))
+    setAdultsErr('')
+    setChildAgesErr('')
   }
 
   function handleSave() {
@@ -222,11 +352,17 @@ export function GuestDrawer({ open, onClose, itinerary }: GuestDrawerProps) {
       infants,
       numericAges.filter((a) => a > 0),
       guests,
-      itinerary.leadFirst,
-      itinerary.leadLast,
-    ).map((g, i) => guests[i] || g)
+      itinerary,
+    ).map((g, i) => ({ ...g, ...(guests[i] || {}), ageBand: normalizeBand(guests[i]?.ageBand || g.ageBand) }))
 
     saveGuestDetails(itinerary.id, finalGuests)
+
+    const citizen = (band: GuestDetail['ageBand']) =>
+      finalGuests.filter((g) => g.ageBand === band && g.residency === 'citizen').length
+    const res = (band: GuestDetail['ageBand']) =>
+      finalGuests.filter((g) => g.ageBand === band && g.residency === 'resident').length
+    const nonRes = (band: GuestDetail['ageBand']) =>
+      finalGuests.filter((g) => g.ageBand === band && g.residency === 'nonResident').length
 
     const lead = finalGuests.find((g) => g.lead) || finalGuests[0]
     upsertItinerary({
@@ -236,6 +372,15 @@ export function GuestDrawer({ open, onClose, itinerary }: GuestDrawerProps) {
       infants,
       paxAdults: adults,
       paxChildren: children,
+      adultsCitizen: citizen('adult'),
+      adultsRes: res('adult'),
+      adultsNonRes: nonRes('adult'),
+      childrenCitizen: citizen('child'),
+      childrenRes: res('child'),
+      childrenNonRes: nonRes('child'),
+      infantsCitizen: citizen('infant'),
+      infantsRes: res('infant'),
+      infantsNonRes: nonRes('infant'),
       childAges: numericAges.slice(0, children),
       leadFirst: lead?.firstName || itinerary.leadFirst,
       leadLast: lead?.lastName || itinerary.leadLast,
@@ -279,7 +424,7 @@ export function GuestDrawer({ open, onClose, itinerary }: GuestDrawerProps) {
         </div>
         <div className="h-px shrink-0 border-t border-dashed border-[#E5E7EB]" />
 
-        <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-hidden border-x border-[#E5E7EB] bg-white p-6 shadow-sm">
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden border-x border-[#E5E7EB] bg-white p-6 shadow-sm">
           <div className="flex shrink-0 overflow-hidden rounded-md border border-[#E5E7EB]">
             <button type="button" className={modeBtn(mode === 'manage')} onClick={() => setMode('manage')}>
               Manage
@@ -288,6 +433,31 @@ export function GuestDrawer({ open, onClose, itinerary }: GuestDrawerProps) {
               Assign
             </button>
           </div>
+
+          {pendingLines.length > 0 ? (
+            <div className="shrink-0 rounded-lg border border-[#BFDBFE] bg-[#EFF6FF] p-3">
+              <div className="mb-1.5 flex items-center justify-between gap-2">
+                <span className="text-[12.5px] font-bold text-[#1D4ED8]">
+                  Pending changes ({pendingLines.length})
+                </span>
+                <button
+                  type="button"
+                  onClick={discardPending}
+                  className="border-0 bg-transparent p-0 text-[12px] font-semibold text-[#0369A1]"
+                >
+                  Discard all
+                </button>
+              </div>
+              <ul className="m-0 list-disc space-y-0.5 pl-4 text-[11.5px] text-[#1E3A8A]">
+                {pendingLines.slice(0, 5).map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+                {pendingLines.length > 5 ? (
+                  <li>+{pendingLines.length - 5} more</li>
+                ) : null}
+              </ul>
+            </div>
+          ) : null}
 
           <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
             {mode === 'manage' ? (
@@ -339,12 +509,12 @@ export function GuestDrawer({ open, onClose, itinerary }: GuestDrawerProps) {
                                 <SelectValue placeholder="Select" />
                               </SelectTrigger>
                               <SelectContent>
-                              <SelectItem value="__none__">Select</SelectItem>
-                              {AGE_OPTIONS.map((opt) => (
-                                <SelectItem key={opt} value={String(opt)}>
-                                  {opt}
-                                </SelectItem>
-                              ))}
+                                <SelectItem value="__none__">Select</SelectItem>
+                                {AGE_OPTIONS.map((opt) => (
+                                  <SelectItem key={opt} value={String(opt)}>
+                                    {opt}
+                                  </SelectItem>
+                                ))}
                               </SelectContent>
                             </Select>
                           </div>
@@ -376,13 +546,8 @@ export function GuestDrawer({ open, onClose, itinerary }: GuestDrawerProps) {
                 const expanded = expandedIdx === i
                 const label = g.lead
                   ? 'Lead Traveler'
-                  : g.ageBand === 'infant'
-                    ? `Infant ${i}`
-                    : g.ageBand === 'child' || g.ageBand === 'youth'
-                      ? `Child ${i}`
-                      : `Guest ${i + 1}`
-                const isChildLike =
-                  g.ageBand === 'child' || g.ageBand === 'youth' || g.ageBand === 'infant'
+                  : `${guestRoleLabel(g.ageBand)} ${i + 1}`
+                const isInfant = g.ageBand === 'infant'
                 return (
                   <div key={g.id} className="flex flex-col gap-4">
                     {i > 0 ? <div className="h-px border-t border-dashed border-[#E5E7EB]" /> : null}
@@ -391,7 +556,12 @@ export function GuestDrawer({ open, onClose, itinerary }: GuestDrawerProps) {
                       onClick={() => setExpandedIdx(expanded ? -1 : i)}
                       className="flex w-full items-center justify-between border-0 bg-transparent p-0 text-left"
                     >
-                      <span className="text-base font-semibold text-[#171717]">{label}</span>
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className="truncate text-base font-semibold text-[#171717]">{label}</span>
+                        <span className="shrink-0 rounded bg-[#F3F4F6] px-1.5 py-0.5 text-[10px] font-bold uppercase text-[#525252]">
+                          {guestRoleLabel(g.ageBand)}
+                        </span>
+                      </span>
                       <svg
                         width="24"
                         height="24"
@@ -406,7 +576,7 @@ export function GuestDrawer({ open, onClose, itinerary }: GuestDrawerProps) {
                     </button>
                     {expanded ? (
                       <div className="flex flex-col gap-3">
-                        {!isChildLike || g.ageBand === 'youth' ? (
+                        {!isInfant ? (
                           <div className="flex overflow-hidden rounded-md">
                             {SALUTATIONS.map((s) => (
                               <button
@@ -439,6 +609,47 @@ export function GuestDrawer({ open, onClose, itinerary }: GuestDrawerProps) {
                             className={inputClass}
                           />
                         </Field>
+                        {!g.lead ? (
+                          <Field label="Role">
+                            <div className="flex overflow-hidden rounded-md">
+                              {ROLE_OPTIONS.map((role) => (
+                                <button
+                                  key={role.id}
+                                  type="button"
+                                  disabled={g.lead && role.id !== 'adult'}
+                                  onClick={() => patchGuest(i, { ageBand: role.id })}
+                                  className={cn(
+                                    'h-9 flex-1 text-sm font-semibold',
+                                    g.ageBand === role.id
+                                      ? 'bg-[#931115] text-white'
+                                      : 'bg-[#F3F4F6] text-[#171717]',
+                                  )}
+                                >
+                                  {role.label}
+                                </button>
+                              ))}
+                            </div>
+                          </Field>
+                        ) : null}
+                        <Field label="Residency">
+                          <Select
+                            value={g.residency || 'resident'}
+                            onValueChange={(value) =>
+                              patchGuest(i, { residency: value as GuestResidency })
+                            }
+                          >
+                            <SelectTrigger className={inputClass}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {RESIDENCY_OPTIONS.map((opt) => (
+                                <SelectItem key={opt.id} value={opt.id}>
+                                  {opt.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </Field>
                         {g.lead ? (
                           <Field label="DOB">
                             <DatePickerGridInput
@@ -461,17 +672,22 @@ export function GuestDrawer({ open, onClose, itinerary }: GuestDrawerProps) {
                                 <SelectValue placeholder="Select" />
                               </SelectTrigger>
                               <SelectContent>
-                              <SelectItem value="__none__">Select</SelectItem>
-                              {AGE_OPTIONS.map((opt) => (
-                                <SelectItem key={opt} value={String(opt)}>
-                                  {opt}
-                                </SelectItem>
-                              ))}
+                                <SelectItem value="__none__">Select</SelectItem>
+                                {(g.ageBand === 'infant'
+                                  ? [0, 1]
+                                  : g.ageBand === 'adult'
+                                    ? Array.from({ length: 83 }, (_, n) => n + 18)
+                                    : AGE_OPTIONS
+                                ).map((opt) => (
+                                  <SelectItem key={opt} value={String(opt)}>
+                                    {opt}
+                                  </SelectItem>
+                                ))}
                               </SelectContent>
                             </Select>
                           </Field>
                         )}
-                        {!isChildLike || g.ageBand === 'youth' ? (
+                        {!isInfant ? (
                           <>
                             <Field label="International Flight Details">
                               <input
@@ -525,8 +741,13 @@ export function GuestDrawer({ open, onClose, itinerary }: GuestDrawerProps) {
           </div>
         </div>
 
-        <div className="flex shrink-0 justify-end rounded-b-xl border border-[#E5E7EB] bg-[#F9FAFB] px-6 py-4 shadow-sm">
-          <div className="flex gap-4">
+        <div className="flex shrink-0 flex-col gap-2 rounded-b-xl border border-[#E5E7EB] bg-[#F9FAFB] px-6 py-4 shadow-sm">
+          <p className="m-0 text-[11.5px] font-medium text-[#737373]">
+            {pendingLines.length > 0
+              ? 'Edits are staged as Pending Changes until you Save.'
+              : 'No pending guest changes.'}
+          </p>
+          <div className="flex justify-end gap-4">
             <button
               type="button"
               onClick={onClose}

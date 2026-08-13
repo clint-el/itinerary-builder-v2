@@ -142,7 +142,20 @@ export function buildSeedGuests(it: Itinerary): GuestDetail[] {
   const children = it.children ?? it.paxChildren ?? 0
   const infants = it.infants ?? 0
 
-  for (let i = 0; i < adults; i++) {
+  const adultsCitizen = it.adultsCitizen ?? 0
+  const adultsRes = it.adultsRes ?? Math.max(0, adults - adultsCitizen - (it.adultsNonRes ?? 0))
+  const adultsNonRes = it.adultsNonRes ?? Math.max(0, adults - adultsCitizen - adultsRes)
+  const childrenCitizen = it.childrenCitizen ?? 0
+  const childrenRes = it.childrenRes ?? 0
+  const childrenNonRes =
+    it.childrenNonRes ?? Math.max(0, children - childrenCitizen - childrenRes)
+  const infantsCitizen = it.infantsCitizen ?? 0
+  const infantsRes = it.infantsRes ?? 0
+  const infantsNonRes = it.infantsNonRes ?? Math.max(0, infants - infantsCitizen - infantsRes)
+
+  let adultIdx = 0
+  function pushAdult(residency: GuestDetail['residency']) {
+    const i = adultIdx
     guests.push({
       id: `${it.id}-a${i}`,
       salutation: i === 0 ? lead.salutation || 'Mr' : i % 2 === 0 ? 'Mr' : 'Mrs',
@@ -151,41 +164,62 @@ export function buildSeedGuests(it: Itinerary): GuestDetail[] {
       dob: i === 0 ? '1988-04-12' : undefined,
       ageBand: 'adult',
       age: 30 + i * 3,
+      residency,
       flight: i === 0 ? 'KQ100 / LHR–NBO' : '',
       dietary: i === 0 ? 'No shellfish' : '',
       preferences: i === 0 ? 'Quiet room, high floor' : '',
       note: '',
       lead: i === 0,
     })
+    adultIdx++
   }
+  for (let i = 0; i < adultsCitizen; i++) pushAdult('citizen')
+  for (let i = 0; i < adultsRes; i++) pushAdult('resident')
+  for (let i = 0; i < adultsNonRes; i++) pushAdult('nonResident')
+  // Fallback if counters missing but adults > 0
+  while (adultIdx < adults) pushAdult('resident')
 
-  for (let i = 0; i < children; i++) {
-    const age = ages[i] ?? 8
+  let childIdx = 0
+  function pushChild(residency: GuestDetail['residency']) {
+    const age = ages[childIdx] ?? 8
     guests.push({
-      id: `${it.id}-c${i}`,
+      id: `${it.id}-c${childIdx}`,
       salutation: '',
-      firstName: ['Sam', 'Mia', 'Leo', 'Ava', 'Noah'][i % 5],
+      firstName: ['Sam', 'Mia', 'Leo', 'Ava', 'Noah'][childIdx % 5],
       lastName: lead.last,
-      ageBand: age >= 12 ? 'youth' : 'child',
+      ageBand: 'child',
       age,
+      residency,
       dietary: '',
       preferences: '',
       note: '',
       lead: false,
     })
+    childIdx++
   }
+  for (let i = 0; i < childrenCitizen; i++) pushChild('citizen')
+  for (let i = 0; i < childrenRes; i++) pushChild('resident')
+  for (let i = 0; i < childrenNonRes; i++) pushChild('nonResident')
+  while (childIdx < children) pushChild('resident')
 
-  for (let i = 0; i < infants; i++) {
+  let infantIdx = 0
+  function pushInfant(residency: GuestDetail['residency']) {
     guests.push({
-      id: `${it.id}-i${i}`,
-      firstName: ['Baby', 'Infant'][i % 2],
+      id: `${it.id}-i${infantIdx}`,
+      firstName: ['Baby', 'Infant'][infantIdx % 2],
       lastName: lead.last,
       ageBand: 'infant',
       age: 1,
+      residency,
       note: 'Travel cot required',
       lead: false,
     })
+    infantIdx++
   }
+  for (let i = 0; i < infantsCitizen; i++) pushInfant('citizen')
+  for (let i = 0; i < infantsRes; i++) pushInfant('resident')
+  for (let i = 0; i < infantsNonRes; i++) pushInfant('nonResident')
+  while (infantIdx < infants) pushInfant('resident')
 
   return guests
 }

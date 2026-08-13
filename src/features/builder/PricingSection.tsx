@@ -128,6 +128,7 @@ export function PricingSection({
   pricingRows,
   setPricingRows,
   overrideOn,
+  overrideDisabled = false,
   onToggleOverride,
   overrideModalOpen,
   setOverrideModalOpen,
@@ -145,6 +146,7 @@ export function PricingSection({
   pricingRows: PricingRow[]
   setPricingRows: (rows: PricingRow[]) => void
   overrideOn: boolean
+  overrideDisabled?: boolean
   onToggleOverride: () => void
   overrideModalOpen: boolean
   setOverrideModalOpen: (v: boolean) => void
@@ -282,7 +284,13 @@ export function PricingSection({
         <button
           type="button"
           onClick={onToggleOverride}
-          className="text-[14px] font-semibold text-[#2563EB]"
+          disabled={overrideDisabled && !overrideOn}
+          title={
+            overrideDisabled && !overrideOn
+              ? 'Stay price overrides locked after Invoiced'
+              : undefined
+          }
+          className="text-[14px] font-semibold text-[#2563EB] disabled:cursor-not-allowed disabled:opacity-40"
         >
           {overrideOn ? 'Done' : 'Override Prices'}
         </button>

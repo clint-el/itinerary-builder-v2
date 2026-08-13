@@ -22,8 +22,10 @@ import {
 } from '@/components/ui/select'
 import { AGENCIES } from '@/shared/lib/catalogs'
 import { nextInquiryId } from '@/shared/lib/storage'
+import type { GuestDetail } from '@/shared/lib/types'
 import { cn } from '@/shared/lib/utils'
 import { DateRangePickerInput } from '@/shared/ui/date-picker'
+import { DraftGuestDetailsSheet } from '@/features/guests/DraftGuestDetailsSheet'
 
 interface Props {
   open: boolean
@@ -73,7 +75,7 @@ function Counter({
 }
 
 export function CreateItineraryDialog({ open, onOpenChange, seedTitle = '' }: Props) {
-  const { createItinerary, itineraries } = useStore()
+  const { createItinerary, itineraries, saveGuestDetails } = useStore()
   const navigate = useNavigate()
 
   const [inquiryRef, setInquiryRef] = useState('')
@@ -103,6 +105,8 @@ export function CreateItineraryDialog({ open, onOpenChange, seedTitle = '' }: Pr
   const [childAges, setChildAges] = useState<number[]>([])
 
   const [errors, setErrors] = useState<string[]>([])
+  const [draftGuests, setDraftGuests] = useState<GuestDetail[]>([])
+  const [guestSheetOpen, setGuestSheetOpen] = useState(false)
 
   const agencyBoxRef = useRef<HTMLDivElement>(null)
 
@@ -135,6 +139,8 @@ export function CreateItineraryDialog({ open, onOpenChange, seedTitle = '' }: Pr
     setInfantsNonRes(0)
     setChildAges([])
     setErrors([])
+    setDraftGuests([])
+    setGuestSheetOpen(false)
   }, [open, seedTitle])
 
   useEffect(() => {
@@ -240,6 +246,9 @@ export function CreateItineraryDialog({ open, onOpenChange, seedTitle = '' }: Pr
       infantsNonRes,
       childAges: childAges.slice(0, childrenTotal),
     })
+    if (draftGuests.length > 0) {
+      saveGuestDetails(created.id, draftGuests)
+    }
     onOpenChange(false)
     navigate(`/build/${created.id}`)
   }
@@ -414,6 +423,7 @@ export function CreateItineraryDialog({ open, onOpenChange, seedTitle = '' }: Pr
             </div>
 
             <div className="flex flex-col gap-3">
+
               <div className="rounded-lg border p-3.5">
                 <div className="mb-3 flex items-baseline justify-between">
                   <Label>
@@ -504,6 +514,33 @@ export function CreateItineraryDialog({ open, onOpenChange, seedTitle = '' }: Pr
           </DialogFooter>
         </form>
       </DialogContent>
+
+      <DraftGuestDetailsSheet
+        open={guestSheetOpen}
+        onClose={() => setGuestSheetOpen(false)}
+        input={{
+          title: title.trim() || 'Untitled Itinerary',
+          agency,
+          agent,
+          leadFirst: leadFirst.trim(),
+          leadLast: leadLast.trim(),
+          destinations: [],
+          travelDateFrom,
+          travelDateTo: travelDateTo || travelDateFrom,
+          adultsCitizen,
+          adultsRes,
+          adultsNonRes,
+          childrenCitizen,
+          childrenRes,
+          childrenNonRes,
+          infantsCitizen,
+          infantsRes,
+          infantsNonRes,
+          childAges: childAges.slice(0, childrenTotal),
+        }}
+        guests={draftGuests}
+        onChange={setDraftGuests}
+      />
     </Dialog>
   )
 }

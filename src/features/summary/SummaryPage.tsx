@@ -1,20 +1,33 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { CalendarDays, ChevronLeft, ChevronRight, FileText, List, Ticket } from 'lucide-react'
+import { CalendarDays, ChevronLeft, ChevronRight, FileText, History, List, Lock, Ticket } from 'lucide-react'
 import { useStore } from '@/app/store'
+import {
+  GuestDetailsSheet,
+  GuestsToolbarButton,
+  guestIssueHint,
+} from '@/features/guests/GuestDetailsSheet'
 import { Button } from '@/components/ui/button'
 import {
   isBuilderStatus,
   isTerminalStatus,
   nightsBetween,
   partyGuests,
+  statusMeta,
   transitions,
 } from '@/shared/lib/helpers'
+import {
+  evaluateTransition,
+  isStructureLocked,
+  itineraryCommercialFp,
+  roleAllowsVoucherAction,
+} from '@/shared/lib/lifecycleRules'
 import type { LifecycleTransition } from '@/shared/lib/types'
 import { cn, formatDay } from '@/shared/lib/utils'
 import { StatusChip } from '@/shared/ui/StatusChip'
 import {
   buildDepositSummary,
+  buildLifecycleActivityLog,
   buildPaymentHistory,
   buildSummaryCards,
   buildSummaryDays,
@@ -72,17 +85,27 @@ function headerClass(align: 'l' | 'c' | 'r', dense: boolean) {
 export function SummaryPage() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
-  const { itineraries, getServices, getQuoteGroups, getGuestDetails, updateStatus } = useStore()
+  const {
+    itineraries,
+    getServices,
+    getQuoteGroups,
+    getGuestDetails,
+    applyLifecycleTransition,
+    confirmSupplierVoucher,
+    rejectSupplierVoucher,
+    demoRole,
+  } = useStore()
   const itinerary = itineraries.find((it) => it.id === id)
   const services = getServices(id)
   const quoteGroups = getQuoteGroups(id)
-  const [view, setView] = useState<'summary' | 'byday' | 'vouchers'>('summary')
+  const [view, setView] = useState<'summary' | 'byday' | 'vouchers' | 'activity'>('summary')
   const [priceMode, setPriceMode] = useState<PriceDisplayMode>('all')
   const [openPriceGroups, setOpenPriceGroups] = useState<Record<string, boolean>>({})
   const [depositsOpen, setDepositsOpen] = useState(false)
   const [voucherMode, setVoucherMode] = useState<VoucherValueMode>('cost')
   const [issued, setIssued] = useState<Record<string, boolean>>({})
   const [flash, setFlash] = useState<string | null>(null)
+  const [guestSheetOpen, setGuestSheetOpen] = useState(false)
   const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(
@@ -92,15 +115,49 @@ export function SummaryPage() {
     [],
   )
 
+  const guestDetails = useMemo(() => getGuestDetails(id), [getGuestDetails, id])
   const guests = useMemo(
-    () => (itinerary ? partyGuests(itinerary, getGuestDetails(id)) : []),
-    [itinerary, id, getGuestDetails],
+    () => (itinerary ? partyGuests(itinerary, guestDetails) : []),
+    [itinerary, guestDetails],
   )
 
   const lifecycle = useMemo(
     () => (itinerary ? transitions(itinerary.status) : []),
     [itinerary],
   )
+
+  const gatedLifecycle = useMemo(() => {
+    if (!itinerary) return []
+    return lifecycle.map((t) => {
+      const generating =
+        t.to === 'QUOTED' && itinerary.status === 'PREPARED'
+          ? ('quote' as const)
+          : t.to === 'INVOICED' && itinerary.status === 'APPROVED'
+            ? ('invoice' as const)
+            : undefined
+      const gate = evaluateTransition(itinerary, services, t.to, {
+        role: demoRole,
+        generating,
+      })
+      return { ...t, gate }
+    })
+  }, [itinerary, lifecycle, services, demoRole])
+
+  const docHint = useMemo(() => {
+    if (!itinerary) return null
+    const fp = itineraryCommercialFp(services)
+    if (itinerary.status === 'PREPARED' || itinerary.status === 'QUOTED') {
+      if (!itinerary.quoteFingerprint) return 'Quote snapshot not generated yet'
+      if (itinerary.quoteFingerprint !== fp) return 'Quote snapshot is out of date'
+      return 'Quote snapshot matches current lines'
+    }
+    if (itinerary.status === 'APPROVED' || itinerary.status === 'INVOICED') {
+      if (!itinerary.invoiceFingerprint) return 'Invoice snapshot not generated yet'
+      if (itinerary.invoiceFingerprint !== fp) return 'Invoice snapshot is out of date'
+      return 'Invoice snapshot matches current lines'
+    }
+    return null
+  }, [itinerary, services])
 
   const lines = useMemo(() => {
     if (services.length > 0) return linesFromServices(services, guests)
@@ -128,10 +185,21 @@ export function SummaryPage() {
   const vouchers = useMemo(
     () =>
       view === 'vouchers'
-        ? buildVouchers(lines, voucherMode, itinerary?.reference || itinerary?.id || 'CPS', issued)
+        ? buildVouchers(
+            lines,
+            voucherMode,
+            itinerary?.reference || itinerary?.id || 'CPS',
+            issued,
+            itinerary?.supplierVouchers || {},
+          )
         : [],
-    [view, lines, voucherMode, itinerary?.reference, itinerary?.id, issued],
+    [view, lines, voucherMode, itinerary?.reference, itinerary?.id, itinerary?.supplierVouchers, issued],
   )
+  const activityLog = useMemo(
+    () => buildLifecycleActivityLog(itinerary?.lifecycleLog),
+    [itinerary?.lifecycleLog],
+  )
+  const showSidePanel = view !== 'vouchers' && view !== 'activity'
   const holdRollup = useMemo(() => holdsSummaryOf(lines), [lines])
   const byDaySections = useMemo(() => {
     const keys = [...new Set(lines.map((line) => line.date || 'undated'))].sort()
@@ -194,16 +262,36 @@ export function SummaryPage() {
 
   const nextHint = isTerminalStatus(itinerary.status)
     ? 'This itinerary is in a terminal state.'
-    : lifecycle.length
+    : gatedLifecycle.length
       ? 'Choose the next step.'
       : 'No manual transitions available.'
 
-  function applyTransition(t: LifecycleTransition) {
-    if (t.reason) {
-      const reason = window.prompt(`Reason for: ${t.label}`)
-      if (reason == null || !reason.trim()) return
+  function applyTransition(t: LifecycleTransition & { gate?: { ok: boolean; reason?: string } }) {
+    if (t.gate && !t.gate.ok) {
+      showFlash(t.gate.reason || 'Transition blocked')
+      return
     }
-    updateStatus(id, t.to)
+    let reason: string | undefined
+    if (t.reason) {
+      const entered = window.prompt(`Reason for: ${t.label}`)
+      if (entered == null || !entered.trim()) return
+      reason = entered.trim()
+    }
+    const generating =
+      t.to === 'QUOTED' && itinerary!.status === 'PREPARED'
+        ? ('quote' as const)
+        : t.to === 'INVOICED' && itinerary!.status === 'APPROVED'
+          ? ('invoice' as const)
+          : undefined
+    const result = applyLifecycleTransition(id, t.to, { reason, generating })
+    if (!result.ok) {
+      showFlash(result.reason)
+      return
+    }
+    if (t.to === 'VOUCHERED') {
+      showFlash('Vouchers auto-raised for suppliers')
+      setView('vouchers')
+    }
     if (isBuilderStatus(t.to)) navigate(`/build/${id}`)
   }
 
@@ -216,6 +304,24 @@ export function SummaryPage() {
   function issueVoucher(card: VoucherCard) {
     setIssued((current) => ({ ...current, [card.supplier]: true }))
     showFlash(`Voucher ${card.ref} issued to ${card.supplier}`)
+  }
+
+  function onConfirmVoucher(card: VoucherCard) {
+    const result = confirmSupplierVoucher(id, card.supplier)
+    if (!result.ok) {
+      showFlash(result.reason)
+      return
+    }
+    showFlash(`${card.supplier} confirmed — lines Booked`)
+  }
+
+  function onRejectVoucher(card: VoucherCard) {
+    const result = rejectSupplierVoucher(id, card.supplier)
+    if (!result.ok) {
+      showFlash(result.reason)
+      return
+    }
+    showFlash(`${card.supplier} rejected — resolve before advancing`)
   }
 
   const tabClass = (active: boolean) =>
@@ -265,6 +371,12 @@ export function SummaryPage() {
                 {holdRollup.chip}
               </span>
               <StatusChip status={itinerary.status} />
+              {isStructureLocked(itinerary.status) ? (
+                <span className="inline-flex h-[26px] items-center gap-1.5 whitespace-nowrap rounded-full bg-[#FEF3C7] px-3 text-[12px] font-bold text-[#B45309]">
+                  <Lock className="size-3" />
+                  Structure locked
+                </span>
+              ) : null}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3 xl:grid-cols-6">
@@ -295,8 +407,12 @@ export function SummaryPage() {
               <Ticket className="size-3.5" />
               Vouchers
             </button>
+            <button type="button" className={tabClass(view === 'activity')} onClick={() => setView('activity')}>
+              <History className="size-3.5" />
+              Activity
+            </button>
           </div>
-          {view !== 'vouchers' ? (
+          {showSidePanel ? (
             <div className="flex items-center gap-2.5">
               <span className="text-[11.5px] font-semibold text-[#A1A1A1]">Values shown</span>
               <div className="flex gap-0.5 rounded-[9px] border border-[#E5E7EB] bg-[#F3F4F6] p-0.5">
@@ -323,7 +439,65 @@ export function SummaryPage() {
 
         <div className="flex items-start gap-4">
           <main className="min-w-0 flex-1 space-y-4">
-            {lines.length === 0 ? (
+            {view === 'activity' ? (
+              activityLog.length === 0 ? (
+                <div className="rounded-[14px] border border-[#E5E7EB] bg-white p-8 text-center text-sm text-muted-foreground">
+                  No status changes yet. Lifecycle transitions will appear here.
+                </div>
+              ) : (
+                <section className="rounded-[14px] border border-[#E5E7EB] bg-white px-5 py-4">
+                  <h2 className="mb-3 text-[15px] font-bold text-[#171717]">Lifecycle activity</h2>
+                  <ul className="flex flex-col">
+                    {activityLog.map((entry) => {
+                      const fromMeta = statusMeta(entry.from)
+                      const toMeta = statusMeta(entry.to)
+                      const when = new Date(entry.at)
+                      const whenLabel = Number.isNaN(when.getTime())
+                        ? entry.at
+                        : when.toLocaleString(undefined, {
+                            dateStyle: 'medium',
+                            timeStyle: 'short',
+                          })
+                      return (
+                        <li
+                          key={entry.id}
+                          className="border-b border-[#F3F4F6] py-3.5 last:border-0"
+                        >
+                          <div className="flex flex-wrap items-baseline justify-between gap-2">
+                            <div className="text-[13.5px] font-semibold text-[#171717]">
+                              {entry.label || `Move to ${toMeta.label}`}
+                            </div>
+                            <div className="text-[11.5px] text-[#A1A1A1]">{whenLabel}</div>
+                          </div>
+                          <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[12.5px] text-[#525252]">
+                            <span
+                              className="rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                              style={{ background: fromMeta.bg, color: fromMeta.fg }}
+                            >
+                              {fromMeta.label}
+                            </span>
+                            <span className="text-[#A1A1A1]">→</span>
+                            <span
+                              className="rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                              style={{ background: toMeta.bg, color: toMeta.fg }}
+                            >
+                              {toMeta.label}
+                            </span>
+                            <span className="text-[#A1A1A1]">·</span>
+                            <span>{entry.actor}</span>
+                          </div>
+                          {entry.reason ? (
+                            <p className="mt-2 text-[12.5px] leading-snug text-[#737373]">
+                              Reason: {entry.reason}
+                            </p>
+                          ) : null}
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </section>
+              )
+            ) : lines.length === 0 ? (
               <div className="rounded-[14px] border border-[#E5E7EB] bg-white p-8 text-center text-sm text-muted-foreground">
                 No services added yet.
               </div>
@@ -335,6 +509,16 @@ export function SummaryPage() {
                 depositTotal={deposits.depositTotal}
                 valueModeClass={valueModeClass}
                 onIssue={issueVoucher}
+                onConfirm={onConfirmVoucher}
+                onReject={onRejectVoucher}
+                canConfirm={roleAllowsVoucherAction(demoRole, 'confirm')}
+                canReject={roleAllowsVoucherAction(demoRole, 'reject')}
+                raised={
+                  itinerary.status === 'VOUCHERED' ||
+                  itinerary.status === 'CONFIRMED' ||
+                  itinerary.status === 'TRAVEL_IN_PROGRESS' ||
+                  itinerary.status === 'COMPLETED'
+                }
               />
             ) : view === 'summary' ? (
               cards.map((c) => <ServiceCard key={c.type} card={c} priceMode={priceMode} />)
@@ -363,7 +547,7 @@ export function SummaryPage() {
             )}
           </main>
 
-          {view !== 'vouchers' ? (
+          {showSidePanel ? (
           <aside className="sticky top-4 w-[330px] shrink-0">
             <section className="rounded-[14px] border border-[#E5E7EB] bg-white px-[22px] py-5">
               <h2 className="mb-3.5 text-[16px] font-bold text-[#171717]">Pricing</h2>
@@ -482,7 +666,7 @@ export function SummaryPage() {
           ) : null}
         </div>
 
-        {view !== 'vouchers' && lines.length > 0 ? (
+        {showSidePanel && lines.length > 0 ? (
           <aside className="w-full">
             <section className="rounded-[14px] border border-[#E5E7EB] bg-white px-[22px] py-5">
               <div className="mb-3.5 flex items-baseline justify-between gap-3">
@@ -579,6 +763,11 @@ export function SummaryPage() {
             <ChevronLeft />
             Back to editing
           </Button>
+          <GuestsToolbarButton
+            count={guestDetails.length || guests.length}
+            hasIssues={guestIssueHint(guestDetails)}
+            onClick={() => setGuestSheetOpen(true)}
+          />
           {lines.length > 0 ? (
             <Button variant="outline" onClick={() => navigate(`/quote-doc/${id}`)}>
               <FileText />
@@ -586,22 +775,36 @@ export function SummaryPage() {
             </Button>
           ) : null}
           <StatusChip status={itinerary.status} />
-          <span className="truncate">{nextHint}</span>
+          {isStructureLocked(itinerary.status) ? (
+            <span className="inline-flex h-6 items-center gap-1.5 rounded-[7px] bg-[#FEF3C7] px-2.5 text-[11.5px] font-semibold text-[#B45309]">
+              <Lock className="size-3" />
+              Structure locked
+            </span>
+          ) : null}
+          <span className="min-w-0 truncate">
+            {nextHint}
+            {docHint ? <span className="text-[#A1A1A1]"> · {docHint}</span> : null}
+          </span>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
-          {lifecycle.length === 0 ? (
+          {gatedLifecycle.length === 0 ? (
             <span className="text-[13px] italic text-[#A1A1A1]">No further actions in this state.</span>
           ) : (
-            lifecycle.map((t) => (
-              <Button
-                key={t.to}
-                className={transitionButtonClass(t)}
-                variant={t.primary ? 'default' : 'outline'}
-                onClick={() => applyTransition(t)}
-              >
-                {t.label}
-              </Button>
-            ))
+            gatedLifecycle.map((t) => {
+              const blocked = !t.gate.ok
+              return (
+                <Button
+                  key={t.to}
+                  className={cn(transitionButtonClass(t), blocked && 'opacity-45')}
+                  variant={t.primary ? 'default' : 'outline'}
+                  disabled={blocked}
+                  title={blocked && !t.gate.ok ? t.gate.reason : undefined}
+                  onClick={() => applyTransition(t)}
+                >
+                  {t.label}
+                </Button>
+              )
+            })
           )}
         </div>
       </div>
@@ -611,6 +814,14 @@ export function SummaryPage() {
           <span className="text-[#00D492]">✓</span>
           {flash}
         </div>
+      ) : null}
+
+      {itinerary ? (
+        <GuestDetailsSheet
+          open={guestSheetOpen}
+          onClose={() => setGuestSheetOpen(false)}
+          itinerary={itinerary}
+        />
       ) : null}
     </div>
   )
@@ -623,6 +834,11 @@ function VouchersView({
   depositTotal,
   valueModeClass,
   onIssue,
+  onConfirm,
+  onReject,
+  canConfirm,
+  canReject,
+  raised,
 }: {
   vouchers: VoucherCard[]
   mode: VoucherValueMode
@@ -630,6 +846,11 @@ function VouchersView({
   depositTotal: string
   valueModeClass: (active: boolean) => string
   onIssue: (card: VoucherCard) => void
+  onConfirm: (card: VoucherCard) => void
+  onReject: (card: VoucherCard) => void
+  canConfirm: boolean
+  canReject: boolean
+  raised: boolean
 }) {
   const totalLabel = mode === 'sell' ? 'Total sell value' : 'Total payable to suppliers'
   const totalValue =
@@ -709,27 +930,48 @@ function VouchersView({
                 </div>
               </div>
             </div>
-            <div className="flex shrink-0 items-center gap-3.5">
+            <div className="flex shrink-0 items-center gap-2">
               {v.showValue ? (
-                <div className="text-right">
+                <div className="mr-1.5 text-right">
                   <div className="text-[10.5px] font-bold uppercase tracking-[0.3px] text-[#A1A1A1]">
                     {v.totalLabel}
                   </div>
                   <div className="text-[16px] font-bold text-[#171717]">{v.total}</div>
                 </div>
               ) : null}
-              <button
-                type="button"
-                onClick={() => onIssue(v)}
-                className={cn(
-                  'h-[34px] rounded-lg px-3.5 text-[13px] font-semibold',
-                  v.issued
-                    ? 'border border-[#E5E7EB] bg-white text-[#737373]'
-                    : 'border border-[#931115] bg-[#931115] text-white',
-                )}
-              >
-                {v.issued ? 'Re-issue voucher' : 'Issue voucher'}
-              </button>
+              {raised ? (
+                <>
+                  <button
+                    type="button"
+                    disabled={!canConfirm || v.voucherStatus === 'Confirmed'}
+                    onClick={() => onConfirm(v)}
+                    className="h-[34px] rounded-lg border border-[#15803D] bg-[#DCFCE7] px-3 text-[12.5px] font-semibold text-[#15803D] disabled:opacity-40"
+                  >
+                    Confirm
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!canReject || v.voucherStatus === 'Rejected'}
+                    onClick={() => onReject(v)}
+                    className="h-[34px] rounded-lg border border-[#B91C1C] bg-[#FEE2E2] px-3 text-[12.5px] font-semibold text-[#B91C1C] disabled:opacity-40"
+                  >
+                    Reject
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => onIssue(v)}
+                  className={cn(
+                    'h-[34px] rounded-lg px-3.5 text-[13px] font-semibold',
+                    v.issued
+                      ? 'border border-[#E5E7EB] bg-white text-[#737373]'
+                      : 'border border-[#931115] bg-[#931115] text-white',
+                  )}
+                >
+                  {v.issued ? 'Re-issue voucher' : 'Issue voucher'}
+                </button>
+              )}
             </div>
           </div>
 

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useStore } from '@/app/store'
+import { GuestDetailsSheet } from '@/features/guests/GuestDetailsSheet'
 import { AddServiceOverlay } from '@/features/quote/AddServiceOverlay'
-import { GuestDrawer } from '@/features/quote/GuestDrawer'
 import { PriceModal } from '@/features/quote/PriceModal'
 import { STATUS_META } from '@/shared/lib/catalogs'
 import { marginFromSell, nightsBetween, quoteGroupsTotal } from '@/shared/lib/helpers'
@@ -89,7 +89,6 @@ export function QuotePage() {
   const [tab, setTab] = useState<QuoteTab>('itinerary')
   const [groups, setGroups] = useState<QuoteGroup[]>([])
   const [addOpen, setAddOpen] = useState(false)
-  const [guestOpen, setGuestOpen] = useState(false)
   const [priceOpen, setPriceOpen] = useState(false)
   const [dragGroupId, setDragGroupId] = useState<string | null>(null)
   const [dragOverGroupId, setDragOverGroupId] = useState<string | null>(null)
@@ -216,15 +215,17 @@ export function QuotePage() {
 
   function handlePrepared() {
     // Only promote Draft → Prepared; never regress later lifecycle states.
-    if (itinerary?.status === 'DRAFT') updateStatus(id, 'PREPARED')
+    if (itinerary?.status === 'DRAFT') {
+      const result = updateStatus(id, 'PREPARED')
+      if (!result.ok) {
+        window.alert(result.reason)
+        return
+      }
+    }
     navigate(`/summary/${id}`)
   }
 
   function onTabClick(next: QuoteTab) {
-    if (next === 'guests') {
-      setGuestOpen(true)
-      return
-    }
     setTab(next)
   }
 
@@ -271,9 +272,7 @@ export function QuotePage() {
                 onClick={() => onTabClick(t.id)}
                 className={cn(
                   'h-7 flex-1 whitespace-nowrap rounded-lg border-0 text-sm font-semibold',
-                  tab === t.id && t.id !== 'guests'
-                    ? 'bg-[#931115] text-white'
-                    : 'bg-transparent text-[#171717]',
+                  tab === t.id ? 'bg-[#931115] text-white' : 'bg-transparent text-[#171717]',
                 )}
               >
                 {t.label}
@@ -414,6 +413,8 @@ export function QuotePage() {
                 </div>
               </div>
             </>
+          ) : tab === 'guests' ? (
+            <GuestDetailsSheet open inline itinerary={itinerary} onClose={() => setTab('itinerary')} />
           ) : (
             <div className="flex flex-1 items-center justify-center p-10 text-sm text-[#A1A1A1]">
               {tab === 'activity' && 'Activity log coming soon.'}
@@ -465,7 +466,6 @@ export function QuotePage() {
         defaultStart={itinerary.travelDateFrom}
         defaultEnd={itinerary.travelDateTo}
       />
-      <GuestDrawer open={guestOpen} onClose={() => setGuestOpen(false)} itinerary={itinerary} />
       <PriceModal
         open={priceOpen}
         onClose={() => setPriceOpen(false)}

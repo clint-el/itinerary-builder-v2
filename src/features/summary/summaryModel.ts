@@ -1,6 +1,6 @@
 import { nightsBetween, parseMoney, rackOf } from '@/shared/lib/helpers'
 import { applyOfferToCostAndSell, roomTypeLabel } from '@/shared/lib/catalogs'
-import type { AddedService, Guest, Hold, QuoteGroup, ServiceTab } from '@/shared/lib/types'
+import type { AddedService, Guest, Hold, LifecycleLogEntry, QuoteGroup, ServiceTab } from '@/shared/lib/types'
 import {
   asActivities,
   asHireRoutes,
@@ -1421,6 +1421,7 @@ export type VoucherCard = {
   depositRule: string
   depositDue: string
   issued: boolean
+  voucherStatus?: 'Raised' | 'Confirmed' | 'Rejected' | null
 }
 
 function voucherDesc(l: SummaryLine) {
@@ -1484,6 +1485,7 @@ export function buildVouchers(
   mode: VoucherValueMode,
   metaRef: string,
   issued: Record<string, boolean> = {},
+  supplierVouchers: Record<string, 'Raised' | 'Confirmed' | 'Rejected'> = {},
 ): VoucherCard[] {
   const show = mode !== 'none'
   const bySup = new Map<string, SummaryLine[]>()
@@ -1501,15 +1503,20 @@ export function buildVouchers(
     const rule = depositRuleFor(name)
     const first = sorted.find((l) => l.date)?.date || ''
     const last = [...sorted].reverse().find((l) => l.date)?.date || first
-    const isIssued = !!issued[name]
+    const voucherStatus = supplierVouchers[name] || null
+    const isIssued = !!issued[name] || !!voucherStatus
     const holds = sorted.map((l) => l.hold)
-    const [holdLabel, holdFg, holdBg] = isIssued
-      ? (['Voucher issued', '#15803D', '#DCFCE7'] as const)
-      : holds.includes('requested')
-        ? (['Hold requested', '#B45309', '#FEF3C7'] as const)
-        : holds.includes('held')
-          ? (['On hold', '#0369A1', '#E0F2FE'] as const)
-          : (['No hold', '#A1A1A1', '#F1F5F9'] as const)
+    const [holdLabel, holdFg, holdBg] = voucherStatus === 'Confirmed'
+      ? (['Supplier confirmed', '#15803D', '#DCFCE7'] as const)
+      : voucherStatus === 'Rejected'
+        ? (['Supplier rejected', '#B91C1C', '#FEE2E2'] as const)
+        : voucherStatus === 'Raised' || isIssued
+          ? (['Voucher raised', '#15803D', '#DCFCE7'] as const)
+          : holds.includes('requested')
+            ? (['Hold requested', '#B45309', '#FEF3C7'] as const)
+            : holds.includes('held')
+              ? (['On hold', '#0369A1', '#E0F2FE'] as const)
+              : (['No hold', '#A1A1A1', '#F1F5F9'] as const)
 
     const year = (last || first || '').slice(0, 4) || ''
     const dateRange =
@@ -1543,6 +1550,7 @@ export function buildVouchers(
       depositRule: rule.label,
       depositDue: fmtDepositDue(first, rule),
       issued: isIssued,
+      voucherStatus,
     }
   })
 
@@ -1566,6 +1574,7 @@ export function buildVouchers(
       depositRule: card.depositRule,
       depositDue: card.depositDue,
       issued: card.issued,
+      voucherStatus: card.voucherStatus,
     }))
 }
 
@@ -1637,4 +1646,10 @@ export function buildInclusions(lines: SummaryLine[]): {
   }
 
   return { inclusions, exclusionsBody: EXCLUSIONS_BODY }
+}
+
+/** Newest-first lifecycle status log for the Summary Activity tab. */
+export function buildLifecycleActivityLog(entries: LifecycleLogEntry[] | undefined): LifecycleLogEntry[] {
+  if (!entries?.length) return []
+  return [...entries].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0))
 }

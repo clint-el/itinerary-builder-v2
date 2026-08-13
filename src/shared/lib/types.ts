@@ -22,6 +22,19 @@ export type PaymentStatus =
 
 export type ServiceTab = 'accommodation' | 'transportation' | 'flight' | 'activity' | 'other'
 
+export type LineStatus = 'New' | 'Confirmed' | 'Cancelled'
+
+export type SupplierStatus = 'None' | 'NeedsRequest' | 'Waiting' | 'Booked' | 'Rejected'
+
+export type SupplierVoucherStatus = 'Raised' | 'Confirmed' | 'Rejected'
+
+export type DemoRole =
+  | 'Safari.Planner'
+  | 'Sales.Manager'
+  | 'Operations'
+  | 'Finance'
+  | 'Admin'
+
 export interface Itinerary {
   id: string
   reference: string
@@ -60,6 +73,25 @@ export interface Itinerary {
   guestsLabel?: string
   creditTerms?: boolean
   financeLocked?: boolean
+  /** Commercial fingerprint covered by the latest generated quote PDF. */
+  quoteFingerprint?: string
+  /** Commercial fingerprint covered by the latest generated invoice. */
+  invoiceFingerprint?: string
+  /** Per-supplier voucher outcome after Invoiced → Vouchered. */
+  supplierVouchers?: Record<string, SupplierVoucherStatus>
+  lastTransitionReason?: string
+  /** Append-only lifecycle status transitions (MVP Activity Log). */
+  lifecycleLog?: LifecycleLogEntry[]
+}
+
+export interface LifecycleLogEntry {
+  id: string
+  at: string
+  actor: string
+  from: ItineraryStatus
+  to: ItineraryStatus
+  label?: string
+  reason?: string
 }
 
 export interface CatalogItem {
@@ -77,8 +109,12 @@ export interface Guest {
   type: 'adult' | 'youth' | 'child' | 'infant'
   age: number
   lead?: boolean
+  /** Derived for R/NR chips: citizen + resident → R; nonResident → NR */
   resident: boolean
+  residency?: GuestResidency
 }
+
+export type GuestResidency = 'citizen' | 'resident' | 'nonResident'
 
 export interface Room {
   id: string
@@ -160,6 +196,11 @@ export interface AddedService {
   initial: string
   expanded: boolean
   draft: Record<string, unknown>
+  lineStatus?: LineStatus
+  supplierStatus?: SupplierStatus
+  /** Commercial fingerprint captured when the line was Confirmed. */
+  confirmedFp?: string
+  opsReady?: boolean
 }
 
 export interface QuoteExtra {
@@ -211,8 +252,10 @@ export interface GuestDetail {
   firstName: string
   lastName: string
   dob?: string
-  ageBand: 'adult' | 'youth' | 'child' | 'infant'
+  /** Role column: Adult / Child / Infant only (12–17 still Role=Child; pricing may treat as youth). */
+  ageBand: 'adult' | 'child' | 'infant'
   age?: number
+  residency?: GuestResidency
   flight?: string
   dietary?: string
   preferences?: string

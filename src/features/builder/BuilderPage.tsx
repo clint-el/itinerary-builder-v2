@@ -12,6 +12,11 @@ import {
   Sparkles,
 } from 'lucide-react'
 import { useStore } from '@/app/store'
+import {
+  GuestDetailsSheet,
+  GuestsToolbarButton,
+  guestIssueHint,
+} from '@/features/guests/GuestDetailsSheet'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -24,6 +29,11 @@ import {
 import { Separator } from '@/components/ui/separator'
 import { PROMOTIONS, TAB_META, defaultDraft, liveSystemPrice } from '@/shared/lib/catalogs'
 import { partyGuests } from '@/shared/lib/helpers'
+import {
+  isPricingLocked,
+  isStructureLocked,
+  roleCanEditBuilder,
+} from '@/shared/lib/lifecycleRules'
 import type { AddedService, ServiceTab } from '@/shared/lib/types'
 import { cn } from '@/shared/lib/utils'
 import { StatusChip } from '@/shared/ui/StatusChip'
@@ -66,18 +76,35 @@ function emptyDrafts(): Record<ServiceTab, Record<string, unknown>> {
 export function BuilderPage() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
-  const { itineraries, getServices, saveServices, updateStatus, getGuestDetails } = useStore()
+  const {
+    itineraries,
+    getServices,
+    saveServices,
+    updateStatus,
+    getGuestDetails,
+    demoRole,
+    confirmServiceLine,
+    resetServiceLine,
+    cancelServiceLine,
+    removeServiceLine,
+  } = useStore()
   const itinerary = itineraries.find((it) => it.id === id)
+  const canEdit = roleCanEditBuilder(demoRole)
+  const structureLocked = itinerary ? isStructureLocked(itinerary.status) : false
+  const pricingLocked = itinerary ? isPricingLocked(itinerary.status) : false
 
+  const guestDetails = useMemo(() => getGuestDetails(id), [getGuestDetails, id])
   const guests = useMemo(
-    () => (itinerary ? partyGuests(itinerary, getGuestDetails(id)) : []),
-    [itinerary, id, getGuestDetails],
+    () => (itinerary ? partyGuests(itinerary, guestDetails) : []),
+    [itinerary, guestDetails],
   )
+  const [guestSheetOpen, setGuestSheetOpen] = useState(false)
 
   const [activeTab, setActiveTab] = useState<ServiceTab>('accommodation')
   const [drafts, setDrafts] = useState(emptyDrafts)
   const [services, setServices] = useState<AddedService[]>([])
   const [seq, setSeq] = useState(1)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [rightPaneWidth, setRightPaneWidth] = useState(340)
 
   const [pricingOverride, setPricingOverride] = useState(false)
@@ -117,6 +144,7 @@ export function BuilderPage() {
 
   function doAdd() {
     if (draftMissingRequirements(activeTab, draft).length > 0) return
+    if (structureLocked && !editingId) return
     const card = buildAddedService(
       activeTab,
       { ...draft, priceOverride: pricingOverride },
@@ -124,9 +152,23 @@ export function BuilderPage() {
       pricingOverride ? pricingRows : undefined,
       guests,
     )
-    const next = sortServicesByDate([...services, card])
+    let next: AddedService[]
+    if (editingId) {
+      const prev = services.find((s) => s.id === editingId)
+      const updated: AddedService = {
+        ...card,
+        id: editingId,
+        lineStatus: prev?.lineStatus ?? card.lineStatus,
+        supplierStatus: prev?.supplierStatus ?? card.supplierStatus,
+        opsReady: prev?.opsReady,
+      }
+      next = sortServicesByDate(services.map((s) => (s.id === editingId ? updated : s)))
+      setEditingId(null)
+    } else {
+      next = sortServicesByDate([...services, card])
+      setSeq((s) => s + 1)
+    }
     setServices(next)
-    setSeq((s) => s + 1)
     setDrafts((prev) => ({ ...prev, [activeTab]: defaultDraft(activeTab) }))
     setPricingOverride(false)
     persist(next)
@@ -134,6 +176,7 @@ export function BuilderPage() {
 
   function addToItinerary() {
     if (draftMissingRequirements(activeTab, draft).length > 0) return
+    if (structureLocked && !editingId) return
     if (
       (activeTab === 'accommodation' || activeTab === 'activity' || activeTab === 'flight') &&
       PROMOTIONS.find((p) => p.id === draft.promotion && p.active)
@@ -150,6 +193,11 @@ export function BuilderPage() {
       ...prev,
       [service.tab]: structuredClone(service.draft || defaultDraft(service.tab)),
     }))
+    if (structureLocked) {
+      setEditingId(service.id)
+      return
+    }
+    setEditingId(null)
     const next = services.filter((s) => s.id !== service.id)
     setServices(next)
     persist(next)
@@ -158,8 +206,52 @@ export function BuilderPage() {
   function completeReview() {
     if (!id) return
     saveServices(id, services)
-    if (itinerary?.status === 'DRAFT') updateStatus(id, 'PREPARED')
+    if (itinerary?.status === 'DRAFT') {
+      const result = updateStatus(id, 'PREPARED')
+      if (!result.ok) {
+        window.alert(result.reason)
+        return
+      }
+    }
     navigate(`/summary/${id}`)
+  }
+
+  function refreshServices() {
+    if (!id) return
+    setServices(getServices(id))
+  }
+
+  function handleConfirmLine(svc: AddedService) {
+    const result = confirmServiceLine(id, svc.id)
+    if (!result.ok) window.alert(result.reason)
+    refreshServices()
+  }
+
+  function handleResetLine(svc: AddedService) {
+    const result = resetServiceLine(id, svc.id)
+    if (!result.ok) window.alert(result.reason)
+    refreshServices()
+  }
+
+  function handleCancelLine(svc: AddedService) {
+    const result = cancelServiceLine(id, svc.id)
+    if (!result.ok) window.alert(result.reason)
+    refreshServices()
+  }
+
+  function handleRemoveLine(svc: AddedService) {
+    if (structureLocked) {
+      window.alert('Structure is locked after Quoted — Return to Draft to add or remove lines')
+      return
+    }
+    const result = removeServiceLine(id, svc.id)
+    if (!result.ok) {
+      window.alert(result.reason)
+      return
+    }
+    const next = services.filter((s) => s.id !== svc.id)
+    setServices(next)
+    if (editingId === svc.id) setEditingId(null)
   }
 
   function startPaneResize(e: React.MouseEvent) {
@@ -191,7 +283,10 @@ export function BuilderPage() {
 
   const promo = PROMOTIONS.find((p) => p.id === draft.promotion)
   const missingRequirements = draftMissingRequirements(activeTab, draft)
-  const canAdd = missingRequirements.length === 0
+  const fieldsReady = missingRequirements.length === 0
+  const canMutateStructure = !structureLocked || Boolean(editingId)
+  const canAdd = fieldsReady && canMutateStructure
+  const addLabel = editingId && structureLocked ? 'Update line' : 'Add to itinerary'
   const draftTotals = computeDraftTotals(
     activeTab,
     { ...draft, priceOverride: pricingOverride },
@@ -233,8 +328,20 @@ export function BuilderPage() {
               Finance locked
             </span>
           ) : null}
+          {structureLocked ? (
+            <span className="inline-flex h-6 items-center gap-1.5 rounded-[7px] bg-[#FEF3C7] px-2.5 text-[11.5px] font-semibold whitespace-nowrap text-[#B45309]">
+              <Lock className="size-3" />
+              Structure locked
+            </span>
+          ) : null}
         </div>
         <div className="flex items-center gap-2.5">
+          <GuestsToolbarButton
+            count={guestDetails.length || guests.length}
+            hasIssues={guestIssueHint(guestDetails)}
+            onClick={() => setGuestSheetOpen(true)}
+          />
+          <span className="h-[22px] w-px bg-[#E5E7EB]" />
           <Button variant="outline" onClick={() => navigate('/')}>
             Cancel
           </Button>
@@ -244,6 +351,13 @@ export function BuilderPage() {
           </Button>
         </div>
       </header>
+
+      {structureLocked ? (
+        <div className="flex shrink-0 items-center gap-2 border-b border-[#FDE68A] bg-[#FFFBEB] px-5 py-2 text-[12.5px] font-medium text-[#92400E]">
+          <Lock className="size-3.5 shrink-0" />
+          Structure locked after Quoted — Return to Draft to add or remove lines. Existing lines can still be edited.
+        </div>
+      ) : null}
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div className="flex w-24 shrink-0 flex-col gap-1.5 border-r bg-white p-3">
@@ -310,7 +424,9 @@ export function BuilderPage() {
                 setPricingRows={setPricingRows}
                 guests={guests}
                 overrideOn={pricingOverride}
+                overrideDisabled={pricingLocked && activeTab === 'accommodation'}
                 onToggleOverride={() => {
+                  if (pricingLocked && activeTab === 'accommodation') return
                   if (pricingOverride) {
                     setPricingOverride(false)
                     patchDraft({ priceOverride: false })
@@ -404,19 +520,31 @@ export function BuilderPage() {
                   />
                 </div>
               </div>
-              {!canAdd ? (
+              {!fieldsReady ? (
                 <p className="min-w-0 truncate text-[12px] text-[#B45309]" title={missingRequirements.join(', ')}>
                   Required: {missingRequirements.join(', ')}
+                </p>
+              ) : structureLocked && !editingId ? (
+                <p className="min-w-0 truncate text-[12px] text-[#B45309]">
+                  Structure locked — edit an existing line or Return to Draft to add
                 </p>
               ) : null}
             </div>
             <Button
               className="h-[38px] shrink-0 bg-[#931115] px-5 hover:bg-[#7a0e12] disabled:opacity-50"
-              disabled={!canAdd}
-              title={canAdd ? undefined : `Fill required fields: ${missingRequirements.join(', ')}`}
+              disabled={!canAdd || !canEdit}
+              title={
+                !canEdit
+                  ? `Role ${demoRole} cannot edit builder lines`
+                  : structureLocked && !editingId
+                    ? 'Structure locked after Quoted — Return to Draft to add lines'
+                    : fieldsReady
+                      ? undefined
+                      : `Fill required fields: ${missingRequirements.join(', ')}`
+              }
               onClick={addToItinerary}
             >
-              Add to itinerary
+              {addLabel}
             </Button>
           </div>
         </div>
@@ -428,7 +556,15 @@ export function BuilderPage() {
           setServices={setServices}
           persist={persist}
           onEdit={editService}
+          demoRole={demoRole}
+          readOnly={!canEdit}
+          structureLocked={structureLocked}
+          onConfirmLine={handleConfirmLine}
+          onResetLine={handleResetLine}
+          onCancelLine={handleCancelLine}
+          onRemoveLine={handleRemoveLine}
           onPickSearch={(tab, item) => {
+            if (!canEdit || structureLocked) return
             setActiveTab(tab)
             setDrafts((prev) => ({
               ...prev,
@@ -473,6 +609,12 @@ export function BuilderPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <GuestDetailsSheet
+        open={guestSheetOpen}
+        onClose={() => setGuestSheetOpen(false)}
+        itinerary={itinerary}
+      />
     </div>
   )
 }

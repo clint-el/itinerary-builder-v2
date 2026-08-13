@@ -1,6 +1,8 @@
 import type {
+  CreateItineraryInput,
   Guest,
   GuestDetail,
+  GuestResidency,
   Itinerary,
   ItineraryStatus,
   ListFilters,
@@ -9,6 +11,95 @@ import type {
   SplitForm,
 } from './types'
 import { GUESTS, LIFECYCLE_TRANSITIONS, PAYMENT_META, STATUS_META } from './catalogs'
+
+export function residencyIsResident(residency?: GuestResidency): boolean {
+  return residency !== 'nonResident'
+}
+
+export function guestRoleLabel(ageBand: GuestDetail['ageBand'] | Guest['type']): string {
+  if (ageBand === 'infant') return 'Infant'
+  if (ageBand === 'adult') return 'Adult'
+  return 'Child' // child + youth both display as Child
+}
+
+/** Expand Create Itinerary PAX counters into persisted guest slots with residency. */
+export function buildGuestDetailsFromCreateInput(input: CreateItineraryInput): GuestDetail[] {
+  const guests: GuestDetail[] = []
+  let adultIdx = 0
+  let childIdx = 0
+  let infantIdx = 0
+  const ages = input.childAges || []
+
+  function pushAdults(count: number, residency: GuestResidency) {
+    for (let i = 0; i < count; i++) {
+      const isLead = adultIdx === 0
+      guests.push({
+        id: `g-a-${adultIdx}`,
+        salutation: isLead ? 'Mrs' : 'Mr',
+        firstName: isLead ? input.leadFirst : '',
+        lastName: isLead ? input.leadLast : '',
+        ageBand: 'adult',
+        age: 34,
+        residency,
+        lead: isLead,
+        flight: '',
+        dietary: '',
+        preferences: '',
+        note: '',
+      })
+      adultIdx++
+    }
+  }
+
+  function pushChildren(count: number, residency: GuestResidency) {
+    for (let i = 0; i < count; i++) {
+      const age = ages[childIdx] ?? 8
+      guests.push({
+        id: `g-c-${childIdx}`,
+        salutation: '',
+        firstName: '',
+        lastName: '',
+        ageBand: 'child',
+        age,
+        residency,
+        lead: false,
+        dietary: '',
+        preferences: '',
+        note: '',
+      })
+      childIdx++
+    }
+  }
+
+  function pushInfants(count: number, residency: GuestResidency) {
+    for (let i = 0; i < count; i++) {
+      guests.push({
+        id: `g-i-${infantIdx}`,
+        salutation: '',
+        firstName: '',
+        lastName: '',
+        ageBand: 'infant',
+        age: 1,
+        residency,
+        lead: false,
+        note: '',
+      })
+      infantIdx++
+    }
+  }
+
+  pushAdults(input.adultsCitizen, 'citizen')
+  pushAdults(input.adultsRes, 'resident')
+  pushAdults(input.adultsNonRes, 'nonResident')
+  pushChildren(input.childrenCitizen, 'citizen')
+  pushChildren(input.childrenRes, 'resident')
+  pushChildren(input.childrenNonRes, 'nonResident')
+  pushInfants(input.infantsCitizen, 'citizen')
+  pushInfants(input.infantsRes, 'resident')
+  pushInfants(input.infantsNonRes, 'nonResident')
+
+  return guests
+}
 
 export function inquiryRefLabel(reference: string): string {
   const base = String(reference || '').split('-')[0]
@@ -514,18 +605,26 @@ export function nightsBetween(start: string, end: string) {
  */
 export function partyGuests(it: Itinerary, details?: GuestDetail[]): Guest[] {
   if (details && details.length > 0) {
-    return details.map((d, i) => ({
-      id: i + 1,
-      name:
-        [d.firstName, d.lastName].filter(Boolean).join(' ').trim() ||
-        (d.lead ? 'Lead traveler' : `Guest ${i + 1}`),
-      type: d.ageBand,
-      age:
+    return details.map((d, i) => {
+      const age =
         d.age ??
-        (d.ageBand === 'adult' ? 30 : d.ageBand === 'youth' ? 14 : d.ageBand === 'infant' ? 1 : 8),
-      lead: !!d.lead,
-      resident: true,
-    }))
+        (d.ageBand === 'adult' ? 30 : d.ageBand === 'infant' ? 1 : 8)
+      // Role column is Adult/Child/Infant; pricing still uses youth band for 12–17.
+      const type: Guest['type'] =
+        d.ageBand === 'child' && age >= 12 ? 'youth' : d.ageBand
+      const residency = d.residency ?? 'resident'
+      return {
+        id: i + 1,
+        name:
+          [d.firstName, d.lastName].filter(Boolean).join(' ').trim() ||
+          (d.lead ? 'Lead traveler' : `Guest ${i + 1}`),
+        type,
+        age,
+        lead: !!d.lead,
+        resident: residencyIsResident(residency),
+        residency,
+      }
+    })
   }
 
   const adults = it.adults ?? it.paxAdults ?? 0
@@ -559,6 +658,7 @@ export function partyGuests(it: Itinerary, details?: GuestDetail[]): Guest[] {
       age: 34,
       lead: adultIdx === 0,
       resident: true,
+      residency: 'citizen',
     })
     adultIdx++
   }
@@ -574,6 +674,7 @@ export function partyGuests(it: Itinerary, details?: GuestDetail[]): Guest[] {
       age: 34,
       lead: adultIdx === 0,
       resident: true,
+      residency: 'resident',
     })
     adultIdx++
   }
@@ -589,6 +690,7 @@ export function partyGuests(it: Itinerary, details?: GuestDetail[]): Guest[] {
       age: 32,
       lead: adultIdx === 0,
       resident: false,
+      residency: 'nonResident',
     })
     adultIdx++
   }
@@ -602,6 +704,7 @@ export function partyGuests(it: Itinerary, details?: GuestDetail[]): Guest[] {
       type: age >= 12 ? 'youth' : 'child',
       age,
       resident: true,
+      residency: 'citizen',
     })
   }
   for (let i = 0; i < childrenRes; i++) {
@@ -612,6 +715,7 @@ export function partyGuests(it: Itinerary, details?: GuestDetail[]): Guest[] {
       type: age >= 12 ? 'youth' : 'child',
       age,
       resident: true,
+      residency: 'resident',
     })
   }
   for (let i = 0; i < childrenNonRes; i++) {
@@ -622,6 +726,7 @@ export function partyGuests(it: Itinerary, details?: GuestDetail[]): Guest[] {
       type: age >= 12 ? 'youth' : 'child',
       age,
       resident: false,
+      residency: 'nonResident',
     })
   }
 
@@ -633,6 +738,7 @@ export function partyGuests(it: Itinerary, details?: GuestDetail[]): Guest[] {
       type: 'infant',
       age: 1,
       resident: true,
+      residency: 'citizen',
     })
   }
   for (let i = 0; i < infantsRes; i++) {
@@ -642,6 +748,7 @@ export function partyGuests(it: Itinerary, details?: GuestDetail[]): Guest[] {
       type: 'infant',
       age: 1,
       resident: true,
+      residency: 'resident',
     })
   }
   for (let i = 0; i < infantsNonRes; i++) {
@@ -651,6 +758,7 @@ export function partyGuests(it: Itinerary, details?: GuestDetail[]): Guest[] {
       type: 'infant',
       age: 1,
       resident: false,
+      residency: 'nonResident',
     })
   }
   return guests

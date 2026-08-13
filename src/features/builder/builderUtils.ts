@@ -123,15 +123,22 @@ export function usedGuestIds(list: { guestIds: number[] }[]) {
 
 export function guestChipStyle(g: Guest) {
   const m = TYPE_META[g.type] || TYPE_META.adult
+  const residency = g.residency
+  const resLabel =
+    residency === 'citizen' ? 'C' : residency === 'nonResident' || !g.resident ? 'NR' : 'R'
+  const resBg =
+    resLabel === 'C' ? '#DBEAFE' : resLabel === 'R' ? '#ECFDF5' : '#FEF3C7'
+  const resFg =
+    resLabel === 'C' ? '#1D4ED8' : resLabel === 'R' ? '#059669' : '#B45309'
   return {
     bg: m.bg,
     bd: m.bd,
     fg: m.fg,
-    meta: `${m.label} · ${g.age}`,
+    meta: `${m.label === 'Youth' ? 'Child' : m.label} · ${g.age}`,
     lead: !!g.lead,
-    resLabel: g.resident ? 'R' : 'NR',
-    resBg: g.resident ? '#ECFDF5' : '#FEF3C7',
-    resFg: g.resident ? '#059669' : '#B45309',
+    resLabel,
+    resBg,
+    resFg,
   }
 }
 
@@ -433,6 +440,8 @@ export function buildAddedService(
     bg: meta.bg,
     initial: meta.initial,
     expanded: true,
+    lineStatus: 'New',
+    supplierStatus: 'None',
     draft: structuredClone({
       ...draft,
       ...(tab === 'accommodation' ? { rooms } : {}),

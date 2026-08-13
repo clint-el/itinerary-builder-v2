@@ -1,6 +1,15 @@
 import { useRef, useState, type ReactNode } from 'react'
 import { ChevronDown, Pencil, Search, X } from 'lucide-react'
 import { CATALOG, TAB_META } from '@/shared/lib/catalogs'
+import {
+  canRemoveLine,
+  isEngaged,
+  isLineUpdated,
+  lineStatusOf,
+  roleAllowsLineAction,
+  supplierStatusLabel,
+  supplierStatusOf,
+} from '@/shared/lib/lifecycleRules'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -10,7 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import type { AddedService, ServiceTab } from '@/shared/lib/types'
+import type { AddedService, DemoRole, ServiceTab } from '@/shared/lib/types'
 import { cn, formatUsd } from '@/shared/lib/utils'
 
 export function RightPane({
@@ -21,6 +30,13 @@ export function RightPane({
   persist,
   onEdit,
   onPickSearch,
+  demoRole,
+  onConfirmLine,
+  onResetLine,
+  onCancelLine,
+  onRemoveLine,
+  readOnly,
+  structureLocked = false,
 }: {
   width: number
   onResizeStart: (e: React.MouseEvent) => void
@@ -29,6 +45,13 @@ export function RightPane({
   persist: (next: AddedService[]) => void
   onEdit: (svc: AddedService) => void
   onPickSearch: (tab: ServiceTab, item: { location: string; name: string; service: string }) => void
+  demoRole: DemoRole
+  onConfirmLine: (svc: AddedService) => void
+  onResetLine: (svc: AddedService) => void
+  onCancelLine: (svc: AddedService) => void
+  onRemoveLine: (svc: AddedService) => void
+  readOnly?: boolean
+  structureLocked?: boolean
 }) {
   const [search, setSearch] = useState('')
   const [dragId, setDragId] = useState<string | null>(null)
@@ -84,11 +107,13 @@ export function RightPane({
                   <button
                     key={`${r.tab}-${r.name}`}
                     type="button"
+                    disabled={structureLocked || readOnly}
                     onClick={() => {
+                      if (structureLocked || readOnly) return
                       onPickSearch(r.tab, r)
                       setSearch('')
                     }}
-                    className="flex w-full items-center gap-2 border-b px-2.5 py-2 text-left last:border-0 hover:bg-[#F9FAFB]"
+                    className="flex w-full items-center gap-2 border-b px-2.5 py-2 text-left last:border-0 hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <span
                       className="flex size-7 items-center justify-center rounded-md text-xs font-bold"
@@ -124,8 +149,12 @@ export function RightPane({
                 return (
                   <div
                     key={svc.id}
-                    draggable
+                    draggable={!structureLocked && !readOnly}
                     onDragStart={(e) => {
+                      if (structureLocked || readOnly) {
+                        e.preventDefault()
+                        return
+                      }
                       e.dataTransfer.setData('text/plain', svc.id)
                       dragIdRef.current = svc.id
                       setDragId(svc.id)
@@ -133,6 +162,7 @@ export function RightPane({
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={(e) => {
                       e.preventDefault()
+                      if (structureLocked || readOnly) return
                       const fromId = dragIdRef.current || dragId
                       if (!fromId || fromId === svc.id) return
                       const list = services.slice()
@@ -147,7 +177,11 @@ export function RightPane({
                       setDragId(null)
                       setReorderOpen(true)
                     }}
-                    className="cursor-grab rounded-lg border border-[#E5E7EB] bg-white p-2.5 active:cursor-grabbing"
+                    className={
+                      structureLocked || readOnly
+                        ? 'rounded-lg border border-[#E5E7EB] bg-white p-2.5'
+                        : 'cursor-grab rounded-lg border border-[#E5E7EB] bg-white p-2.5 active:cursor-grabbing'
+                    }
                   >
                     <div className="flex items-start gap-2">
                       <span
@@ -157,22 +191,41 @@ export function RightPane({
                         {svc.initial}
                       </span>
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-[13px] font-bold text-[#171717]">
-                          {svc.title}
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <div className="truncate text-[13px] font-bold text-[#171717]">
+                            {svc.title}
+                          </div>
+                          {isLineUpdated(svc) ? (
+                            <span className="shrink-0 rounded bg-[#FEF3C7] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#B45309]">
+                              Updated
+                            </span>
+                          ) : null}
                         </div>
                         <div className="mt-px truncate text-[11.5px] text-[#A1A1A1]">
                           {svc.subtitle}
                         </div>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          <span className="rounded bg-[#F3F4F6] px-1.5 py-0.5 text-[10px] font-semibold text-[#525252]">
+                            {lineStatusOf(svc)}
+                          </span>
+                          {supplierStatusOf(svc) !== 'None' ? (
+                            <span className="rounded bg-[#EEF2FF] px-1.5 py-0.5 text-[10px] font-semibold text-[#4338CA]">
+                              {supplierStatusLabel(supplierStatusOf(svc))}
+                            </span>
+                          ) : null}
+                        </div>
                       </div>
-                      <button
-                        type="button"
-                        title="Edit this service"
-                        aria-label={`Edit ${svc.title}`}
-                        onClick={() => onEdit(svc)}
-                        className="flex size-5 shrink-0 items-center justify-center text-[#2563EB]"
-                      >
-                        <Pencil className="size-3.5" />
-                      </button>
+                      {!readOnly ? (
+                        <button
+                          type="button"
+                          title="Edit this service"
+                          aria-label={`Edit ${svc.title}`}
+                          onClick={() => onEdit(svc)}
+                          className="flex size-5 shrink-0 items-center justify-center text-[#2563EB]"
+                        >
+                          <Pencil className="size-3.5" />
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         title="Toggle details"
@@ -194,19 +247,51 @@ export function RightPane({
                           )}
                         />
                       </button>
-                      <button
-                        type="button"
-                        title="Remove service"
-                        aria-label={`Remove ${svc.title}`}
-                        onClick={() => {
-                          const next = services.filter((s) => s.id !== svc.id)
-                          setServices(next)
-                          persist(next)
-                        }}
-                        className="flex size-5 shrink-0 items-center justify-center text-[#A1A1A1]"
-                      >
-                        <X className="size-3.5" />
-                      </button>
+                      {roleAllowsLineAction(demoRole, 'remove') &&
+                      !structureLocked &&
+                      canRemoveLine(svc).ok ? (
+                        <button
+                          type="button"
+                          title="Remove service"
+                          aria-label={`Remove ${svc.title}`}
+                          onClick={() => onRemoveLine(svc)}
+                          className="flex size-5 shrink-0 items-center justify-center text-[#A1A1A1]"
+                        >
+                          <X className="size-3.5" />
+                        </button>
+                      ) : null}
+                    </div>
+
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {roleAllowsLineAction(demoRole, 'confirm') && lineStatusOf(svc) === 'New' ? (
+                        <button
+                          type="button"
+                          onClick={() => onConfirmLine(svc)}
+                          className="h-6 rounded-md border border-[#15803D] bg-[#DCFCE7] px-2 text-[10.5px] font-semibold text-[#15803D]"
+                        >
+                          Confirm
+                        </button>
+                      ) : null}
+                      {roleAllowsLineAction(demoRole, 'reset') &&
+                      lineStatusOf(svc) === 'Confirmed' &&
+                      !isEngaged(svc) ? (
+                        <button
+                          type="button"
+                          onClick={() => onResetLine(svc)}
+                          className="h-6 rounded-md border border-[#E5E7EB] bg-white px-2 text-[10.5px] font-semibold text-[#525252]"
+                        >
+                          Reset
+                        </button>
+                      ) : null}
+                      {roleAllowsLineAction(demoRole, 'cancel') && isEngaged(svc) ? (
+                        <button
+                          type="button"
+                          onClick={() => onCancelLine(svc)}
+                          className="h-6 rounded-md border border-[#FECACA] bg-[#FEF2F2] px-2 text-[10.5px] font-semibold text-[#B91C1C]"
+                        >
+                          Cancel
+                        </button>
+                      ) : null}
                     </div>
 
                     <div className="mt-2 flex items-center justify-between">
