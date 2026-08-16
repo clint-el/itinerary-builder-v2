@@ -463,20 +463,42 @@ export function createSplitRecord(
   const newRef = nextChildReference(parentRef, itineraries)
   const nextSuffix = parseInt(newRef.split('-').pop()!, 10)
   const fam = sf.family.trim()
-  const ad = parseInt(sf.ad, 10) || 0
-  const ch = parseInt(sf.ch, 10) || 0
-  const guests = [ad ? `${ad} Ad` : '', ch ? `${ch} Ch` : ''].filter(Boolean).join(' · ') || '—'
+  const adultsTotal = sf.adultsCitizen + sf.adultsRes + sf.adultsNonRes
+  const childrenTotal = sf.childrenCitizen + sf.childrenRes + sf.childrenNonRes
+  const infantsTotal = sf.infantsCitizen + sf.infantsRes + sf.infantsNonRes
+  const lead = sf.guests.find((g) => g.lead) || sf.guests[0]
+  const guestsLabel =
+    [
+      adultsTotal ? `${adultsTotal} Ad` : '',
+      childrenTotal ? `${childrenTotal} Ch` : '',
+      infantsTotal ? `${infantsTotal} In` : '',
+    ]
+      .filter(Boolean)
+      .join(' · ') || '—'
   return {
     ...src,
     id: newRef,
     reference: newRef,
     itineraryRef: `${src.itineraryRef || 'ITN-10234'}-${nextSuffix}`,
     title: fam || `Copy ${src.title || 'Untitled Itinerary'}`,
-    paxAdults: ad,
-    paxChildren: ch,
-    adults: ad,
-    children: ch,
-    guestsLabel: guests,
+    leadFirst: lead?.firstName || src.leadFirst,
+    leadLast: lead?.lastName || src.leadLast,
+    paxAdults: adultsTotal,
+    paxChildren: childrenTotal,
+    adults: adultsTotal,
+    children: childrenTotal,
+    infants: infantsTotal,
+    adultsCitizen: sf.adultsCitizen,
+    adultsRes: sf.adultsRes,
+    adultsNonRes: sf.adultsNonRes,
+    childrenCitizen: sf.childrenCitizen,
+    childrenRes: sf.childrenRes,
+    childrenNonRes: sf.childrenNonRes,
+    infantsCitizen: sf.infantsCitizen,
+    infantsRes: sf.infantsRes,
+    infantsNonRes: sf.infantsNonRes,
+    childAges: sf.childAges,
+    guestsLabel,
     status: 'DRAFT',
     paymentStatus: 'UNPAID',
     totalUsd: 0,

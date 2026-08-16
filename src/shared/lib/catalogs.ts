@@ -625,7 +625,42 @@ export const SEED_QUOTE_GROUPS: QuoteGroup[] = [
   },
 ]
 
-export function defaultDraft(tab: ServiceTab): Record<string, unknown> {
+export type TravelRange = { from?: string; to?: string }
+
+/** Draft date fields that inherit the itinerary travel window when left blank. */
+const TRAVEL_DATE_FIELDS: Record<ServiceTab, { start: string[]; end: string[] }> = {
+  accommodation: { start: ['start'], end: ['end'] },
+  transportation: { start: ['transDate', 'hireStart'], end: ['hireEnd'] },
+  flight: { start: ['departDate'], end: ['returnDate'] },
+  activity: { start: ['startDate'], end: ['endDate'] },
+  other: { start: ['startDate'], end: ['endDate'] },
+}
+
+/** Fill blank date fields from the travel window; existing values are never overwritten. */
+export function applyTravelRange(
+  tab: ServiceTab,
+  draft: Record<string, unknown>,
+  range: TravelRange,
+): Record<string, unknown> {
+  const fields = TRAVEL_DATE_FIELDS[tab]
+  const next = { ...draft }
+  const fill = (keys: string[], value?: string) => {
+    if (!value) return
+    for (const key of keys) {
+      if (!String(next[key] ?? '').trim()) next[key] = value
+    }
+  }
+  fill(fields.start, range.from)
+  fill(fields.end, range.to)
+  return next
+}
+
+export function defaultDraft(tab: ServiceTab, range?: TravelRange): Record<string, unknown> {
+  const base = baseDraft(tab)
+  return range ? applyTravelRange(tab, base, range) : base
+}
+
+function baseDraft(tab: ServiceTab): Record<string, unknown> {
   if (tab === 'accommodation') {
     return {
       location: '', supplier: '', service: '', start: '', end: '', discount: 0, basis: 'bb',

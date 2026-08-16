@@ -214,6 +214,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       upsertItineraryStorage(created)
       setServicesStorage(created.id, [])
       setQuoteGroupsStorage(created.id, [])
+      // Business Rule 8 / IB-S.8: split carries the reconciled named guest roster forward,
+      // not just a blank pax count.
+      setGuestDetailsStorage(created.id, form.guests)
       bump()
       return created
     },

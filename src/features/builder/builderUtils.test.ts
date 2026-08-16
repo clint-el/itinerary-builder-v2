@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { defaultDraft } from '@/shared/lib/catalogs'
+import { applyTravelRange, defaultDraft } from '@/shared/lib/catalogs'
 import type { AddedService } from '@/shared/lib/types'
 import {
   canAddDraft,
@@ -74,6 +74,60 @@ describe('draftMissingRequirements', () => {
       service: 'WILSON TO LOISABA OW',
     }
     expect(draftMissingRequirements('flight', draft)).toEqual(['Departure date'])
+  })
+})
+
+describe('travel window seeding', () => {
+  const range = { from: '2026-09-01', to: '2026-09-10' }
+
+  it('seeds date fields for every service tab', () => {
+    expect(defaultDraft('accommodation', range)).toMatchObject({
+      start: '2026-09-01',
+      end: '2026-09-10',
+    })
+    expect(defaultDraft('transportation', range)).toMatchObject({
+      transDate: '2026-09-01',
+      hireStart: '2026-09-01',
+      hireEnd: '2026-09-10',
+    })
+    expect(defaultDraft('flight', range)).toMatchObject({
+      departDate: '2026-09-01',
+      returnDate: '2026-09-10',
+    })
+    expect(defaultDraft('activity', range)).toMatchObject({
+      startDate: '2026-09-01',
+      endDate: '2026-09-10',
+    })
+    expect(defaultDraft('other', range)).toMatchObject({
+      startDate: '2026-09-01',
+      endDate: '2026-09-10',
+    })
+  })
+
+  it('only needs rooms once dates come from the travel window', () => {
+    const draft = {
+      ...defaultDraft('accommodation', range),
+      location: 'Nairobi',
+      supplier: 'Hemingways Nairobi',
+      service: 'Double Suite',
+    }
+    expect(draftMissingRequirements('accommodation', draft)).toEqual(['At least one room'])
+  })
+
+  it('never overwrites dates a planner already set', () => {
+    const edited = applyTravelRange(
+      'accommodation',
+      { ...defaultDraft('accommodation'), start: '2026-09-04', end: '' },
+      range,
+    )
+    expect(edited).toMatchObject({ start: '2026-09-04', end: '2026-09-10' })
+  })
+
+  it('leaves dates blank when the itinerary has no travel window', () => {
+    expect(defaultDraft('accommodation', { from: '', to: '' })).toMatchObject({
+      start: '',
+      end: '',
+    })
   })
 })
 

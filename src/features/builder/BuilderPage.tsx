@@ -27,7 +27,14 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Separator } from '@/components/ui/separator'
-import { PROMOTIONS, TAB_META, defaultDraft, liveSystemPrice } from '@/shared/lib/catalogs'
+import {
+  PROMOTIONS,
+  TAB_META,
+  applyTravelRange,
+  defaultDraft,
+  liveSystemPrice,
+  type TravelRange,
+} from '@/shared/lib/catalogs'
 import { partyGuests } from '@/shared/lib/helpers'
 import {
   isPricingLocked,
@@ -63,13 +70,15 @@ const RAIL_ICONS = {
   other: Plus,
 } as const
 
-function emptyDrafts(): Record<ServiceTab, Record<string, unknown>> {
+const SERVICE_TABS: ServiceTab[] = ['accommodation', 'transportation', 'flight', 'activity', 'other']
+
+function emptyDrafts(range?: TravelRange): Record<ServiceTab, Record<string, unknown>> {
   return {
-    accommodation: defaultDraft('accommodation'),
-    transportation: defaultDraft('transportation'),
-    flight: defaultDraft('flight'),
-    activity: defaultDraft('activity'),
-    other: defaultDraft('other'),
+    accommodation: defaultDraft('accommodation', range),
+    transportation: defaultDraft('transportation', range),
+    flight: defaultDraft('flight', range),
+    activity: defaultDraft('activity', range),
+    other: defaultDraft('other', range),
   }
 }
 
@@ -100,8 +109,13 @@ export function BuilderPage() {
   )
   const [guestSheetOpen, setGuestSheetOpen] = useState(false)
 
+  const travelRange = useMemo<TravelRange>(
+    () => ({ from: itinerary?.travelDateFrom || '', to: itinerary?.travelDateTo || '' }),
+    [itinerary?.travelDateFrom, itinerary?.travelDateTo],
+  )
+
   const [activeTab, setActiveTab] = useState<ServiceTab>('accommodation')
-  const [drafts, setDrafts] = useState(emptyDrafts)
+  const [drafts, setDrafts] = useState(() => emptyDrafts(travelRange))
   const [services, setServices] = useState<AddedService[]>([])
   const [seq, setSeq] = useState(1)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -127,6 +141,17 @@ export function BuilderPage() {
     }, 0)
     setSeq(maxSeq + 1)
   }, [id, getServices])
+
+  useEffect(() => {
+    if (!travelRange.from && !travelRange.to) return
+    setDrafts((prev) => {
+      const next = { ...prev }
+      for (const tab of SERVICE_TABS) {
+        next[tab] = applyTravelRange(tab, prev[tab], travelRange)
+      }
+      return next
+    })
+  }, [travelRange])
 
   const draft = drafts[activeTab]
   const tabMeta = TAB_META[activeTab]
@@ -169,7 +194,7 @@ export function BuilderPage() {
       setSeq((s) => s + 1)
     }
     setServices(next)
-    setDrafts((prev) => ({ ...prev, [activeTab]: defaultDraft(activeTab) }))
+    setDrafts((prev) => ({ ...prev, [activeTab]: defaultDraft(activeTab, travelRange) }))
     setPricingOverride(false)
     persist(next)
   }
@@ -191,7 +216,7 @@ export function BuilderPage() {
     setActiveTab(service.tab)
     setDrafts((prev) => ({
       ...prev,
-      [service.tab]: structuredClone(service.draft || defaultDraft(service.tab)),
+      [service.tab]: structuredClone(service.draft || defaultDraft(service.tab, travelRange)),
     }))
     if (structureLocked) {
       setEditingId(service.id)

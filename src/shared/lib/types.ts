@@ -287,8 +287,18 @@ export interface CreateItineraryInput {
 
 export interface SplitForm {
   family: string
-  ad: string
-  ch: string
+  adultsCitizen: number
+  adultsRes: number
+  adultsNonRes: number
+  childrenCitizen: number
+  childrenRes: number
+  childrenNonRes: number
+  infantsCitizen: number
+  infantsRes: number
+  infantsNonRes: number
+  childAges: number[]
+  /** Named guest roster for the new itinerary — reconciled against the counts above in the dialog. */
+  guests: GuestDetail[]
 }
 
 export interface LifecycleTransition {

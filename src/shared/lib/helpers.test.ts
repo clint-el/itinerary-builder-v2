@@ -147,12 +147,28 @@ describe('helpers', () => {
     expect(nextChildReference('CPS5678', SEED_ITINERARIES)).toBe('CPS5678-3')
     const split = createSplitRecord(SEED_ITINERARIES, 'CPS5678', {
       family: 'Split Family',
-      ad: '2',
-      ch: '1',
+      adultsCitizen: 0,
+      adultsRes: 0,
+      adultsNonRes: 2,
+      childrenCitizen: 0,
+      childrenRes: 0,
+      childrenNonRes: 1,
+      infantsCitizen: 0,
+      infantsRes: 0,
+      infantsNonRes: 0,
+      childAges: [8],
+      guests: [
+        { id: 'g1', firstName: 'Jane', lastName: 'Doe', ageBand: 'adult', residency: 'nonResident', lead: true },
+        { id: 'g2', firstName: 'John', lastName: 'Doe', ageBand: 'adult', residency: 'nonResident' },
+        { id: 'g3', firstName: '', lastName: '', ageBand: 'child', age: 8, residency: 'nonResident' },
+      ],
     })
     expect(split?.reference).toBe('CPS5678-3')
     expect(split?.status).toBe('DRAFT')
     expect(split?.title).toBe('Split Family')
+    expect(split?.paxAdults).toBe(2)
+    expect(split?.paxChildren).toBe(1)
+    expect(split?.leadFirst).toBe('Jane')
   })
 
   it('copies itinerary with new CPS id after highest root', () => {
