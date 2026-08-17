@@ -1,13 +1,12 @@
 import { useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import {
-  ACTIVITY_TYPES,
   PROMOTIONS,
   extrasForActivityService,
+  extrasForTab,
 } from '@/shared/lib/catalogs'
 import { rackOf } from '@/shared/lib/helpers'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -16,11 +15,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import type { ActivityItem, CatalogItem, Guest, ServiceTab } from '@/shared/lib/types'
+import type { ActivityItem, CatalogItem, DemoRole, Guest, ServiceTab } from '@/shared/lib/types'
 import { cn, formatDateRange, formatUsd } from '@/shared/lib/utils'
-import { DatePickerGridInput } from '@/shared/ui/date-picker'
 import { ActivityTypeModal, CustomExtraModal, GuestChip } from './BuilderModals'
+import { CancellationPolicyControl } from './CancellationPolicyControl'
+import { ExtrasTab } from './ExtrasTab'
 import { LocationDropdown } from './LocationDropdown'
+import { OptionInclusions } from './OptionInclusions'
 import { SupplierPicker } from './SupplierPicker'
 import {
   asActivities,
@@ -31,19 +32,28 @@ import {
   guestChipStyle,
   usedGuestIds,
 } from './builderUtils'
+import {
+  activityOptionsForService,
+  otherOptionsForService,
+  resolveServiceOption,
+} from './serviceOptions'
 
-type ActivitySideTab = 'extras' | 'promotions'
+type ActivitySideTab = 'policy' | 'extras' | 'promotions' | 'notes'
 
 export function ActivityOtherPanel({
   tab,
   draft,
   patch,
   guests,
+  demoRole,
+  isDraftItinerary,
 }: {
   tab: Extract<ServiceTab, 'activity' | 'other'>
   draft: Record<string, unknown>
   patch: (p: Record<string, unknown>) => void
   guests: Guest[]
+  demoRole: DemoRole
+  isDraftItinerary: boolean
 }) {
   const [actOpen, setActOpen] = useState(false)
   const [ceOpen, setCeOpen] = useState(false)
@@ -52,12 +62,16 @@ export function ActivityOtherPanel({
   const used = usedGuestIds(activities)
   const itemLabel = tab === 'other' ? 'item' : 'activity'
   const isActivity = tab === 'activity'
+  const serviceId = String(draft.serviceId || '')
+  const typeCatalog = isActivity
+    ? activityOptionsForService(serviceId)
+    : otherOptionsForService(serviceId)
   const extras = extraObjects(draft)
   const extraIds = asExtraIds(draft)
   const customExtras = asCustomExtras(draft)
   const catalogExtras = isActivity
     ? extrasForActivityService('', activities.map((a) => a.name))
-    : []
+    : extrasForTab('other')
 
   function setActivities(next: ActivityItem[]) {
     patch({ activities: next })
@@ -114,7 +128,9 @@ export function ActivityOtherPanel({
             <Label>Location</Label>
             <LocationDropdown
               value={String(draft.location || '')}
-              onChange={(name) => patch({ location: name, supplier: '', service: '' })}
+              onChange={(name) =>
+                patch({ location: name, supplier: '', service: '', serviceId: '' })
+              }
             />
           </div>
           <div className="grid gap-1.5">
@@ -122,38 +138,13 @@ export function ActivityOtherPanel({
             <SupplierPicker
               tab={tab}
               value={String(draft.supplier || '')}
-              onPick={(item: CatalogItem) => patch({ supplier: item.name, service: item.service })}
+              onPick={(item: CatalogItem) =>
+                patch({ supplier: item.name, service: item.service, serviceId: item.id })
+              }
             />
           </div>
         </div>
       </section>
-
-      {tab === 'other' ? (
-        <section className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-4 shadow-sm">
-          <div className="mb-3">
-            <h3 className="text-[12px] font-bold uppercase tracking-wide text-[#334155]">Dates</h3>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="grid gap-1.5">
-              <Label>Start</Label>
-              <DatePickerGridInput
-                value={String(draft.startDate || '')}
-                onChange={(value) => patch({ startDate: value })}
-                className="bg-white"
-              />
-            </div>
-            <div className="grid gap-1.5">
-              <Label>End</Label>
-              <DatePickerGridInput
-                value={String(draft.endDate || '')}
-                onChange={(value) => patch({ endDate: value })}
-                referenceValue={String(draft.startDate || '')}
-                className="bg-white"
-              />
-            </div>
-          </div>
-        </section>
-      ) : null}
 
       <section className="rounded-xl border bg-white p-4">
         <div className="mb-3 flex items-center justify-between">
@@ -171,21 +162,37 @@ export function ActivityOtherPanel({
             const net = a.rate * a.guestIds.length
             const someToAdd = avail.length > 0
             const allAdded = guests.length > 0 && a.guestIds.length === guests.length
+            const typeOption = resolveServiceOption(serviceId, a.name)
             return (
               <div key={a.id} className="rounded-xl border bg-[#F9FAFB] p-3">
                 <div className="mb-2 flex flex-wrap items-center gap-2">
                   <span className="flex size-5 items-center justify-center rounded border bg-white text-[11px] font-bold">
                     {i + 1}
                   </span>
-                  <Input
-                    className="h-7 flex-1 text-[12.5px] font-semibold"
-                    value={a.name}
-                    onChange={(e) =>
+                  <Select
+                    value={a.name || undefined}
+                    onValueChange={(value) => {
+                      const found = typeCatalog.find((t) => t.name === value)
                       setActivities(
-                        activities.map((x) => (x.id === a.id ? { ...x, name: e.target.value } : x)),
+                        activities.map((x) =>
+                          x.id === a.id
+                            ? { ...x, name: value, rate: found ? found.rate : x.rate }
+                            : x,
+                        ),
                       )
-                    }
-                  />
+                    }}
+                  >
+                    <SelectTrigger className="h-7 min-w-[180px] flex-1 bg-white text-[12.5px] font-semibold">
+                      <SelectValue placeholder={isActivity ? 'Activity type' : 'Other type'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {typeCatalog.map((t) => (
+                        <SelectItem key={t.id} value={t.name}>
+                          {t.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <span className="rounded-md bg-white px-2 py-1 text-[11px] font-semibold text-[#525252] shadow-sm">
                     {formatDateRange(
                       a.start || String(draft.startDate || ''),
@@ -195,6 +202,7 @@ export function ActivityOtherPanel({
                   <span className="text-[12px] font-semibold text-[#525252]">
                     {a.guestIds.length} PAX
                   </span>
+                  <OptionInclusions option={typeOption} />
                   <button
                     type="button"
                     onClick={() => setActivities(activities.filter((x) => x.id !== a.id))}
@@ -281,94 +289,55 @@ export function ActivityOtherPanel({
         </div>
       </section>
 
-      {isActivity ? (
-        <>
-          <div className="flex gap-1 border-b">
-            {tabBtn('extras', 'Extras', extras.length)}
-            {tabBtn('promotions', 'Special Offer(s)', PROMOTIONS.length)}
-          </div>
+      <div className="flex gap-1 border-b">
+        {tabBtn('extras', 'Extras', extras.length)}
+        {tabBtn('promotions', 'Special Offer(s)', PROMOTIONS.length)}
+        {tabBtn('policy', 'Policy')}
+        {tabBtn('notes', 'Notes')}
+      </div>
 
-          {sideTab === 'extras' ? (
-            <div className="space-y-3">
-              {extras.length === 0 ? (
-                <p className="text-[12.5px] text-[#A1A1A1]">No extras selected.</p>
-              ) : (
-                extras.map((ex) => (
-                  <div
-                    key={ex.id}
-                    className="flex items-center justify-between rounded-lg border bg-white px-3 py-2"
-                  >
-                    <div>
-                      <div className="text-[13px] font-semibold">{ex.title}</div>
-                      {ex.mandatory ? (
-                        <div className="text-[11px] text-[#A1A1A1]">Mandatory</div>
-                      ) : null}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[13px] font-semibold">
-                        {formatUsd(ex.price * (ex.qty || 1))}
-                      </span>
-                      {!ex.mandatory ? (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (ex.custom) {
-                              patch({ customExtras: customExtras.filter((x) => x.id !== ex.id) })
-                            } else {
-                              patch({ extras: extraIds.filter((id) => id !== ex.id) })
-                            }
-                          }}
-                          className="text-[#931115]"
-                        >
-                          <Trash2 className="size-3.5" />
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                ))
-              )}
-              <div>
-                <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-[#A1A1A1]">
-                  Catalog
-                  {activities.length
-                    ? ' · linked to selected activities'
-                    : ' · add an activity to filter'}
-                </p>
-                <div className="space-y-1.5">
-                  {catalogExtras.filter((c) => !extraIds.includes(c.id)).length === 0 ? (
-                    <p className="text-[12.5px] text-[#A1A1A1]">
-                      {activities.length
-                        ? 'No more catalog extras for these activities.'
-                        : 'Add an activity item to see linked extras (e.g. Lunch on Game Drive).'}
-                    </p>
-                  ) : (
-                    catalogExtras
-                      .filter((c) => !extraIds.includes(c.id))
-                      .map((c) => (
-                        <button
-                          key={c.id}
-                          type="button"
-                          onClick={() => patch({ extras: [...extraIds, c.id] })}
-                          className="flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left hover:bg-[#F9FAFB]"
-                        >
-                          <span className="text-[13px] font-semibold">{c.title}</span>
-                          <span className="flex items-center gap-2 text-[12.5px] font-semibold text-[#525252]">
-                            {formatUsd(c.price)}
-                            <Plus className="size-3.5 text-[#931115]" />
-                          </span>
-                        </button>
-                      ))
-                  )}
-                </div>
-              </div>
-              <Button variant="outline" onClick={() => setCeOpen(true)}>
-                <Plus className="size-4" />
-                Custom extra
-              </Button>
-            </div>
-          ) : null}
+      {sideTab === 'policy' ? (
+        <CancellationPolicyControl
+          tab={tab}
+          draft={draft}
+          patch={patch}
+          demoRole={demoRole}
+          isDraftItinerary={isDraftItinerary}
+        />
+      ) : null}
 
-          {sideTab === 'promotions' ? (
+      {sideTab === 'extras' ? (
+        <ExtrasTab
+          selected={extras}
+          catalog={catalogExtras}
+          extraIds={extraIds}
+          onAdd={(id) => patch({ extras: [...extraIds, id] })}
+          onRemove={(ex) => {
+            if (ex.custom) {
+              patch({ customExtras: customExtras.filter((x) => x.id !== ex.id) })
+            } else {
+              patch({ extras: extraIds.filter((id) => id !== ex.id) })
+            }
+          }}
+          onCustom={() => setCeOpen(true)}
+          availableHint={
+            isActivity
+              ? activities.length
+                ? 'Linked to selected activities'
+                : 'Add an activity to filter linked extras'
+              : undefined
+          }
+          emptyAvailableMessage={
+            isActivity
+              ? activities.length
+                ? 'No more extras for these activities.'
+                : 'Add an activity item to see linked extras (e.g. Lunch on Game Drive).'
+              : 'No more extras available.'
+          }
+        />
+      ) : null}
+
+      {sideTab === 'promotions' ? (
             <div className="space-y-2">
               {PROMOTIONS.map((p) => {
                 const sel = draft.promotion === p.id
@@ -403,27 +372,42 @@ export function ActivityOtherPanel({
               })}
             </div>
           ) : null}
-        </>
-      ) : null}
 
-      <section>
-        <div className="mb-2 flex items-baseline gap-2">
-          <h3 className="text-[14px] font-semibold text-[#171717]">Internal notes</h3>
-          <span className="text-[12px] font-medium text-[#94A3B8]">Not shown to the client</span>
+      {sideTab === 'notes' ? (
+        <div className="space-y-4">
+          <div>
+            <p className="mb-2 text-[14px] font-bold text-[#171717]">Service Notes</p>
+            <textarea
+              readOnly
+              rows={3}
+              className="w-full resize-none rounded-lg border border-[#E5E7EB] bg-[#FAFAFB] p-2.5 text-[13px] text-[#525252]"
+              value={
+                isActivity
+                  ? 'Park fees and guide tips are typically excluded unless noted on the activity item. Shared vehicle seatings are subject to availability.'
+                  : 'Miscellaneous line — confirm inclusions with the supplier before quoting.'
+              }
+            />
+          </div>
+          <div>
+            <div className="mb-2 flex items-baseline gap-2">
+              <h3 className="text-[14px] font-semibold text-[#171717]">Internal notes</h3>
+              <span className="text-[12px] font-medium text-[#94A3B8]">Not shown to the client</span>
+            </div>
+            <textarea
+              rows={3}
+              value={String(draft.notes || '')}
+              onChange={(e) => patch({ notes: e.target.value })}
+              className="w-full resize-y rounded-lg border border-[#E5E7EB] bg-[#FAFAFB] px-2.5 py-2 text-[13px] text-[#171717] outline-none placeholder:text-[#A1A1AA]"
+              placeholder="Anything the ops team should know about this service…"
+            />
+          </div>
         </div>
-        <textarea
-          rows={3}
-          value={String(draft.notes || '')}
-          onChange={(e) => patch({ notes: e.target.value })}
-          className="w-full resize-y rounded-lg border border-[#E5E7EB] bg-[#FAFAFB] px-2.5 py-2 text-[13px] text-[#171717] outline-none placeholder:text-[#A1A1AA]"
-          placeholder="Anything the ops team should know about this service…"
-        />
-      </section>
+      ) : null}
 
       <ActivityTypeModal
         open={actOpen}
         onClose={() => setActOpen(false)}
-        types={ACTIVITY_TYPES}
+        types={typeCatalog}
         defaultStart={String(draft.startDate || '')}
         defaultEnd={String(draft.endDate || '')}
         title={isActivity ? 'Add activity' : 'Add Other'}
@@ -444,33 +428,31 @@ export function ActivityOtherPanel({
         }
       />
 
-      {isActivity ? (
-        <CustomExtraModal
-          open={ceOpen}
-          onClose={() => setCeOpen(false)}
-          onSubmit={(extra) => {
-            const n = Number(draft.customExtraSeq) || 1
-            patch({
-              customExtras: [
-                ...customExtras,
-                {
-                  id: `custom-a${n}`,
-                  title: extra.title,
-                  serviceType: extra.serviceType,
-                  chargeType: extra.chargeType,
-                  timeUnit: extra.timeUnit,
-                  qty: extra.qty,
-                  price: extra.price,
-                  dateFrom: extra.dateFrom,
-                  dateTo: extra.dateTo,
-                  custom: true,
-                },
-              ],
-              customExtraSeq: n + 1,
-            })
-          }}
-        />
-      ) : null}
+      <CustomExtraModal
+        open={ceOpen}
+        onClose={() => setCeOpen(false)}
+        onSubmit={(extra) => {
+          const n = Number(draft.customExtraSeq) || 1
+          patch({
+            customExtras: [
+              ...customExtras,
+              {
+                id: `custom-${isActivity ? 'a' : 'o'}${n}`,
+                title: extra.title,
+                serviceType: extra.serviceType,
+                chargeType: extra.chargeType,
+                timeUnit: extra.timeUnit,
+                qty: extra.qty,
+                price: extra.price,
+                dateFrom: extra.dateFrom,
+                dateTo: extra.dateTo,
+                custom: true,
+              },
+            ],
+            customExtraSeq: n + 1,
+          })
+        }}
+      />
     </div>
   )
 }

@@ -1,5 +1,6 @@
+import { useState } from 'react'
 import { Plus, RefreshCw, Trash2 } from 'lucide-react'
-import { VEHICLE_TYPES } from '@/shared/lib/catalogs'
+import { PROMOTIONS, extrasForTab } from '@/shared/lib/catalogs'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import {
@@ -9,63 +10,107 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import type { CatalogItem, Guest, Vehicle } from '@/shared/lib/types'
-import { formatUsd } from '@/shared/lib/utils'
-import { GuestChip } from './BuilderModals'
+import type { CatalogItem, DemoRole, Guest, Vehicle } from '@/shared/lib/types'
+import { cn, formatUsd } from '@/shared/lib/utils'
+import { DatePickerGridInput } from '@/shared/ui/date-picker'
+import { CustomExtraModal, GuestChip } from './BuilderModals'
+import { CancellationPolicyControl } from './CancellationPolicyControl'
+import { ExtrasTab } from './ExtrasTab'
 import { LocationDropdown } from './LocationDropdown'
+import { OptionInclusions } from './OptionInclusions'
 import { SupplierPicker } from './SupplierPicker'
 import {
   TRANS_SERVICES,
+  asCustomExtras,
+  asExtraIds,
   asVehicles,
+  extraObjects,
   findGuest,
   guestChipStyle,
   usedGuestIds,
+  autoAssignByCapacity,
 } from './builderUtils'
+import { resolveServiceOption, vehicleOptionsForService } from './serviceOptions'
+
+// Extras and Special Offer(s) content below is invented for this prototype —
+// Transport's real ticket (PCP-1462) said "No Extras" / "Special Offers only
+// if the API exposes them," but Clint deliberately reversed that for this
+// build. Flagged in the session report for BA/product sign-off; the data
+// shape mirrors the other three panels exactly (extrasForTab + PROMOTIONS),
+// nothing new invented at the architecture level, only at the content level.
+type TransTab = 'policy' | 'extras' | 'promotions' | 'notes'
 
 export function TransportationPanel({
   draft,
   patch,
   guests,
+  demoRole,
+  isDraftItinerary,
 }: {
   draft: Record<string, unknown>
   patch: (p: Record<string, unknown>) => void
   guests: Guest[]
+  demoRole: DemoRole
+  isDraftItinerary: boolean
 }) {
+  const [transTab, setTransTab] = useState<TransTab>('policy')
+  const [ceOpen, setCeOpen] = useState(false)
   const vehicles = asVehicles(draft)
   const used = usedGuestIds(vehicles)
+  const extras = extraObjects(draft)
+  const extraIds = asExtraIds(draft)
+  const customExtras = asCustomExtras(draft)
+  const serviceId = String(draft.serviceId || '')
+  const vehicleOptions = vehicleOptionsForService(serviceId)
 
   function setVehicles(next: Vehicle[]) {
     patch({ vehicles: next })
   }
 
   function autoAssign() {
-    const pool = guests.map((g) => g.id)
-    const next = vehicles.map((v) => ({ ...v, guestIds: [] as number[] }))
-    next.forEach((v) => {
-      while (pool.length && v.guestIds.length < v.cap) {
-        v.guestIds.push(pool.shift()!)
-      }
-    })
-    setVehicles(next)
+    setVehicles(autoAssignByCapacity(vehicles, guests, (v) => v.cap))
   }
+
+  const tabBtn = (key: TransTab, label: string, badge?: number) => (
+    <button
+      type="button"
+      onClick={() => setTransTab(key)}
+      className={cn(
+        'h-[38px] border-b-2 px-3 text-[13px] font-semibold',
+        transTab === key ? 'border-[#931115] text-[#931115]' : 'border-transparent text-[#525252]',
+      )}
+    >
+      {label}
+      {badge != null && badge > 0 ? (
+        <span
+          className={cn(
+            'ml-1 rounded px-1.5 text-[11px] font-semibold',
+            transTab === key ? 'bg-[#DBEAFE] text-[#2563EB]' : 'bg-[#F3F4F6] text-[#525252]',
+          )}
+        >
+          {badge}
+        </span>
+      ) : null}
+    </button>
+  )
 
   return (
     <div>
-      <section className="mb-5 rounded-xl border border-[#E5E7EB] bg-white px-5 pb-5 pt-[18px] shadow-sm">
+      <section className="mb-5 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-4 shadow-sm">
         <div className="mb-3">
-          <h3 className="text-[12.5px] font-bold uppercase tracking-[0.06em] text-[#334155]">
+          <h3 className="text-[12px] font-bold uppercase tracking-wide text-[#334155]">
             Supplier & service
           </h3>
-          <p className="mt-1 text-[13.5px] font-medium text-[#64748B]">
-            Pick location, supplier and service
-          </p>
+          <p className="text-[11.5px] text-[#94A3B8]">Pick location, supplier and service</p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="grid gap-1.5">
             <Label>Location</Label>
             <LocationDropdown
               value={String(draft.location || '')}
-              onChange={(name) => patch({ location: name, supplier: '', service: '' })}
+              onChange={(name) =>
+                patch({ location: name, supplier: '', service: '', serviceId: '' })
+              }
             />
           </div>
           <div className="grid gap-1.5">
@@ -73,7 +118,9 @@ export function TransportationPanel({
             <SupplierPicker
               tab="transportation"
               value={String(draft.supplier || '')}
-              onPick={(item: CatalogItem) => patch({ supplier: item.name, service: item.service })}
+              onPick={(item: CatalogItem) =>
+                patch({ supplier: item.name, service: item.service, serviceId: item.id })
+              }
             />
           </div>
           <div className="grid gap-1.5 sm:col-span-2">
@@ -115,20 +162,43 @@ export function TransportationPanel({
               <RefreshCw className="size-3.5" />
               Auto-assign
             </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 border-[#931115] text-xs font-semibold text-[#931115]"
-              onClick={() =>
+            <Select
+              key={`add-vehicle-${String(draft.service || '')}-${vehicles.length}`}
+              value={undefined}
+              disabled={!String(draft.service || '').trim()}
+              onValueChange={(type) => {
+                const found = vehicleOptions.find((t) => t.type === type)
+                if (!found) return
                 setVehicles([
                   ...vehicles,
-                  { id: `v${Date.now()}`, type: 'Land Cruiser', cap: 6, rate: 220, guestIds: [] },
+                  {
+                    id: `v${Date.now()}`,
+                    type: found.type,
+                    cap: found.cap,
+                    rate: found.rate,
+                    guestIds: [],
+                    dateFrom: String(draft.transDate || draft.hireStart || ''),
+                    dateTo: String(draft.transDate || draft.hireEnd || draft.hireStart || ''),
+                  },
                 ])
-              }
+              }}
             >
-              <Plus className="size-3.5" />
-              Add vehicle
-            </Button>
+              <SelectTrigger className="h-7 w-auto gap-1 border-[#931115] bg-white px-2.5 text-xs font-semibold text-[#931115] shadow-none disabled:opacity-40">
+                <Plus className="size-3.5" />
+                <SelectValue
+                  placeholder={
+                    String(draft.service || '').trim() ? 'Add vehicle' : 'Select a service first'
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent align="end">
+                {vehicleOptions.map((t) => (
+                  <SelectItem key={t.id} value={t.type}>
+                    {t.type} ({t.cap})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
@@ -145,7 +215,7 @@ export function TransportationPanel({
                   <Select
                     value={v.type}
                     onValueChange={(value) => {
-                      const found = VEHICLE_TYPES.find((t) => t.type === value)
+                      const found = vehicleOptions.find((t) => t.type === value)
                       setVehicles(
                         vehicles.map((x) =>
                           x.id === v.id
@@ -164,8 +234,8 @@ export function TransportationPanel({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {VEHICLE_TYPES.map((t) => (
-                        <SelectItem key={t.type} value={t.type}>
+                      {vehicleOptions.map((t) => (
+                        <SelectItem key={t.id} value={t.type}>
                           {t.type} ({t.cap})
                         </SelectItem>
                       ))}
@@ -177,6 +247,7 @@ export function TransportationPanel({
                   >
                     {v.guestIds.length} / {v.cap} PAX
                   </span>
+                  <OptionInclusions option={resolveServiceOption(serviceId, v.type)} />
                   <div className="flex-1" />
                   <button
                     type="button"
@@ -187,7 +258,54 @@ export function TransportationPanel({
                     <Trash2 className="size-3.5" />
                   </button>
                 </div>
-                <div className="flex flex-wrap items-center gap-2 p-[9px]">
+                <div className="space-y-2.5 p-[9px]">
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div className="grid gap-1">
+                      <Label className="text-[11px] text-[#737373]">
+                        Date From<span className="text-[#931115]">*</span>
+                      </Label>
+                      <DatePickerGridInput
+                        value={v.dateFrom || ''}
+                        onChange={(value) =>
+                          setVehicles(
+                            vehicles.map((x) => {
+                              if (x.id !== v.id) return x
+                              const next = { ...x, dateFrom: value }
+                              // Keep Date To from drifting before From when From is set later.
+                              if (value && x.dateTo && x.dateTo < value) next.dateTo = value
+                              return next
+                            }),
+                          )
+                        }
+                        className="h-8 bg-white"
+                      />
+                    </div>
+                    <div className="grid gap-1">
+                      <Label className="text-[11px] text-[#737373]">
+                        Date To<span className="text-[#931115]">*</span>
+                      </Label>
+                      <DatePickerGridInput
+                        value={v.dateTo || ''}
+                        onChange={(value) =>
+                          setVehicles(
+                            vehicles.map((x) => {
+                              if (x.id !== v.id) return x
+                              const next = { ...x, dateTo: value }
+                              if (value && x.dateFrom && value < x.dateFrom) next.dateFrom = value
+                              return next
+                            }),
+                          )
+                        }
+                        className="h-8 bg-white"
+                      />
+                    </div>
+                  </div>
+                  {(!v.dateFrom || !v.dateTo) && (
+                    <p className="text-[11px] font-medium text-[#B45309]">
+                      Date From and Date To are required for each vehicle.
+                    </p>
+                  )}
+                  <div className="flex flex-wrap items-center gap-2">
                   {v.guestIds.map((gid) => {
                     const g = findGuest(gid, guests)
                     if (!g) return null
@@ -236,6 +354,7 @@ export function TransportationPanel({
                       ))}
                     </SelectContent>
                   </Select>
+                  </div>
                 </div>
               </div>
             )
@@ -243,31 +362,132 @@ export function TransportationPanel({
         </div>
       </section>
 
-      <section className="mt-4 space-y-4">
-        <div>
-          <h3 className="mb-2 text-[14px] font-semibold text-[#171717]">Service Notes</h3>
-          <textarea
-            readOnly
-            rows={3}
-            className="w-full resize-none rounded-lg border border-[#E5E7EB] bg-[#FAFAFB] px-2.5 py-2 text-[13px] text-[#525252] outline-none"
-            value="Rates include fuel and driver-guide. Vehicle capacity excludes driver."
-          />
-        </div>
+      <div className="mt-4 flex gap-1 border-b">
+        {tabBtn('extras', 'Extras', extras.length)}
+        {tabBtn('promotions', 'Special Offer(s)', PROMOTIONS.length)}
+        {tabBtn('policy', 'Policy')}
+        {tabBtn('notes', 'Notes')}
+      </div>
 
-        <div>
-          <div className="mb-2 flex items-baseline gap-2">
-            <h3 className="text-[14px] font-semibold text-[#171717]">Internal notes</h3>
-            <span className="text-[12px] font-medium text-[#94A3B8]">Not shown to the client</span>
-          </div>
-          <textarea
-            rows={3}
-            value={String(draft.notes || '')}
-            onChange={(e) => patch({ notes: e.target.value })}
-            className="w-full resize-y rounded-lg border border-[#E5E7EB] bg-[#FAFAFB] px-2.5 py-2 text-[13px] text-[#171717] outline-none placeholder:text-[#A1A1AA]"
-            placeholder="Anything the ops team should know about this service…"
+      {transTab === 'policy' ? (
+        <div className="pt-3">
+          <CancellationPolicyControl
+            tab="transportation"
+            draft={draft}
+            patch={patch}
+            demoRole={demoRole}
+            isDraftItinerary={isDraftItinerary}
           />
         </div>
-      </section>
+      ) : null}
+
+      {transTab === 'extras' ? (
+        <ExtrasTab
+          className="pt-3"
+          selected={extras}
+          catalog={extrasForTab('transportation')}
+          extraIds={extraIds}
+          onAdd={(id) => patch({ extras: [...extraIds, id] })}
+          onRemove={(ex) => {
+            if (ex.custom) {
+              patch({ customExtras: customExtras.filter((x) => x.id !== ex.id) })
+            } else {
+              patch({ extras: extraIds.filter((id) => id !== ex.id) })
+            }
+          }}
+          onCustom={() => setCeOpen(true)}
+        />
+      ) : null}
+
+      {transTab === 'promotions' ? (
+        <div className="space-y-2 pt-3">
+          {PROMOTIONS.map((p) => {
+            const sel = draft.promotion === p.id
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => patch({ promotion: sel ? null : p.id })}
+                className="flex w-full items-start gap-3 rounded-xl border p-3 text-left"
+                style={{
+                  borderColor: sel ? '#931115' : '#E5E7EB',
+                  background: sel ? '#FEF2F2' : '#FFFFFF',
+                }}
+              >
+                <span
+                  className="mt-1 flex size-4 items-center justify-center rounded-full border"
+                  style={{ borderColor: sel ? '#2B7FFF' : '#D4D4D4' }}
+                >
+                  {sel ? <span className="size-2 rounded-full bg-[#2B7FFF]" /> : null}
+                </span>
+                <span>
+                  <span className="block text-[13.5px] font-semibold">{p.title}</span>
+                  <span className="text-[12px] text-[#737373]">{p.desc}</span>
+                  {p.active ? (
+                    <span className="mt-1 inline-block text-[11px] font-bold text-[#059669]">
+                      Active
+                    </span>
+                  ) : null}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      ) : null}
+
+      {transTab === 'notes' ? (
+        <section className="space-y-4 pt-3">
+          <div>
+            <h3 className="mb-2 text-[14px] font-semibold text-[#171717]">Service Notes</h3>
+            <textarea
+              readOnly
+              rows={3}
+              className="w-full resize-none rounded-lg border border-[#E5E7EB] bg-[#FAFAFB] px-2.5 py-2 text-[13px] text-[#525252] outline-none"
+              value="Rates include fuel and driver-guide. Vehicle capacity excludes driver."
+            />
+          </div>
+
+          <div>
+            <div className="mb-2 flex items-baseline gap-2">
+              <h3 className="text-[14px] font-semibold text-[#171717]">Internal notes</h3>
+              <span className="text-[12px] font-medium text-[#94A3B8]">Not shown to the client</span>
+            </div>
+            <textarea
+              rows={3}
+              value={String(draft.notes || '')}
+              onChange={(e) => patch({ notes: e.target.value })}
+              className="w-full resize-y rounded-lg border border-[#E5E7EB] bg-[#FAFAFB] px-2.5 py-2 text-[13px] text-[#171717] outline-none placeholder:text-[#A1A1AA]"
+              placeholder="Anything the ops team should know about this service…"
+            />
+          </div>
+        </section>
+      ) : null}
+
+      <CustomExtraModal
+        open={ceOpen}
+        onClose={() => setCeOpen(false)}
+        onSubmit={(extra) => {
+          const n = Number(draft.customExtraSeq) || 1
+          patch({
+            customExtras: [
+              ...customExtras,
+              {
+                id: `custom-t${n}`,
+                title: extra.title,
+                serviceType: extra.serviceType,
+                chargeType: extra.chargeType,
+                timeUnit: extra.timeUnit,
+                qty: extra.qty,
+                price: extra.price,
+                dateFrom: extra.dateFrom,
+                dateTo: extra.dateTo,
+                custom: true,
+              },
+            ],
+            customExtraSeq: n + 1,
+          })
+        }}
+      />
     </div>
   )
 }

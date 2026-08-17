@@ -287,7 +287,7 @@ export function PricingSection({
           disabled={overrideDisabled && !overrideOn}
           title={
             overrideDisabled && !overrideOn
-              ? 'Stay price overrides locked after Invoiced'
+              ? 'Price overrides locked after Invoiced'
               : undefined
           }
           className="text-[14px] font-semibold text-[#2563EB] disabled:cursor-not-allowed disabled:opacity-40"

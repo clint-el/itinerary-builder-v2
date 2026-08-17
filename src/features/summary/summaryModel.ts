@@ -3,6 +3,7 @@ import { applyOfferToCostAndSell, roomTypeLabel } from '@/shared/lib/catalogs'
 import type { AddedService, Guest, Hold, LifecycleLogEntry, QuoteGroup, ServiceTab } from '@/shared/lib/types'
 import {
   asActivities,
+  asFlights,
   asHireRoutes,
   asRooms,
   asVehicles,
@@ -349,8 +350,9 @@ export function linesFromServices(services: AddedService[], guests: Guest[]): Su
       const mix = { ad: (pax.adult || 0) + (pax.youth || 0), ch: (pax.child || 0) + (pax.infant || 0) }
       const totalPax = mix.ad + mix.ch
       const service = String(d.service || '')
-      const date = String(d.departDate || '')
-      const departTime = String(d.departTime || '')
+      const flights = asFlights(d)
+      const date = flights[0]?.departDate || String(d.departDate || '')
+      const departTime = flights[0]?.departTime || String(d.departTime || '')
       const returnTime = d.flightMode === 'return' ? String(d.returnTime || '') : ''
       const paxCount = totalPax || flightAutoQty(d)
       const supplier = String(d.supplier || svc.title)

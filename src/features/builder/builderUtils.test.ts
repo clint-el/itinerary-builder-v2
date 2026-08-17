@@ -4,8 +4,15 @@ import type { AddedService } from '@/shared/lib/types'
 import {
   canAddDraft,
   draftMissingRequirements,
+  autoAssignByCapacity,
+  findFlightServiceOption,
+  formatFlightOptionLabel,
+  isDepartDateOnFlightOptionDay,
+  isDepartTimeInFlightOptionWindow,
+  optionsForFlightService,
   serviceStartDate,
   sortServicesByDate,
+  weekdayFromIsoDate,
 } from './builderUtils'
 
 describe('draftMissingRequirements', () => {
@@ -14,8 +21,6 @@ describe('draftMissingRequirements', () => {
       'Location',
       'Supplier',
       'Service',
-      'Start date',
-      'End date',
       'At least one room',
     ])
   })
@@ -36,6 +41,8 @@ describe('draftMissingRequirements', () => {
           rate: 150,
           qty: 1,
           guestIds: [1],
+          start: '2026-09-01',
+          end: '2026-09-03',
         },
       ],
     }
@@ -43,7 +50,7 @@ describe('draftMissingRequirements', () => {
     expect(canAddDraft('accommodation', draft)).toBe(true)
   })
 
-  it('requires location, supplier and service for transportation', () => {
+  it('requires location, supplier, service and vehicle dates for transportation', () => {
     const draft = {
       ...defaultDraft('transportation'),
     }
@@ -51,21 +58,29 @@ describe('draftMissingRequirements', () => {
       'Location',
       'Supplier',
       'Service',
+      'Vehicle date from / date to',
     ])
   })
 
-  it('accepts transportation with location, supplier and service', () => {
+  it('accepts transportation with location, supplier, service and vehicle dates', () => {
+    const base = defaultDraft('transportation')
+    const vehicles = ((base.vehicles as { id: string }[]) || []).map((v) => ({
+      ...v,
+      dateFrom: '2026-09-01',
+      dateTo: '2026-09-01',
+    }))
     const draft = {
-      ...defaultDraft('transportation'),
+      ...base,
       location: 'Nairobi',
       supplier: 'Hemingways Transfers',
       service: 'JKIA to Hemingways Nairobi (3-pax)',
+      vehicles,
     }
     expect(draftMissingRequirements('transportation', draft)).toEqual([])
     expect(canAddDraft('transportation', draft)).toBe(true)
   })
 
-  it('requires departure date for flights', () => {
+  it('requires at least one flight with a departure date', () => {
     const draft = {
       ...defaultDraft('flight'),
       flightFrom: 'Wilson',
@@ -73,7 +88,23 @@ describe('draftMissingRequirements', () => {
       supplier: 'AirKenya',
       service: 'WILSON TO LOISABA OW',
     }
-    expect(draftMissingRequirements('flight', draft)).toEqual(['Departure date'])
+    expect(draftMissingRequirements('flight', draft)).toEqual(['At least one flight'])
+
+    const withFlight = {
+      ...draft,
+      flights: [
+        {
+          id: 'f1',
+          cap: 5,
+          guestIds: [],
+          optionId: 'wlo-morning',
+          optionName: 'Morning Flight',
+          departDate: '',
+          departTime: '',
+        },
+      ],
+    }
+    expect(draftMissingRequirements('flight', withFlight)).toEqual(['Departure date'])
   })
 })
 
@@ -89,6 +120,7 @@ describe('travel window seeding', () => {
       transDate: '2026-09-01',
       hireStart: '2026-09-01',
       hireEnd: '2026-09-10',
+      vehicles: [{ dateFrom: '2026-09-01', dateTo: '2026-09-10' }],
     })
     expect(defaultDraft('flight', range)).toMatchObject({
       departDate: '2026-09-01',
@@ -112,6 +144,26 @@ describe('travel window seeding', () => {
       service: 'Double Suite',
     }
     expect(draftMissingRequirements('accommodation', draft)).toEqual(['At least one room'])
+  })
+
+  it('requires room stay dates when the travel window is missing', () => {
+    const draft = {
+      ...defaultDraft('accommodation'),
+      location: 'Nairobi',
+      supplier: 'Hemingways Nairobi',
+      service: 'Double Suite',
+      rooms: [
+        {
+          id: 'r1',
+          type: 'hemingways-double-suite',
+          basis: 'bb',
+          rate: 150,
+          qty: 1,
+          guestIds: [1],
+        },
+      ],
+    }
+    expect(draftMissingRequirements('accommodation', draft)).toEqual(['Room stay dates'])
   })
 
   it('never overwrites dates a planner already set', () => {
@@ -190,5 +242,60 @@ describe('sortServicesByDate', () => {
       svc('second', 'flight', { departDate: '2026-09-01' }),
     ]
     expect(sortServicesByDate(list).map((s) => s.id)).toEqual(['first', 'second', 'no-date'])
+  })
+})
+
+describe('flight service options', () => {
+  it('exposes options for scheduled services and none for charter', () => {
+    expect(optionsForFlightService('Scheduled Economy').length).toBeGreaterThan(0)
+    expect(optionsForFlightService('WILSON TO LOISABA OW').length).toBe(2)
+    expect(optionsForFlightService('Private Charter')).toEqual([])
+    expect(optionsForFlightService('Shared Charter')).toEqual([])
+  })
+
+  it('validates departure time against the selected option window', () => {
+    const morning = findFlightServiceOption('Scheduled Economy', 'econ-morning')
+    expect(morning).toBeTruthy()
+    expect(isDepartTimeInFlightOptionWindow('07:30', morning!)).toBe(true)
+    expect(isDepartTimeInFlightOptionWindow('07:00', morning!)).toBe(true)
+    expect(isDepartTimeInFlightOptionWindow('08:00', morning!)).toBe(true)
+    expect(isDepartTimeInFlightOptionWindow('06:59', morning!)).toBe(false)
+    expect(isDepartTimeInFlightOptionWindow('08:01', morning!)).toBe(false)
+  })
+
+  it('validates departure date against option operating days', () => {
+    const weekdayOnly = findFlightServiceOption('SEN - SERENGETI NORTH to MANYARA', 'sen-morning')
+    expect(weekdayOnly).toBeTruthy()
+    // 2026-09-07 is a Monday; 2026-09-12 is a Saturday
+    expect(weekdayFromIsoDate('2026-09-07')).toBe('Mon')
+    expect(weekdayFromIsoDate('2026-09-12')).toBe('Sat')
+    expect(isDepartDateOnFlightOptionDay('2026-09-07', weekdayOnly!)).toBe(true)
+    expect(isDepartDateOnFlightOptionDay('2026-09-12', weekdayOnly!)).toBe(false)
+  })
+
+  it('formats option labels with flight number, window, and days', () => {
+    const morning = findFlightServiceOption('WILSON TO LOISABA OW', 'wlo-morning')
+    expect(formatFlightOptionLabel(morning!)).toBe(
+      'Morning Flight — FY78787 · 7:00 AM–8:00 AM · Mon–Sun',
+    )
+  })
+})
+
+describe('autoAssignByCapacity', () => {
+  it('clears existing assignments and fills buckets in order up to capacity', () => {
+    const guests = [
+      { id: 1, name: 'A', type: 'adult' as const, age: 30, resident: true },
+      { id: 2, name: 'B', type: 'adult' as const, age: 30, resident: true },
+      { id: 3, name: 'C', type: 'adult' as const, age: 30, resident: true },
+      { id: 4, name: 'D', type: 'adult' as const, age: 30, resident: true },
+    ]
+    const items = [
+      { id: 'a', guestIds: [9], cap: 2 },
+      { id: 'b', guestIds: [8], cap: 1 },
+    ]
+    const next = autoAssignByCapacity(items, guests, (x) => x.cap)
+    expect(next[0].guestIds).toEqual([1, 2])
+    expect(next[1].guestIds).toEqual([3])
+    expect(items[0].guestIds).toEqual([9])
   })
 })

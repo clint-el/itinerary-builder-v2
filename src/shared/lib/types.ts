@@ -95,6 +95,8 @@ export interface LifecycleLogEntry {
 }
 
 export interface CatalogItem {
+  /** Stable mock catalog id (unique per supplier+service row). */
+  id: string
   name: string
   service: string
   location: string
@@ -134,6 +136,25 @@ export interface Vehicle {
   cap: number
   rate: number
   guestIds: number[]
+  /** Inclusive start of the vehicle hire / transfer window (ISO `YYYY-MM-DD`). */
+  dateFrom?: string
+  /** Inclusive end of the vehicle hire / transfer window (ISO `YYYY-MM-DD`). */
+  dateTo?: string
+}
+
+/** One concrete departure / aircraft under a Flight service line (mirrors Transport vehicles). */
+export interface FlightInstance {
+  id: string
+  /** Seat capacity for this departure. */
+  cap: number
+  guestIds: number[]
+  /** Catalog Flight Option id (or charter sentinel). */
+  optionId?: string
+  /** Display name frozen at add-time (useful if catalog label changes). */
+  optionName?: string
+  departDate?: string
+  /** 24h `HH:MM`. */
+  departTime?: string
 }
 
 export interface HireRoute {

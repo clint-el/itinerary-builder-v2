@@ -430,14 +430,41 @@ export function BuilderPage() {
             </div>
 
             {activeTab === 'accommodation' ? (
-              <AccommodationPanel draft={draft} patch={patchDraft} guests={guests} />
+              <AccommodationPanel
+                draft={draft}
+                patch={patchDraft}
+                guests={guests}
+                demoRole={demoRole}
+                isDraftItinerary={itinerary.status === 'DRAFT'}
+              />
             ) : null}
             {activeTab === 'transportation' ? (
-              <TransportationPanel draft={draft} patch={patchDraft} guests={guests} />
+              <TransportationPanel
+                draft={draft}
+                patch={patchDraft}
+                guests={guests}
+                demoRole={demoRole}
+                isDraftItinerary={itinerary.status === 'DRAFT'}
+              />
             ) : null}
-            {activeTab === 'flight' ? <FlightPanel draft={draft} patch={patchDraft} guests={guests} /> : null}
+            {activeTab === 'flight' ? (
+              <FlightPanel
+                draft={draft}
+                patch={patchDraft}
+                guests={guests}
+                demoRole={demoRole}
+                isDraftItinerary={itinerary.status === 'DRAFT'}
+              />
+            ) : null}
             {activeTab === 'activity' || activeTab === 'other' ? (
-              <ActivityOtherPanel tab={activeTab} draft={draft} patch={patchDraft} guests={guests} />
+              <ActivityOtherPanel
+                tab={activeTab}
+                draft={draft}
+                patch={patchDraft}
+                guests={guests}
+                demoRole={demoRole}
+                isDraftItinerary={itinerary.status === 'DRAFT'}
+              />
             ) : null}
 
             <div className="mt-4">
@@ -449,9 +476,9 @@ export function BuilderPage() {
                 setPricingRows={setPricingRows}
                 guests={guests}
                 overrideOn={pricingOverride}
-                overrideDisabled={pricingLocked && activeTab === 'accommodation'}
+                overrideDisabled={pricingLocked}
                 onToggleOverride={() => {
-                  if (pricingLocked && activeTab === 'accommodation') return
+                  if (pricingLocked) return
                   if (pricingOverride) {
                     setPricingOverride(false)
                     patchDraft({ priceOverride: false })

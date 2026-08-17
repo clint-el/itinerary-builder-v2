@@ -1,8 +1,6 @@
 import { Copy, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import {
   BASIS,
-  BASIS_DETAILS,
-  BASIS_OPTIONS,
   PROMOTIONS,
   extrasForTab,
   roomTypeCapacity,
@@ -18,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import type { Guest, Hold, Room } from '@/shared/lib/types'
+import type { DemoRole, Guest, Hold, Room } from '@/shared/lib/types'
 import { cn, formatUsd } from '@/shared/lib/utils'
 import { DatePickerGridInput } from '@/shared/ui/date-picker'
 import {
@@ -27,8 +25,12 @@ import {
   HoldModal,
   HoldsList,
 } from './BuilderModals'
+import { CancellationPolicyControl } from './CancellationPolicyControl'
+import { ExtrasTab } from './ExtrasTab'
 import { LocationDropdown } from './LocationDropdown'
+import { OptionInclusions } from './OptionInclusions'
 import { SupplierPicker } from './SupplierPicker'
+import { resolveServiceOption, basisOptionsForService } from './serviceOptions'
 import {
   asCustomExtras,
   asExtraIds,
@@ -36,23 +38,27 @@ import {
   extraObjects,
   findGuest,
   guestChipStyle,
-  nights,
   roomPriceBreakdown,
   usedGuestIds,
+  autoAssignByCapacity,
 } from './builderUtils'
 import type { CatalogItem } from '@/shared/lib/types'
 import { useState } from 'react'
 
-type AccTab = 'guests' | 'extras' | 'promotions' | 'supplier' | 'notes'
+type AccTab = 'policy' | 'guests' | 'extras' | 'promotions' | 'supplier' | 'notes'
 
 export function AccommodationPanel({
   draft,
   patch,
   guests,
+  demoRole,
+  isDraftItinerary,
 }: {
   draft: Record<string, unknown>
   patch: (p: Record<string, unknown>) => void
   guests: Guest[]
+  demoRole: DemoRole
+  isDraftItinerary: boolean
 }) {
   const [accTab, setAccTab] = useState<AccTab>('guests')
   const [holdOpen, setHoldOpen] = useState(false)
@@ -66,16 +72,20 @@ export function AccommodationPanel({
   const customExtras = asCustomExtras(draft)
   const holds = (Array.isArray(draft.holds) ? draft.holds : []) as Hold[]
   const basis = String(draft.basis || 'bb') as keyof typeof BASIS
-  const details = BASIS_DETAILS[basis]
+  const serviceId = String(draft.serviceId || '')
+  const basisOptions = basisOptionsForService(serviceId)
+  const basisOption = resolveServiceOption(serviceId, basis)
   const start = String(draft.start || '')
   const end = String(draft.end || '')
-  const nightCount = nights(start, end)
-  const overrideCount = rooms.filter(
-    (r) => (r.start && r.start !== start) || (r.end && r.end !== end),
-  ).length
 
   function setRooms(next: Room[]) {
-    patch({ rooms: next })
+    const starts = next.map((r) => String(r.start || '').trim()).filter(Boolean).sort()
+    const ends = next.map((r) => String(r.end || '').trim()).filter(Boolean).sort()
+    patch({
+      rooms: next,
+      ...(starts[0] ? { start: starts[0] } : {}),
+      ...(ends.length ? { end: ends[ends.length - 1] } : {}),
+    })
   }
 
   function moveGuestToRoom(gid: number, targetRoomId: string) {
@@ -128,15 +138,7 @@ export function AccommodationPanel({
   }
 
   function autoAssignRooms() {
-    const pool = guests.map((g) => g.id)
-    const next = rooms.map((x) => ({ ...x, guestIds: [] as number[] }))
-    next.forEach((x) => {
-      const cap = roomTypeCapacity(x.type)
-      while (pool.length && x.guestIds.length < cap) {
-        x.guestIds.push(pool.shift()!)
-      }
-    })
-    setRooms(next)
+    setRooms(autoAssignByCapacity(rooms, guests, (x) => roomTypeCapacity(x.type)))
   }
 
   const tabBtn = (key: AccTab, label: string, badge?: number) => (
@@ -170,18 +172,18 @@ export function AccommodationPanel({
       <section className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-4 shadow-sm">
         <div className="mb-3">
           <h3 className="text-[12px] font-bold uppercase tracking-wide text-[#334155]">
-            Supplier & stay dates
+            Supplier & service
           </h3>
-          <p className="text-[11.5px] text-[#94A3B8]">
-            Sets the supplier for this service and the default room dates
-          </p>
+          <p className="text-[11.5px] text-[#94A3B8]">Pick location, supplier and service</p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="grid gap-1.5">
             <Label>Location</Label>
             <LocationDropdown
               value={String(draft.location || '')}
-              onChange={(name) => patch({ location: name, supplier: '', service: '' })}
+              onChange={(name) =>
+                patch({ location: name, supplier: '', service: '', serviceId: '' })
+              }
               clearSupplierOnPick
             />
           </div>
@@ -190,51 +192,20 @@ export function AccommodationPanel({
             <SupplierPicker
               tab="accommodation"
               value={String(draft.supplier || '')}
-              onPick={(item: CatalogItem) => patch({ supplier: item.name, service: item.service })}
+              onPick={(item: CatalogItem) =>
+                patch({ supplier: item.name, service: item.service, serviceId: item.id })
+              }
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="grid gap-1.5">
-              <Label>Start Date</Label>
-              <DatePickerGridInput
-                value={start}
-                onChange={(value) => patch({ start: value })}
-                className="bg-white"
-              />
-            </div>
-            <div className="grid gap-1.5">
-              <Label>End Date</Label>
-              <DatePickerGridInput
-                value={end}
-                onChange={(value) => patch({ end: value })}
-                referenceValue={start}
-                className="bg-white"
-              />
-            </div>
-          </div>
-          <div className="grid content-start gap-1.5">
-            <Label>Nights</Label>
-            <div className="flex h-9 items-center rounded-md bg-[#F3F4F6] px-3 shadow-[inset_0_0_0_1px_#E5E7EB]">
-              <span className="text-[13px] font-semibold text-[#171717]">
-                {nightCount} {nightCount === 1 ? 'night' : 'nights'}
-              </span>
-            </div>
-          </div>
         </div>
-        <p className="mt-2 text-[12px] text-[#737373]">
-          Applies to all rooms by default — set different dates per room below if some guests stay
-          longer or shorter.
-        </p>
-        {overrideCount > 0 ? (
-          <span className="mt-2 inline-flex h-4.5 items-center rounded bg-[#FEF3C7] px-1.5 text-[9px] font-bold text-[#92400E]">
-            CUSTOM dates · {overrideCount}
-          </span>
-        ) : null}
       </section>
 
       <section className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-4 shadow-sm">
-        <div className="mb-3 grid gap-1.5">
-          <Label>Basis</Label>
+        <div className="mb-0 grid gap-1.5">
+          <div className="flex items-center gap-2">
+            <Label>Basis</Label>
+            <OptionInclusions option={basisOption} />
+          </div>
           <Select
             value={basis}
             onValueChange={(v) => {
@@ -245,28 +216,13 @@ export function AccommodationPanel({
               <SelectValue placeholder="Select basis" />
             </SelectTrigger>
             <SelectContent>
-              {BASIS_OPTIONS.map((b) => (
+              {basisOptions.map((b) => (
                 <SelectItem key={b.id} value={b.id}>
                   {b.label}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-        </div>
-        <div className="space-y-3">
-          <div>
-            <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-[#A1A1A1]">
-              Included
-            </p>
-            <p className="text-[12.5px] leading-relaxed text-[#171717]">{details?.included}</p>
-          </div>
-          <div className="border-t border-[#E2E8F0]" />
-          <div>
-            <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-[#A1A1A1]">
-              Excluded
-            </p>
-            <p className="text-[12.5px] leading-relaxed text-[#525252]">{details?.excluded}</p>
-          </div>
         </div>
       </section>
 
@@ -275,8 +231,19 @@ export function AccommodationPanel({
         {tabBtn('extras', 'Extras', extras.length)}
         {tabBtn('promotions', 'Special Offer(s)', PROMOTIONS.length)}
         {tabBtn('supplier', 'Holds')}
-        {tabBtn('notes', 'Supplier Notes')}
+        {tabBtn('policy', 'Policy')}
+        {tabBtn('notes', 'Notes')}
       </div>
+
+      {accTab === 'policy' ? (
+        <CancellationPolicyControl
+          tab="accommodation"
+          draft={draft}
+          patch={patch}
+          demoRole={demoRole}
+          isDraftItinerary={isDraftItinerary}
+        />
+      ) : null}
 
       {accTab === 'guests' ? (
         <div className="space-y-3">
@@ -350,8 +317,6 @@ export function AccommodationPanel({
             const cap = roomTypeCapacity(room.type)
             const over = room.guestIds.length > cap
             const br = roomPriceBreakdown(room, start, end, guests)
-            const datesDiffer =
-              (!!room.start && room.start !== start) || (!!room.end && room.end !== end)
             return (
               <div
                 key={room.id}
@@ -434,27 +399,6 @@ export function AccommodationPanel({
                   <span className="whitespace-nowrap text-[11px] font-semibold text-[#525252]">
                     {br.rNights} {br.rNights === 1 ? 'night' : 'nights'}
                   </span>
-                  {datesDiffer ? (
-                    <>
-                      <span className="inline-flex h-[18px] items-center rounded bg-[#FEF3C7] px-1.5 text-[9px] font-bold text-[#92400E]">
-                        CUSTOM
-                      </span>
-                      <button
-                        type="button"
-                        title="Reset to default stay dates"
-                        className="text-[11px] font-semibold text-[#2563EB]"
-                        onClick={() =>
-                          setRooms(
-                            rooms.map((x) =>
-                              x.id === room.id ? { ...x, start: '', end: '' } : x,
-                            ),
-                          )
-                        }
-                      >
-                        Reset
-                      </button>
-                    </>
-                  ) : null}
                 </div>
                 <div className="min-h-10 p-2.5">
                   {room.guestIds.length === 0 ? (
@@ -561,6 +505,8 @@ export function AccommodationPanel({
                   rate: 150,
                   qty: 1,
                   guestIds: [],
+                  start,
+                  end,
                 },
               ])
             }
@@ -582,69 +528,20 @@ export function AccommodationPanel({
       ) : null}
 
       {accTab === 'extras' ? (
-        <div className="space-y-3">
-          {extras.length === 0 ? (
-            <p className="text-[12.5px] text-[#A1A1A1]">No extras selected.</p>
-          ) : (
-            extras.map((ex) => (
-              <div
-                key={ex.id}
-                className="flex items-center justify-between rounded-lg border bg-white px-3 py-2"
-              >
-                <div>
-                  <div className="text-[13px] font-semibold">{ex.title}</div>
-                  {ex.mandatory ? (
-                    <div className="text-[11px] text-[#A1A1A1]">Mandatory</div>
-                  ) : null}
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[13px] font-semibold">{formatUsd(ex.price)}</span>
-                  {!ex.mandatory ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (ex.custom) {
-                          patch({ customExtras: customExtras.filter((x) => x.id !== ex.id) })
-                        } else {
-                          patch({ extras: extraIds.filter((id) => id !== ex.id) })
-                        }
-                      }}
-                      className="text-[#931115]"
-                    >
-                      <Trash2 className="size-3.5" />
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-            ))
-          )}
-          <div>
-            <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-[#A1A1A1]">
-              Catalog
-            </p>
-            <div className="space-y-1.5">
-              {extrasForTab('accommodation')
-                .filter((c) => !extraIds.includes(c.id))
-                .map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => patch({ extras: [...extraIds, c.id] })}
-                  className="flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left hover:bg-[#F9FAFB]"
-                >
-                  <span className="text-[13px] font-semibold">{c.title}</span>
-                  <span className="text-[12.5px] font-semibold text-[#525252]">
-                    {formatUsd(c.price)}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-          <Button variant="outline" onClick={() => setCeOpen(true)}>
-            <Plus className="size-4" />
-            Custom extra
-          </Button>
-        </div>
+        <ExtrasTab
+          selected={extras}
+          catalog={extrasForTab('accommodation')}
+          extraIds={extraIds}
+          onAdd={(id) => patch({ extras: [...extraIds, id] })}
+          onRemove={(ex) => {
+            if (ex.custom) {
+              patch({ customExtras: customExtras.filter((x) => x.id !== ex.id) })
+            } else {
+              patch({ extras: extraIds.filter((id) => id !== ex.id) })
+            }
+          }}
+          onCustom={() => setCeOpen(true)}
+        />
       ) : null}
 
       {accTab === 'promotions' ? (
@@ -709,15 +606,6 @@ export function AccommodationPanel({
               rows={3}
               className="w-full resize-none rounded-lg border border-[#E5E7EB] bg-[#FAFAFB] p-2.5 text-[13px] text-[#525252]"
               value="Must include Conservancy Fee as an extra. Families (5 pax or more) with children aged 5-12 years receive FOC exclusive use of vehicle."
-            />
-          </div>
-          <div>
-            <p className="mb-2 text-[14px] font-bold text-[#171717]">Supplier Notes</p>
-            <textarea
-              readOnly
-              rows={8}
-              className="w-full resize-y rounded-lg border border-[#E5E7EB] bg-white p-3 text-[12.5px] leading-relaxed text-[#525252]"
-              value="Rates confirmed subject to availability at time of booking. Peak-season surcharge (20 Dec - 5 Jan) applies automatically. Cancellations within 30 days of arrival are non-refundable."
             />
           </div>
           <div className="grid gap-1.5">

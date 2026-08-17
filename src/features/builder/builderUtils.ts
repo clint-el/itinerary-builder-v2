@@ -12,6 +12,7 @@ import type {
   ActivityItem,
   AddedService,
   CustomExtra,
+  FlightInstance,
   Guest,
   HireRoute,
   Room,
@@ -89,6 +90,281 @@ export const FLIGHT_SERVICES = [
   'Shared Charter',
 ]
 
+/** Weekday codes used by scheduled flight Options (operating days). */
+export type FlightOptionDay = 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat' | 'Sun'
+
+/**
+ * A named schedule Option under a route-level flight Service. Charter-style
+ * services have none — absence of Options (not a separate flag) is what
+ * signals "no fixed schedule" in this prototype.
+ */
+export type FlightServiceOption = {
+  id: string
+  name: string
+  flightNumber: string
+  /** 24h `HH:MM` window start (inclusive). */
+  startTime: string
+  /** 24h `HH:MM` window end (inclusive). */
+  endTime: string
+  days: FlightOptionDay[]
+  included: string
+  excluded: string
+}
+
+const ALL_DAYS: FlightOptionDay[] = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+const WEEKDAYS: FlightOptionDay[] = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
+
+const DEFAULT_FLIGHT_INCLUDED =
+  'Seat on the selected scheduled departure within the option’s published time window.'
+const DEFAULT_FLIGHT_EXCLUDED =
+  'Excess baggage, private charter deviations, ground transfers, and meals are not included.'
+
+function flightOpt(
+  partial: Omit<FlightServiceOption, 'included' | 'excluded'> &
+    Partial<Pick<FlightServiceOption, 'included' | 'excluded'>>,
+): FlightServiceOption {
+  return {
+    included: DEFAULT_FLIGHT_INCLUDED,
+    excluded: DEFAULT_FLIGHT_EXCLUDED,
+    ...partial,
+  }
+}
+
+/**
+ * Mock Options keyed by exact `FLIGHT_SERVICES` names. Services with an empty
+ * array (or omitted key) are treated as charter-style — no Option field, no
+ * departure-time window validation.
+ */
+export const FLIGHT_SERVICE_OPTIONS: Record<string, FlightServiceOption[]> = {
+  'WILSON TO LOISABA OW': [
+    flightOpt({
+      id: 'wlo-morning',
+      name: 'Morning Flight',
+      flightNumber: 'FY78787',
+      startTime: '07:00',
+      endTime: '08:00',
+      days: ALL_DAYS,
+      included: 'Morning scheduled seat Wilson → Loisaba, soft-bag allowance as published.',
+      excluded: 'Afternoon connections, excess baggage, and lodge transfers are not included.',
+    }),
+    flightOpt({
+      id: 'wlo-afternoon',
+      name: 'Afternoon Flight',
+      flightNumber: 'FY78788',
+      startTime: '14:00',
+      endTime: '15:30',
+      days: ALL_DAYS,
+    }),
+  ],
+  'LOISABA TO MARA OW': [
+    flightOpt({
+      id: 'lom-morning',
+      name: 'Morning Flight',
+      flightNumber: 'FY79101',
+      startTime: '08:00',
+      endTime: '09:00',
+      days: ALL_DAYS,
+    }),
+    flightOpt({
+      id: 'lom-midday',
+      name: 'Midday Flight',
+      flightNumber: 'FY79102',
+      startTime: '11:30',
+      endTime: '12:30',
+      days: WEEKDAYS,
+    }),
+  ],
+  'MARA TO KOGATENDE OW': [
+    flightOpt({
+      id: 'mtk-daily',
+      name: 'Daily Connection',
+      flightNumber: 'FY80220',
+      startTime: '09:00',
+      endTime: '10:30',
+      days: ALL_DAYS,
+    }),
+  ],
+  'SEN - SERENGETI NORTH to MANYARA': [
+    flightOpt({
+      id: 'sen-morning',
+      name: 'Morning Hop',
+      flightNumber: 'SA4401',
+      startTime: '06:30',
+      endTime: '07:30',
+      days: WEEKDAYS,
+    }),
+    flightOpt({
+      id: 'sen-evening',
+      name: 'Evening Hop',
+      flightNumber: 'SA4402',
+      startTime: '16:00',
+      endTime: '17:00',
+      days: WEEKDAYS,
+    }),
+  ],
+  'MANYARA to KILIMANJARO': [
+    flightOpt({
+      id: 'mtkili-am',
+      name: 'Morning Flight',
+      flightNumber: 'SA4510',
+      startTime: '07:15',
+      endTime: '08:15',
+      days: ALL_DAYS,
+    }),
+  ],
+  'Scheduled Economy': [
+    flightOpt({
+      id: 'econ-morning',
+      name: 'Morning Flight',
+      flightNumber: 'KQ310',
+      startTime: '07:00',
+      endTime: '08:00',
+      days: ALL_DAYS,
+      included: 'Economy seat on the morning scheduled service, standard soft-bag allowance.',
+      excluded: 'Business cabin upgrades, meals, and inter-terminal transfers are not included.',
+    }),
+    flightOpt({
+      id: 'econ-afternoon',
+      name: 'Afternoon Flight',
+      flightNumber: 'KQ318',
+      startTime: '13:00',
+      endTime: '14:00',
+      days: ALL_DAYS,
+    }),
+  ],
+  'Scheduled Business': [
+    flightOpt({
+      id: 'biz-morning',
+      name: 'Morning Flight',
+      flightNumber: 'KQ310J',
+      startTime: '07:00',
+      endTime: '08:00',
+      days: ALL_DAYS,
+      included: 'Business cabin seat, priority boarding, and elevated soft-bag allowance.',
+      excluded: 'Lounge access outside partner agreements and ground transfers are not included.',
+    }),
+    flightOpt({
+      id: 'biz-evening',
+      name: 'Evening Flight',
+      flightNumber: 'KQ322J',
+      startTime: '17:30',
+      endTime: '18:30',
+      days: WEEKDAYS,
+    }),
+  ],
+  'Private Charter': [],
+  'Shared Charter': [],
+}
+
+export function optionsForFlightService(service: string): FlightServiceOption[] {
+  if (!service) return []
+  return FLIGHT_SERVICE_OPTIONS[service] ?? []
+}
+
+/** Single generic choice when the service has no fixed schedule (charter). */
+export const CHARTER_FLIGHT_OPTION: FlightServiceOption = flightOpt({
+  id: 'charter-departure',
+  name: 'Charter departure',
+  flightNumber: 'CHARTER',
+  startTime: '00:00',
+  endTime: '23:59',
+  days: ALL_DAYS,
+  included: 'Private or shared charter aircraft for the booked sector and party size.',
+  excluded: 'Landing fees outside the quote, positioning legs, and catering are not included unless stated.',
+})
+
+/** Options shown in the Add flight dropdown for the current Service. */
+export function addableFlightOptions(service: string): FlightServiceOption[] {
+  const opts = optionsForFlightService(service)
+  if (opts.length > 0) return opts
+  if (/charter/i.test(service)) return [CHARTER_FLIGHT_OPTION]
+  return []
+}
+
+export function findFlightServiceOption(
+  service: string,
+  optionId: string,
+): FlightServiceOption | undefined {
+  if (!optionId) return undefined
+  if (optionId === CHARTER_FLIGHT_OPTION.id) return CHARTER_FLIGHT_OPTION
+  return optionsForFlightService(service).find((o) => o.id === optionId)
+}
+
+/** Parse `HH:MM` (24h) to minutes since midnight; null if unparseable. */
+export function flightTimeToMinutes(time: string): number | null {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(time || '').trim())
+  if (!m) return null
+  const hours = Number(m[1])
+  const mins = Number(m[2])
+  if (hours > 23 || mins > 59) return null
+  return hours * 60 + mins
+}
+
+function formatFlightClock(time: string): string {
+  const mins = flightTimeToMinutes(time)
+  if (mins == null) return time
+  const hours = Math.floor(mins / 60)
+  const minutes = mins % 60
+  const ampm = hours >= 12 ? 'PM' : 'AM'
+  const h12 = hours % 12 || 12
+  return `${h12}:${String(minutes).padStart(2, '0')} ${ampm}`
+}
+
+export function formatFlightOptionDays(days: FlightOptionDay[]): string {
+  if (days.length === 7) return 'Mon–Sun'
+  if (
+    days.length === 5 &&
+    WEEKDAYS.every((d) => days.includes(d)) &&
+    !days.includes('Sat') &&
+    !days.includes('Sun')
+  ) {
+    return 'Mon–Fri'
+  }
+  return days.join(', ')
+}
+
+export function formatFlightOptionWindow(option: FlightServiceOption): string {
+  return `${formatFlightClock(option.startTime)}–${formatFlightClock(option.endTime)}`
+}
+
+/** Dropdown / trigger label: name + flight # · window · days. */
+export function formatFlightOptionLabel(option: FlightServiceOption): string {
+  return `${option.name} — ${option.flightNumber} · ${formatFlightOptionWindow(option)} · ${formatFlightOptionDays(option.days)}`
+}
+
+/** True when `departTime` (`HH:MM`) is inside the option window (inclusive). */
+export function isDepartTimeInFlightOptionWindow(
+  departTime: string,
+  option: FlightServiceOption,
+): boolean {
+  const t = flightTimeToMinutes(departTime)
+  const start = flightTimeToMinutes(option.startTime)
+  const end = flightTimeToMinutes(option.endTime)
+  if (t == null || start == null || end == null) return true
+  return t >= start && t <= end
+}
+
+const JS_DAY_TO_OPTION: FlightOptionDay[] = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+/** Weekday of an ISO `YYYY-MM-DD` date (local), or null if unparseable. */
+export function weekdayFromIsoDate(iso: string): FlightOptionDay | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || '').trim())
+  if (!m) return null
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+  if (Number.isNaN(d.getTime())) return null
+  return JS_DAY_TO_OPTION[d.getDay()] ?? null
+}
+
+/** True when `departDate` falls on one of the option's operating days. */
+export function isDepartDateOnFlightOptionDay(
+  departDate: string,
+  option: FlightServiceOption,
+): boolean {
+  const day = weekdayFromIsoDate(departDate)
+  if (!day) return true
+  return option.days.includes(day)
+}
+
 export const HOLD_STATUS_STYLE = {
   Requested: { headerBg: '#D97706', headerFg: '#FFFFFF', bodyBg: '#FFFBEB', borderColor: '#FDE68A' },
   Held: { headerBg: '#06AEE8', headerFg: '#FFFFFF', bodyBg: '#F0F9FF', borderColor: '#BAE6FD' },
@@ -121,6 +397,26 @@ export function usedGuestIds(list: { guestIds: number[] }[]) {
   return list.reduce<number[]>((acc, item) => acc.concat(item.guestIds), [])
 }
 
+/**
+ * Greedy fill: clear each bucket, then pour unassigned guests into buckets in
+ * order up to each item's capacity. Shared by Stay / Transport / Flight.
+ */
+export function autoAssignByCapacity<T extends { guestIds: number[] }>(
+  items: T[],
+  guests: Guest[],
+  getCap: (item: T) => number,
+): T[] {
+  const pool = guests.map((g) => g.id)
+  const next = items.map((item) => ({ ...item, guestIds: [] as number[] }))
+  next.forEach((item) => {
+    const cap = getCap(item)
+    while (pool.length && item.guestIds.length < cap) {
+      item.guestIds.push(pool.shift()!)
+    }
+  })
+  return next
+}
+
 export function guestChipStyle(g: Guest) {
   const m = TYPE_META[g.type] || TYPE_META.adult
   const residency = g.residency
@@ -148,7 +444,55 @@ export function asRooms(draft: Record<string, unknown>): Room[] {
 }
 
 export function asVehicles(draft: Record<string, unknown>): Vehicle[] {
-  return (Array.isArray(draft.vehicles) ? draft.vehicles : []) as Vehicle[]
+  const raw = (Array.isArray(draft.vehicles) ? draft.vehicles : []) as (Vehicle & {
+    departDate?: string
+  })[]
+  return raw.map((v) => ({
+    ...v,
+    // Legacy single departDate → dateFrom (and dateTo if missing).
+    dateFrom: String(v.dateFrom || v.departDate || ''),
+    dateTo: String(v.dateTo || v.dateFrom || v.departDate || ''),
+  }))
+}
+
+export function asFlights(draft: Record<string, unknown>): FlightInstance[] {
+  const defaultCap = Math.max(1, Number(draft.capMax) || Number(draft.capacity) || 5)
+  if (Array.isArray(draft.flights)) {
+    return (draft.flights as FlightInstance[]).map((f, i) => ({
+      id: f.id || `f${i + 1}`,
+      cap: Math.max(1, Number(f.cap) || defaultCap),
+      guestIds: Array.isArray(f.guestIds) ? f.guestIds.map(Number) : [],
+      optionId: String(f.optionId || ''),
+      optionName: String(f.optionName || ''),
+      departDate: String(f.departDate || ''),
+      departTime: String(f.departTime || ''),
+    }))
+  }
+  // Legacy drafts / seeds without a `flights` array.
+  if (draft.departDate || draft.departTime || draft.flightOptionId) {
+    return [
+      {
+        id: 'f1',
+        cap: defaultCap,
+        guestIds: [],
+        optionId: String(draft.flightOptionId || ''),
+        optionName: '',
+        departDate: String(draft.departDate || ''),
+        departTime: String(draft.departTime || ''),
+      },
+    ]
+  }
+  return []
+}
+
+/** Keep top-level depart fields in sync with the first flight (summary, policy, sort). */
+export function flightDepartMeta(flights: FlightInstance[]) {
+  const first = flights[0]
+  return {
+    departDate: first?.departDate || '',
+    departTime: first?.departTime || '',
+    qty: Math.max(1, flights.length),
+  }
 }
 
 export function asHireRoutes(draft: Record<string, unknown>): HireRoute[] {
@@ -209,12 +553,16 @@ export function extraObjects(draft: Record<string, unknown>) {
 }
 
 export function flightAutoQty(draft: Record<string, unknown>) {
+  // Explicit Flights & PAX instances drive qty when present.
+  if (Array.isArray(draft.flights) && draft.flights.length > 0) {
+    return draft.flights.length
+  }
   const pax = (draft.pax || { adult: 0, youth: 0, child: 0, infant: 0 }) as Record<string, number>
   const totalPax =
     (pax.adult || 0) + (pax.youth || 0) + (pax.child || 0) + (pax.infant || 0)
   const capacity = Math.max(1, Number(draft.capMax) || Number(draft.capacity) || 1)
   if (totalPax <= 0) return 1
-  // Squeeze keeps everyone on one flight (supplier approval). Split adds flights.
+  // Legacy squeeze/split for drafts that never materialised a flights array.
   if (draft.overflowMode === 'squeeze' || totalPax <= capacity) return 1
   return Math.max(1, Math.ceil(totalPax / capacity))
 }
@@ -308,13 +656,16 @@ export function computeDraftTotals(
     return { net: net + extrasNet, rack: rack + rackOf(extrasNet) }
   }
   // Other: prefer line items (activities) when present; otherwise qty × unit price.
+  const extras = extraObjects(draft)
+  const extrasNet = extras.reduce((sum, e) => sum + e.price * (e.qty || 1), 0)
   const activities = asActivities(draft)
   if (activities.length > 0) {
     const net = activities.reduce((sum, a) => sum + a.rate * a.guestIds.length, 0)
-    return { net, rack: activities.reduce((sum, a) => sum + rackOf(a.rate * a.guestIds.length), 0) }
+    const rack = activities.reduce((sum, a) => sum + rackOf(a.rate * a.guestIds.length), 0)
+    return { net: net + extrasNet, rack: rack + rackOf(extrasNet) }
   }
   const other = (Number(draft.qty) || 0) * (Number(draft.price) || 0)
-  return { net: other, rack: rackOf(other) }
+  return { net: other + extrasNet, rack: rackOf(other) + rackOf(extrasNet) }
 }
 
 export function buildAddedService(
@@ -345,9 +696,6 @@ export function buildAddedService(
   const pax = (draft.pax || { adult: 0, youth: 0, child: 0, infant: 0 }) as Record<string, number>
   const totalPax = (pax.adult || 0) + (pax.youth || 0) + (pax.child || 0) + (pax.infant || 0)
   const autoQty = flightAutoQty(draft)
-  const totalCapacity = (Number(draft.capacity) || 1) * autoQty
-  const eligible = totalPax > 0 && totalPax <= totalCapacity
-  const accNightsN = nights(String(draft.start || ''), String(draft.end || ''))
   const basisKey = String(draft.basis || 'bb') as keyof typeof BASIS
   const roomCount = rooms.length
 
@@ -359,12 +707,16 @@ export function buildAddedService(
   if (tab === 'accommodation') {
     title = String(draft.supplier || 'Accommodation')
     subtitle = `${roomCount} room(s) · ${BASIS[basisKey] || basisKey}`
-    dateMeta = `${accNightsN} night(s)`
+    const roomStarts = rooms.map((r) => String(r.start || draft.start || '').trim()).filter(Boolean).sort()
+    const roomEnds = rooms.map((r) => String(r.end || draft.end || '').trim()).filter(Boolean).sort()
+    const stayStart = roomStarts[0] || String(draft.start || '')
+    const stayEnd = roomEnds[roomEnds.length - 1] || String(draft.end || '')
+    dateMeta = `${nights(stayStart, stayEnd)} night(s)`
     details = [
       { label: 'Location', value: String(draft.location || '—') },
       { label: 'Rooms', value: String(roomCount) },
       { label: 'Basis', value: BASIS[basisKey] || basisKey },
-      { label: 'Dates', value: `${draft.start || 'TBD'} – ${draft.end || 'TBD'}` },
+      { label: 'Dates', value: `${stayStart || 'TBD'} – ${stayEnd || 'TBD'}` },
       { label: 'Guests', value: `${accUsed.length} pax` },
     ]
   } else if (tab === 'transportation') {
@@ -379,17 +731,22 @@ export function buildAddedService(
       ...(transExtras.length ? [{ label: 'Extras', value: String(transExtras.length) }] : []),
     ]
   } else if (tab === 'flight') {
+    const flights = asFlights(draft)
+    const flightUsed = usedGuestIds(flights)
+    const flightPax = flightUsed.length || totalPax
     title = String(draft.supplier || 'Flight')
-    subtitle = `${totalPax} passenger(s) · qty ${autoQty}`
-    dateMeta = eligible ? 'Eligible' : 'Check capacity'
+    subtitle = `${flightPax} passenger(s) · ${flights.length} flight(s)`
+    dateMeta = flights[0]?.departDate || 'Set date'
     details = [
       { label: 'Route', value: `${draft.flightFrom || 'TBD'} – ${draft.flightTo || 'TBD'}` },
-      { label: 'Passengers', value: String(totalPax) },
-      { label: 'Qty', value: String(autoQty) },
-      { label: 'Capacity', value: String(draft.capacity) },
+      { label: 'Passengers', value: String(flightPax) },
+      { label: 'Flights', value: String(flights.length) },
       {
         label: 'Depart',
-        value: [draft.departDate, draft.departTime].filter(Boolean).join(' · ') || 'TBD',
+        value:
+          [flights[0]?.departDate || draft.departDate, flights[0]?.departTime || draft.departTime]
+            .filter(Boolean)
+            .join(' · ') || 'TBD',
       },
     ]
   } else if (tab === 'activity') {
@@ -465,9 +822,13 @@ export function draftMissingRequirements(
     if (missing(draft.location)) needed.push('Location')
     if (missing(draft.supplier)) needed.push('Supplier')
     if (missing(draft.service)) needed.push('Service')
-    if (missing(draft.start)) needed.push('Start date')
-    if (missing(draft.end)) needed.push('End date')
-    if (asRooms(draft).length === 0) needed.push('At least one room')
+    const rooms = asRooms(draft)
+    if (rooms.length === 0) needed.push('At least one room')
+    else if (
+      rooms.some((r) => missing(r.start || draft.start) || missing(r.end || draft.end))
+    ) {
+      needed.push('Room stay dates')
+    }
     return needed
   }
 
@@ -475,6 +836,11 @@ export function draftMissingRequirements(
     if (missing(draft.location)) needed.push('Location')
     if (missing(draft.supplier)) needed.push('Supplier')
     if (missing(draft.service)) needed.push('Service')
+    const vehicles = asVehicles(draft)
+    if (vehicles.length === 0) needed.push('At least one vehicle')
+    else if (vehicles.some((v) => missing(v.dateFrom) || missing(v.dateTo))) {
+      needed.push('Vehicle date from / date to')
+    }
     return needed
   }
 
@@ -483,7 +849,11 @@ export function draftMissingRequirements(
     if (missing(draft.flightTo)) needed.push('To')
     if (missing(draft.supplier)) needed.push('Supplier')
     if (missing(draft.service)) needed.push('Service')
-    if (missing(draft.departDate)) needed.push('Departure date')
+    const flights = asFlights(draft)
+    if (flights.length === 0) needed.push('At least one flight')
+    else if (!flights.some((f) => !missing(f.departDate)) && missing(draft.departDate)) {
+      needed.push('Departure date')
+    }
     return needed
   }
 
@@ -520,9 +890,15 @@ export function serviceStartDate(service: AddedService): string {
   const d = (service.draft || {}) as Record<string, unknown>
   if (service.tab === 'accommodation') return firstDate(d.start)
   if (service.tab === 'transportation') {
-    return d.transMode === 'hire' ? firstDate(d.hireStart) : firstDate(d.transDate)
+    const vehicles = asVehicles(d)
+    return d.transMode === 'hire'
+      ? firstDate(d.hireStart, vehicles[0]?.dateFrom)
+      : firstDate(vehicles[0]?.dateFrom, d.transDate)
   }
-  if (service.tab === 'flight') return firstDate(d.departDate)
+  if (service.tab === 'flight') {
+    const flights = asFlights(d)
+    return firstDate(flights[0]?.departDate, d.departDate)
+  }
   return firstDate(d.startDate, asActivities(d)[0]?.start)
 }
 

@@ -182,42 +182,45 @@ export const LOCATION_TREE = [
 
 export const CATALOG: Record<ServiceTab, CatalogItem[]> = {
   accommodation: [
-    { name: 'Hemingways Nairobi', service: 'Double Suite', location: 'Nairobi', group: 'Hemingways', headOffice: 'Nairobi, Kenya', starred: true },
-    { name: 'Hemingways Watamu', service: 'Double Suite', location: 'Watamu', group: 'Hemingways', headOffice: 'Nairobi, Kenya', starred: true },
-    { name: 'Elewana Loisaba Tented Camp', service: 'GPKG Double Safari Tent', location: 'Loisaba', group: 'Elewana', headOffice: 'Nairobi, Kenya', starred: true },
-    { name: 'Elewana Sand River Masai Mara', service: 'GPKG Family Tent', location: 'Masai Mara', group: 'Elewana', headOffice: 'Nairobi, Kenya', starred: true },
-    { name: 'Elewana Serengeti Migration Camp', service: 'GPKG Double Safari Tent', location: 'Serengeti', group: 'Elewana', headOffice: 'Arusha, Tanzania', starred: true },
-    { name: 'Elewana The Manor at Ngorongoro', service: 'GPKG Stable Cottage', location: 'Ngorongoro', group: 'Elewana', headOffice: 'Arusha, Tanzania', starred: true },
-    { name: 'Mara Serena Lodge', service: 'Luxury Tent', location: 'Masai Mara', group: 'Serena', headOffice: 'Nairobi, Kenya', starred: false },
-    { name: "Governors' Camp", service: 'Riverside Tent', location: 'Masai Mara', group: 'Governors', headOffice: 'Nairobi, Kenya', starred: false },
-    { name: 'Ol Tukai Lodge', service: 'Garden View Room', location: 'Amboseli', group: 'AA Lodges', headOffice: 'Nairobi, Kenya', starred: false },
+    { id: 'acc-hemingways-nairobi', name: 'Hemingways Nairobi', service: 'Double Suite', location: 'Nairobi', group: 'Hemingways', headOffice: 'Nairobi, Kenya', starred: true },
+    { id: 'acc-hemingways-watamu', name: 'Hemingways Watamu', service: 'Double Suite', location: 'Watamu', group: 'Hemingways', headOffice: 'Nairobi, Kenya', starred: true },
+    { id: 'acc-elewana-loisaba', name: 'Elewana Loisaba Tented Camp', service: 'GPKG Double Safari Tent', location: 'Loisaba', group: 'Elewana', headOffice: 'Nairobi, Kenya', starred: true },
+    { id: 'acc-elewana-sand-river', name: 'Elewana Sand River Masai Mara', service: 'GPKG Family Tent', location: 'Masai Mara', group: 'Elewana', headOffice: 'Nairobi, Kenya', starred: true },
+    { id: 'acc-elewana-serengeti', name: 'Elewana Serengeti Migration Camp', service: 'GPKG Double Safari Tent', location: 'Serengeti', group: 'Elewana', headOffice: 'Arusha, Tanzania', starred: true },
+    { id: 'acc-elewana-manor', name: 'Elewana The Manor at Ngorongoro', service: 'GPKG Stable Cottage', location: 'Ngorongoro', group: 'Elewana', headOffice: 'Arusha, Tanzania', starred: true },
+    { id: 'acc-mara-serena', name: 'Mara Serena Lodge', service: 'Luxury Tent', location: 'Masai Mara', group: 'Serena', headOffice: 'Nairobi, Kenya', starred: false },
+    { id: 'acc-governors-camp', name: "Governors' Camp", service: 'Riverside Tent', location: 'Masai Mara', group: 'Governors', headOffice: 'Nairobi, Kenya', starred: false },
+    { id: 'acc-ol-tukai', name: 'Ol Tukai Lodge', service: 'Garden View Room', location: 'Amboseli', group: 'AA Lodges', headOffice: 'Nairobi, Kenya', starred: false },
+    { id: 'acc-wilder-group', name: 'The Wilder Group', service: 'Standard Tent', location: 'Masai Mara', group: 'Wilder', headOffice: 'Nairobi, Kenya', starred: false },
   ],
   transportation: [
-    { name: 'Hemingways Transfers', service: 'JKIA to Hemingways Nairobi (3-pax)', location: 'Nairobi', group: 'Hemingways', headOffice: 'Nairobi, Kenya', starred: true },
-    { name: 'Cheli & Peacock Safaris Nairobi', service: 'Nairobi One Way Transfer', location: 'Nairobi', group: 'Cheli & Peacock', headOffice: 'Nairobi, Kenya', starred: true },
-    { name: 'Bushtops Transfers', service: 'Airstrip transfer', location: 'Masai Mara', group: 'Bushtops', headOffice: 'Nairobi, Kenya', starred: false },
-    { name: 'Mara Route Vehicles', service: 'Full-day game drive', location: 'Masai Mara', group: 'Mara Route', headOffice: 'Nairobi, Kenya', starred: false },
-    { name: 'Nairobi Airport Transfers', service: 'Airport transfer', location: 'Central Kenya', group: 'CityLink', headOffice: 'Nairobi, Kenya', starred: false },
+    { id: 'trn-hemingways-transfers', name: 'Hemingways Transfers', service: 'JKIA to Hemingways Nairobi (3-pax)', location: 'Nairobi', group: 'Hemingways', headOffice: 'Nairobi, Kenya', starred: true },
+    { id: 'trn-cheli-peacock-nbo', name: 'Cheli & Peacock Safaris Nairobi', service: 'Nairobi One Way Transfer', location: 'Nairobi', group: 'Cheli & Peacock', headOffice: 'Nairobi, Kenya', starred: true },
+    { id: 'trn-bushtops', name: 'Bushtops Transfers', service: 'Airstrip transfer', location: 'Masai Mara', group: 'Bushtops', headOffice: 'Nairobi, Kenya', starred: false },
+    { id: 'trn-mara-route', name: 'Mara Route Vehicles', service: 'Full-day game drive', location: 'Masai Mara', group: 'Mara Route', headOffice: 'Nairobi, Kenya', starred: false },
+    { id: 'trn-nairobi-airport', name: 'Nairobi Airport Transfers', service: 'Airport transfer', location: 'Central Kenya', group: 'CityLink', headOffice: 'Nairobi, Kenya', starred: false },
   ],
   flight: [
-    { name: 'AirKenya Wilson1', service: 'WILSON TO LOISABA OW', location: 'Nairobi', group: 'AirKenya', headOffice: 'Nairobi, Kenya', starred: true },
-    { name: 'AirKenya Central Kenya1', service: 'LOISABA TO MARA OW', location: 'Central Kenya', group: 'AirKenya', headOffice: 'Nairobi, Kenya', starred: true },
-    { name: 'AirKenya Mara1', service: 'MARA TO KOGATENDE OW', location: 'Masai Mara', group: 'AirKenya', headOffice: 'Nairobi, Kenya', starred: true },
-    { name: 'Auric Air Serengeti1', service: 'SEN - SERENGETI NORTH to MANYARA', location: 'Serengeti', group: 'Auric Air', headOffice: 'Arusha, Tanzania', starred: true },
-    { name: 'Auric Air Manyara1', service: 'MANYARA to KILIMANJARO', location: 'Ngorongoro', group: 'Auric Air', headOffice: 'Arusha, Tanzania', starred: true },
-    { name: 'Safarilink', service: 'Charter flight', location: 'Masai Mara', group: 'Safarilink', headOffice: 'Nairobi, Kenya', starred: false },
-    { name: 'AirKenya', service: 'Scheduled flight', location: 'Central Kenya', group: 'AirKenya', headOffice: 'Nairobi, Kenya', starred: false },
+    { id: 'flt-airkenya-wilson1', name: 'AirKenya Wilson1', service: 'WILSON TO LOISABA OW', location: 'Nairobi', group: 'AirKenya', headOffice: 'Nairobi, Kenya', starred: true },
+    { id: 'flt-airkenya-central1', name: 'AirKenya Central Kenya1', service: 'LOISABA TO MARA OW', location: 'Central Kenya', group: 'AirKenya', headOffice: 'Nairobi, Kenya', starred: true },
+    { id: 'flt-airkenya-mara1', name: 'AirKenya Mara1', service: 'MARA TO KOGATENDE OW', location: 'Masai Mara', group: 'AirKenya', headOffice: 'Nairobi, Kenya', starred: true },
+    { id: 'flt-auric-serengeti1', name: 'Auric Air Serengeti1', service: 'SEN - SERENGETI NORTH to MANYARA', location: 'Serengeti', group: 'Auric Air', headOffice: 'Arusha, Tanzania', starred: true },
+    { id: 'flt-auric-manyara1', name: 'Auric Air Manyara1', service: 'MANYARA to KILIMANJARO', location: 'Ngorongoro', group: 'Auric Air', headOffice: 'Arusha, Tanzania', starred: true },
+    { id: 'flt-safarilink', name: 'Safarilink', service: 'Charter flight', location: 'Masai Mara', group: 'Safarilink', headOffice: 'Nairobi, Kenya', starred: false },
+    { id: 'flt-airkenya', name: 'AirKenya', service: 'Scheduled flight', location: 'Central Kenya', group: 'AirKenya', headOffice: 'Nairobi, Kenya', starred: false },
+    { id: 'flt-coastal-scheduled', name: 'Coastal Aviation', service: 'Scheduled Economy (Y Class)', location: 'Nairobi', group: 'Coastal Aviation', headOffice: 'Nairobi, Kenya', starred: false },
+    { id: 'flt-coastal-charter', name: 'Coastal Aviation Charter', service: 'Charter Flight', location: 'Nairobi', group: 'Coastal Aviation', headOffice: 'Nairobi, Kenya', starred: false },
   ],
   activity: [
-    { name: 'Cheli and Peacock Safaris Kenya', service: 'Giraffe Centre Entrance Fee', location: 'Nairobi', group: 'Cheli & Peacock', headOffice: 'Nairobi, Kenya', starred: true },
-    { name: "Governors' Balloon Safaris", service: 'Hot-air balloon safari', location: 'Masai Mara', group: 'Governors', headOffice: 'Nairobi, Kenya', starred: false },
-    { name: 'Mara Walking Safaris', service: 'Guided bush walk', location: 'Masai Mara', group: 'Independent', headOffice: 'Nairobi, Kenya', starred: false },
-    { name: 'Nairobi City Tour', service: 'Half-day city tour', location: 'Central Kenya', group: 'CityLink', headOffice: 'Nairobi, Kenya', starred: false },
+    { id: 'act-cheli-peacock-kenya', name: 'Cheli and Peacock Safaris Kenya', service: 'Giraffe Centre Entrance Fee', location: 'Nairobi', group: 'Cheli & Peacock', headOffice: 'Nairobi, Kenya', starred: true },
+    { id: 'act-governors-balloon', name: "Governors' Balloon Safaris", service: 'Hot-air balloon safari', location: 'Masai Mara', group: 'Governors', headOffice: 'Nairobi, Kenya', starred: false },
+    { id: 'act-mara-walking', name: 'Mara Walking Safaris', service: 'Guided bush walk', location: 'Masai Mara', group: 'Independent', headOffice: 'Nairobi, Kenya', starred: false },
+    { id: 'act-nairobi-city-tour', name: 'Nairobi City Tour', service: 'Half-day city tour', location: 'Central Kenya', group: 'CityLink', headOffice: 'Nairobi, Kenya', starred: false },
   ],
   other: [
-    { name: 'KE AMREF Flying Doctors', service: 'Amref Silver: Kenya/Tanzania/Zanzibar 30 days', location: 'Nairobi', group: 'AMREF', headOffice: 'Nairobi, Kenya', starred: true },
-    { name: 'Umbato Meet and Assist Services', service: 'JKIA Meet & Assist (Arrival)', location: 'Nairobi', group: 'Umbato', headOffice: 'Nairobi, Kenya', starred: true },
-    { name: 'Local Guide Services', service: 'Freelance guide', location: 'Masai Mara', group: 'Independent', headOffice: 'Nairobi, Kenya', starred: false },
+    { id: 'oth-amref', name: 'KE AMREF Flying Doctors', service: 'Amref Silver: Kenya/Tanzania/Zanzibar 30 days', location: 'Nairobi', group: 'AMREF', headOffice: 'Nairobi, Kenya', starred: true },
+    { id: 'oth-umbato', name: 'Umbato Meet and Assist Services', service: 'JKIA Meet & Assist (Arrival)', location: 'Nairobi', group: 'Umbato', headOffice: 'Nairobi, Kenya', starred: true },
+    { id: 'oth-local-guide', name: 'Local Guide Services', service: 'Freelance guide', location: 'Masai Mara', group: 'Independent', headOffice: 'Nairobi, Kenya', starred: false },
   ],
 }
 
@@ -249,10 +252,29 @@ export const EXTRAS_CATALOG: ExtraCatalogItem[] = [
   { id: 'drivers-lunch-box', title: "Drivers Lunch Box (TZ) USD", price: 5, tabs: ['transportation'] },
   { id: 'conservancy', title: 'Park/Conservancy Fees', price: 100, mandatory: true, tabs: ['accommodation'] },
   { id: 'flight-transfers', title: 'Flight Transfers (Arrive/Depart)', price: 0, tabs: ['flight', 'transportation'] },
+  {
+    id: 'flight-security-fee',
+    title: 'Airport Security Fee',
+    price: 15,
+    mandatory: true,
+    tabs: ['flight'],
+  },
+  {
+    id: 'trans-fuel-levy',
+    title: 'Fuel Levy',
+    price: 20,
+    mandatory: true,
+    tabs: ['transportation'],
+  },
   { id: 'executive-room-supplement', title: "Supplement — Hemingway's Executive Room", price: 75, tabs: ['accommodation'] },
   { id: 'after-hours-transfer', title: 'After-hours Transfer Surcharge', price: 40, tabs: ['transportation'] },
   { id: 'exclusive-vehicle', title: 'Exclusive Use of Vehicle', price: 150, tabs: ['transportation'] },
   { id: 'child-seat', title: 'Child Seat', price: 15, tabs: ['transportation'] },
+  // Invented for the Transport Policy/Extras/Special Offer(s) prototype build-out
+  // (PCP-1462 scope expansion) — not from a real product spec, flag for BA sign-off.
+  { id: 'bottled-water', title: 'Bottled Water (per PAX)', price: 3, tabs: ['transportation'] },
+  { id: 'onboard-wifi', title: 'Onboard WiFi', price: 12, tabs: ['transportation'] },
+  { id: 'driver-upgrade', title: 'Professional Driver-Guide Upgrade', price: 60, tabs: ['transportation'] },
   // Activity extras — linked to Catalog services via serviceNames (serviceExtras)
   {
     id: 'activity-lunch',
@@ -279,6 +301,7 @@ export const EXTRAS_CATALOG: ExtraCatalogItem[] = [
     id: 'activity-park-fee',
     title: 'Park Entry Fee',
     price: 80,
+    mandatory: true,
     tabs: ['activity'],
   },
   {
@@ -288,6 +311,10 @@ export const EXTRAS_CATALOG: ExtraCatalogItem[] = [
     tabs: ['activity'],
     serviceNames: ['Hot air balloon safari'],
   },
+  // Other line-item extras
+  { id: 'other-admin-fee', title: 'Administration Fee', price: 25, mandatory: true, tabs: ['other'] },
+  { id: 'other-document-handling', title: 'Document Handling', price: 15, tabs: ['other'] },
+  { id: 'other-courier', title: 'Courier / Delivery', price: 35, tabs: ['other'] },
 ]
 
 /** Catalog extras available for a given service tab. */
@@ -391,17 +418,55 @@ export const BASIS = {
   fi: 'Fully Inclusive',
 } as const
 
-export const BASIS_DETAILS = {
-  fb: { included: 'Breakfast, lunch and dinner are included daily.', excluded: 'Alcoholic beverages, laundry and park fees are not included.' },
-  hb: { included: 'Breakfast and dinner are included daily.', excluded: 'Lunch, alcoholic beverages and park fees are not included.' },
-  bb: { included: 'Breakfast is included daily.', excluded: 'Lunch, dinner, beverages and park fees are not included.' },
-  ro: { included: 'Accommodation only, no meals included.', excluded: 'All meals, beverages and park fees are not included.' },
-  gd: { included: 'Breakfast and a shared game drive are included daily.', excluded: 'Lunch, dinner and park fees are not included.' },
-  gp: { included: 'Full board plus scheduled game drives are included daily.', excluded: 'Park/conservancy fees, alcoholic beverages and laundry are not included.' },
-  fi: { included: 'All meals and scheduled game activities are included daily.', excluded: 'Park/conservancy fees, alcoholic beverages and laundry are not included.' },
-} as const
+export type BasisOption = {
+  id: keyof typeof BASIS
+  label: string
+  included: string
+  excluded: string
+}
 
-export const BASIS_OPTIONS = Object.entries(BASIS).map(([id, label]) => ({ id, label }))
+/** Canonical meal-basis options (shared included/excluded copy — not reinvented per property). */
+export const BASIS_OPTION_DEFS: BasisOption[] = [
+  { id: 'fb', label: BASIS.fb, included: 'Breakfast, lunch and dinner are included daily.', excluded: 'Alcoholic beverages, laundry and park fees are not included.' },
+  { id: 'hb', label: BASIS.hb, included: 'Breakfast and dinner are included daily.', excluded: 'Lunch, alcoholic beverages and park fees are not included.' },
+  { id: 'bb', label: BASIS.bb, included: 'Breakfast is included daily.', excluded: 'Lunch, dinner, beverages and park fees are not included.' },
+  { id: 'ro', label: BASIS.ro, included: 'Accommodation only, no meals included.', excluded: 'All meals, beverages and park fees are not included.' },
+  { id: 'gd', label: BASIS.gd, included: 'Breakfast and a shared game drive are included daily.', excluded: 'Lunch, dinner and park fees are not included.' },
+  { id: 'gp', label: BASIS.gp, included: 'Full board plus scheduled game drives are included daily.', excluded: 'Park/conservancy fees, alcoholic beverages and laundry are not included.' },
+  { id: 'fi', label: BASIS.fi, included: 'All meals and scheduled game activities are included daily.', excluded: 'Park/conservancy fees, alcoholic beverages and laundry are not included.' },
+]
+
+function cloneOptions<T extends object>(options: T[]): T[] {
+  return options.map((o) => ({ ...o }))
+}
+
+function pickBasis(ids: Array<BasisOption['id']>): BasisOption[] {
+  return cloneOptions(BASIS_OPTION_DEFS.filter((o) => ids.includes(o.id)))
+}
+
+/**
+ * Meal basis Options keyed by accommodation `CatalogItem.id`.
+ *
+ * Real split used here (no invented copy): city / coastal hotels expose classic
+ * board bases; safari camps/lodges also expose game-package style bases that
+ * only make sense in that product context. Included/excluded text is still the
+ * shared BASIS_OPTION_DEFS copy — not per-supplier prose.
+ */
+export const BASIS_OPTIONS_BY_SERVICE: Record<string, BasisOption[]> = {
+  'acc-hemingways-nairobi': pickBasis(['fb', 'hb', 'bb', 'ro']),
+  'acc-hemingways-watamu': pickBasis(['fb', 'hb', 'bb', 'ro']),
+  'acc-ol-tukai': pickBasis(['fb', 'hb', 'bb', 'ro']),
+  'acc-elewana-loisaba': pickBasis(['fb', 'hb', 'bb', 'gd', 'gp', 'fi']),
+  'acc-elewana-sand-river': pickBasis(['fb', 'hb', 'bb', 'gd', 'gp', 'fi']),
+  'acc-elewana-serengeti': pickBasis(['fb', 'hb', 'bb', 'gd', 'gp', 'fi']),
+  'acc-elewana-manor': pickBasis(['fb', 'hb', 'bb', 'gd', 'gp', 'fi']),
+  'acc-mara-serena': pickBasis(['fb', 'hb', 'bb', 'gd', 'gp', 'fi']),
+  'acc-governors-camp': pickBasis(['fb', 'hb', 'bb', 'gd', 'gp', 'fi']),
+  'acc-wilder-group': pickBasis(['fb', 'hb', 'bb', 'gd', 'gp', 'fi']),
+}
+
+/** Flat list for selects when no catalog service is chosen yet. */
+export const BASIS_OPTIONS = BASIS_OPTION_DEFS.map(({ id, label }) => ({ id, label }))
 
 export const ACC_RATE = {
   adult: { resident: { net: 90, rack: 120 }, nonResident: { net: 140, rack: 180 } },
@@ -431,16 +496,218 @@ export const PROMOTIONS = [
   },
 ]
 
-export const ACTIVITY_TYPES = [
-  { name: 'Giraffe Centre Entrance Fee', rate: 45, includes: 'Entrance to the Giraffe Centre and educational briefing.', excludes: 'Transport and personal purchases are not included.' },
-  { name: 'Karen Blixen Museum Entry Fee', rate: 36, includes: 'Museum entrance and guided walkthrough of the house and grounds.', excludes: 'Transport and souvenir purchases are not included.' },
-  { name: 'Sheldrick Wildlife Trust Nairobi Orphanage Public Hours Visit', rate: 50, includes: 'Public visiting-hour entry to the elephant orphanage.', excludes: 'Park entry fees and private guiding are not included.' },
-  { name: 'Game drive', rate: 60, includes: 'Professional driver-guide, park entry coordination, and bottled water throughout the drive.', excludes: 'Personal expenses, gratuities, and any premium beverages are not covered.' },
-  { name: 'Guided nature walk', rate: 45, includes: 'Licensed walking guide, safety briefing, and use of binoculars during the walk.', excludes: 'Park conservation fees and personal travel insurance are not included.' },
-  { name: 'Hot air balloon safari', rate: 420, includes: 'Sunrise balloon flight, champagne breakfast on landing, and a flight certificate.', excludes: 'Transfers to the launch site and gratuities to the crew are excluded.' },
-  { name: 'Cultural village visit', rate: 35, includes: 'Community host, guided tour of the village, and a traditional welcome.', excludes: 'Craft purchases and optional community donations are not included.' },
-  { name: 'Boat cruise', rate: 80, includes: 'Boat hire, captain and crew, and refreshments served on board.', excludes: 'Fishing equipment hire and premium drinks are excluded.' },
+export type ActivityTypeOption = {
+  id: string
+  name: string
+  rate: number
+  included: string
+  excluded: string
+}
+
+/** Canonical activity-type Options (shared included/excluded copy). */
+export const ACTIVITY_OPTION_DEFS: ActivityTypeOption[] = [
+  {
+    id: 'giraffe-centre-entrance',
+    name: 'Giraffe Centre Entrance Fee',
+    rate: 45,
+    included: 'Entrance to the Giraffe Centre and educational briefing.',
+    excluded: 'Transport and personal purchases are not included.',
+  },
+  {
+    id: 'karen-blixen-museum',
+    name: 'Karen Blixen Museum Entry Fee',
+    rate: 36,
+    included: 'Museum entrance and guided walkthrough of the house and grounds.',
+    excluded: 'Transport and souvenir purchases are not included.',
+  },
+  {
+    id: 'sheldrick-orphanage',
+    name: 'Sheldrick Wildlife Trust Nairobi Orphanage Public Hours Visit',
+    rate: 50,
+    included: 'Public visiting-hour entry to the elephant orphanage.',
+    excluded: 'Park entry fees and private guiding are not included.',
+  },
+  {
+    id: 'game-drive',
+    name: 'Game drive',
+    rate: 60,
+    included:
+      'Professional driver-guide, park entry coordination, and bottled water throughout the drive.',
+    excluded: 'Personal expenses, gratuities, and any premium beverages are not covered.',
+  },
+  {
+    id: 'guided-nature-walk',
+    name: 'Guided nature walk',
+    rate: 45,
+    included: 'Licensed walking guide, safety briefing, and use of binoculars during the walk.',
+    excluded: 'Park conservation fees and personal travel insurance are not included.',
+  },
+  {
+    id: 'hot-air-balloon',
+    name: 'Hot air balloon safari',
+    rate: 420,
+    included: 'Sunrise balloon flight, champagne breakfast on landing, and a flight certificate.',
+    excluded: 'Transfers to the launch site and gratuities to the crew are excluded.',
+  },
+  {
+    id: 'cultural-village',
+    name: 'Cultural village visit',
+    rate: 35,
+    included: 'Community host, guided tour of the village, and a traditional welcome.',
+    excluded: 'Craft purchases and optional community donations are not included.',
+  },
+  {
+    id: 'boat-cruise',
+    name: 'Boat cruise',
+    rate: 80,
+    included: 'Boat hire, captain and crew, and refreshments served on board.',
+    excluded: 'Fishing equipment hire and premium drinks are excluded.',
+  },
 ]
+
+function pickActivity(ids: string[]): ActivityTypeOption[] {
+  return cloneOptions(ACTIVITY_OPTION_DEFS.filter((o) => ids.includes(o.id)))
+}
+
+/**
+ * Activity-type Options keyed by activity `CatalogItem.id`.
+ *
+ * Subsets follow the catalog service itself (entrance-fee product vs balloon vs
+ * walking vs city tour) — option *copy* is still shared from ACTIVITY_OPTION_DEFS;
+ * we are not inventing per-supplier included/excluded text.
+ */
+export const ACTIVITY_OPTIONS_BY_SERVICE: Record<string, ActivityTypeOption[]> = {
+  'act-cheli-peacock-kenya': pickActivity([
+    'giraffe-centre-entrance',
+    'karen-blixen-museum',
+    'sheldrick-orphanage',
+  ]),
+  'act-governors-balloon': pickActivity(['hot-air-balloon']),
+  'act-mara-walking': pickActivity(['guided-nature-walk', 'game-drive', 'cultural-village']),
+  'act-nairobi-city-tour': pickActivity([
+    'giraffe-centre-entrance',
+    'karen-blixen-museum',
+    'sheldrick-orphanage',
+    'cultural-village',
+  ]),
+}
+
+/** @deprecated Prefer ACTIVITY_OPTIONS_BY_SERVICE / optionsForService — flat defs for legacy callers. */
+export const ACTIVITY_TYPES = ACTIVITY_OPTION_DEFS
+
+export type OtherTypeOption = {
+  id: string
+  name: string
+  rate: number
+  included: string
+  excluded: string
+}
+
+export const OTHER_OPTION_DEFS: OtherTypeOption[] = [
+  {
+    id: 'conservancy-fee',
+    name: 'Conservancy fee',
+    rate: 90,
+    included: 'Statutory conservancy / community fee for the stay dates shown.',
+    excluded: 'Park entry fees outside the conservancy and personal expenses are not included.',
+  },
+  {
+    id: 'visa-assistance',
+    name: 'Visa assistance',
+    rate: 55,
+    included: 'Document checklist support and submission guidance for standard tourist visas.',
+    excluded: 'Embassy fees, courier costs, and expedited processing are not included.',
+  },
+  {
+    id: 'travel-insurance',
+    name: 'Travel insurance',
+    rate: 120,
+    included: 'Quoted policy premium for the travel window shown on this itinerary.',
+    excluded: 'Pre-existing condition riders and claim excesses are not included.',
+  },
+  {
+    id: 'miscellaneous-fee',
+    name: 'Miscellaneous fee',
+    rate: 40,
+    included: 'Supplier-quoted miscellaneous charge as described on the line.',
+    excluded: 'Anything not explicitly listed on the supplier confirmation is excluded.',
+  },
+]
+
+/**
+ * Other-type Options keyed by other `CatalogItem.id`.
+ *
+ * Invented for prototype purposes — option *sets* are intentionally uniform
+ * across Other catalog rows for now (same cloned OTHER_OPTION_DEFS list per
+ * id). Real per-supplier option menus are not in the mock data; flag for BA
+ * sign-off before treating this Record as differentiated product data.
+ */
+export const OTHER_OPTIONS_BY_SERVICE: Record<string, OtherTypeOption[]> = Object.fromEntries(
+  CATALOG.other.map((item) => [item.id, cloneOptions(OTHER_OPTION_DEFS)]),
+)
+
+/** @deprecated Prefer OTHER_OPTIONS_BY_SERVICE / optionsForService. */
+export const OTHER_TYPES = OTHER_OPTION_DEFS
+
+export type VehicleTypeOption = {
+  id: string
+  type: string
+  cap: number
+  rate: number
+  included: string
+  excluded: string
+}
+
+export const VEHICLE_OPTION_DEFS: VehicleTypeOption[] = [
+  {
+    id: 'safari-vehicle',
+    type: 'Safari Vehicle',
+    cap: 6,
+    rate: 250,
+    included: 'Pop-up roof safari vehicle, driver-guide, and bottled water on board.',
+    excluded: 'Park / conservancy fees, meals, and gratuities are not included.',
+  },
+  {
+    id: 'land-cruiser',
+    type: 'Land Cruiser',
+    cap: 6,
+    rate: 220,
+    included: '4×4 Land Cruiser, fuel, and professional driver for the transfer window.',
+    excluded: 'After-hours surcharges, waiting time beyond the agreed window, and tips are excluded.',
+  },
+  {
+    id: 'minivan',
+    type: 'Minivan',
+    cap: 8,
+    rate: 280,
+    included: 'Air-conditioned minivan, driver, and standard luggage allowance.',
+    excluded: 'Excess baggage handling and road tolls outside the quoted route are not included.',
+  },
+  {
+    id: 'sedan',
+    type: 'Sedan',
+    cap: 4,
+    rate: 150,
+    included: 'Private sedan transfer with driver for the booked route.',
+    excluded: 'Child seats (on request), waiting time, and multiple stop-offs are not included.',
+  },
+]
+
+/**
+ * Vehicle-type Options keyed by transportation `CatalogItem.id`.
+ *
+ * Invented for prototype purposes — option *sets* (and included/excluded copy)
+ * are intentionally uniform across Transport catalog rows for now. Real
+ * per-supplier vehicle menus are not in the mock data; flag for BA sign-off
+ * before treating this Record as differentiated product data.
+ * (Same honesty precedent as the Transport extras comments above.)
+ */
+export const VEHICLE_OPTIONS_BY_SERVICE: Record<string, VehicleTypeOption[]> = Object.fromEntries(
+  CATALOG.transportation.map((item) => [item.id, cloneOptions(VEHICLE_OPTION_DEFS)]),
+)
+
+/** @deprecated Prefer VEHICLE_OPTIONS_BY_SERVICE / optionsForService. */
+export const VEHICLE_TYPES = VEHICLE_OPTION_DEFS
 
 export const SYSTEM_PRICE = [
   { label: 'Sell', value: '$3364' },
@@ -538,13 +805,6 @@ function formatUsdStatic(n: number) {
     })
   )
 }
-
-export const VEHICLE_TYPES = [
-  { type: 'Safari Vehicle', cap: 6, rate: 250 },
-  { type: 'Land Cruiser', cap: 6, rate: 220 },
-  { type: 'Minivan', cap: 8, rate: 280 },
-  { type: 'Sedan', cap: 4, rate: 150 },
-]
 
 export const SEED_ITINERARIES: Itinerary[] = [
   { id: 'CPS5678', reference: 'CPS5678', itineraryRef: 'ITN-10234', title: 'Families Apex, Tiffany, Zidane', agency: 'Zoo Groups', agent: '', safariPlanner: 'Amelia Earhart', destination: 'Tanzania', travelDateFrom: '2026-08-02', travelDateTo: '2026-08-14', createdAt: '2026-06-01', status: 'DRAFT', paymentStatus: 'UNPAID', totalUsd: 12500, balanceUsd: 12500, updatedAt: '2026-07-08T09:12:00Z', adults: 2, children: 2, infants: 0 },
@@ -652,6 +912,27 @@ export function applyTravelRange(
   }
   fill(fields.start, range.from)
   fill(fields.end, range.to)
+
+  // Nested departure dates on Flights / Vehicles (same “never overwrite” rule).
+  if (range.from && tab === 'flight' && Array.isArray(next.flights)) {
+    next.flights = (next.flights as { departDate?: string }[]).map((f, i) =>
+      i === 0 && !String(f.departDate ?? '').trim() ? { ...f, departDate: range.from } : f,
+    )
+  }
+  if (range.from && tab === 'transportation' && Array.isArray(next.vehicles)) {
+    next.vehicles = (
+      next.vehicles as { dateFrom?: string; dateTo?: string; departDate?: string }[]
+    ).map((v) => {
+      const from = String(v.dateFrom || v.departDate || '').trim()
+      const to = String(v.dateTo || '').trim()
+      return {
+        ...v,
+        dateFrom: from || range.from,
+        dateTo: to || range.to || range.from,
+      }
+    })
+  }
+
   return next
 }
 
@@ -663,7 +944,7 @@ export function defaultDraft(tab: ServiceTab, range?: TravelRange): Record<strin
 function baseDraft(tab: ServiceTab): Record<string, unknown> {
   if (tab === 'accommodation') {
     return {
-      location: '', supplier: '', service: '', start: '', end: '', discount: 0, basis: 'bb',
+      location: '', supplier: '', service: '', serviceId: '', start: '', end: '', discount: 0, basis: 'bb',
       rooms: [] as unknown[],
       extras: ['conservancy'],
       customExtras: [] as unknown[],
@@ -680,36 +961,48 @@ function baseDraft(tab: ServiceTab): Record<string, unknown> {
   }
   if (tab === 'transportation') {
     return {
-      location: '', supplier: '', service: '', transMode: 'transfer',
+      location: '', supplier: '', service: '', serviceId: '', transMode: 'transfer',
       transDate: '', hireStart: '', hireEnd: '', pickup: '', dropoff: '', timeFrom: '', timeTo: '',
       discount: 0,
       transPax: { adult: 0, child: 0, infant: 0 },
-      vehicles: [{ id: 'v1', type: 'Land Cruiser', cap: 6, rate: 220, guestIds: [] as number[] }],
+      vehicles: [
+        {
+          id: 'v1',
+          type: 'Land Cruiser',
+          cap: 6,
+          rate: 220,
+          guestIds: [] as number[],
+          dateFrom: '',
+          dateTo: '',
+        },
+      ],
       hireRoutes: [] as unknown[],
-      extras: [] as string[],
+      extras: ['trans-fuel-levy'] as string[],
       customExtras: [] as unknown[],
       customExtraSeq: 1,
     }
   }
   if (tab === 'flight') {
     return {
-      location: '', supplier: '', service: '', returnService: '', flightMode: 'oneway',
+      location: '', supplier: '', service: '', serviceId: '', returnService: '', flightMode: 'oneway',
       departDate: '', returnDate: '', departTime: '', returnTime: '',
       capacity: 5, capMin: 2, capMax: 5, overflowMode: 'split', qty: 1, discount: 0,
       pax: { adult: 2, youth: 0, child: 0, infant: 0 },
       rates: { adult: 180, youth: 140, child: 90, infant: 0 },
-      extras: [] as string[], customExtras: [] as unknown[], customExtraSeq: 1, promotion: null,
+      flights: [] as unknown[],
+      extras: ['flight-security-fee'] as string[], customExtras: [] as unknown[], customExtraSeq: 1, promotion: null,
     }
   }
   if (tab === 'activity') {
     return {
-      location: '', supplier: '', service: '', startDate: '', endDate: '', discount: 0,
+      location: '', supplier: '', service: '', serviceId: '', startDate: '', endDate: '', discount: 0,
       days: [] as string[], activities: [] as unknown[],
-      extras: [] as string[], customExtras: [] as unknown[], customExtraSeq: 1, promotion: null,
+      extras: ['activity-park-fee'] as string[], customExtras: [] as unknown[], customExtraSeq: 1, promotion: null,
     }
   }
   return {
-    location: '', supplier: '', service: '', description: '', startDate: '', endDate: '',
+    location: '', supplier: '', service: '', serviceId: '', description: '', startDate: '', endDate: '',
     qty: 1, price: 0, discount: 0, activities: [] as unknown[],
+    extras: ['other-admin-fee'] as string[], customExtras: [] as unknown[], customExtraSeq: 1, promotion: null,
   }
 }

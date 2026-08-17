@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { HOLD_STATUS_STYLE } from './builderUtils'
+import { OptionInclusions } from './OptionInclusions'
 import { formatDay, formatUsd } from '@/shared/lib/utils'
 import type { Hold } from '@/shared/lib/types'
 import { DatePickerGridInput } from '@/shared/ui/date-picker'
@@ -311,7 +312,7 @@ export function ActivityTypeModal({
 }: {
   open: boolean
   onClose: () => void
-  types: { name: string; rate: number; includes: string; excludes: string }[]
+  types: { id: string; name: string; rate: number; included: string; excluded: string }[]
   defaultStart: string
   defaultEnd: string
   onSubmit: (payload: { name: string; rate: number; start: string; end: string }) => void
@@ -338,7 +339,19 @@ export function ActivityTypeModal({
         </DialogHeader>
         <div className="grid gap-3">
           <div className="grid gap-1.5">
-            <Label>{typeLabel}</Label>
+            <div className="flex items-center gap-2">
+              <Label>{typeLabel}</Label>
+              {selected ? (
+                <OptionInclusions
+                  option={{
+                    id: selected.id,
+                    label: selected.name,
+                    included: selected.included,
+                    excluded: selected.excluded,
+                  }}
+                />
+              ) : null}
+            </div>
             <Select
               value={actType || undefined}
               onValueChange={setActType}
@@ -348,25 +361,13 @@ export function ActivityTypeModal({
               </SelectTrigger>
               <SelectContent>
               {types.map((t) => (
-                <SelectItem key={t.name} value={t.name}>
+                <SelectItem key={t.id} value={t.name}>
                   {t.name}
                 </SelectItem>
               ))}
               </SelectContent>
             </Select>
           </div>
-          {selected ? (
-            <div className="space-y-2 rounded-lg border bg-[#FAFAFB] p-3 text-[12.5px] text-[#525252]">
-              <div>
-                <div className="mb-0.5 font-semibold text-[#171717]">Includes</div>
-                {selected.includes}
-              </div>
-              <div>
-                <div className="mb-0.5 font-semibold text-[#171717]">Excludes</div>
-                {selected.excludes}
-              </div>
-            </div>
-          ) : null}
           <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-1.5">
               <Label>Start</Label>

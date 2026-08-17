@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, CalendarDays, Check, Info, Plus, Search, Trash2, UsersRound } from 'lucide-react'
-import { PROMOTIONS, extrasForTab } from '@/shared/lib/catalogs'
+import { AlertTriangle, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { CATALOG, PROMOTIONS, extrasForTab } from '@/shared/lib/catalogs'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -10,40 +11,43 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import type { CatalogItem, Guest } from '@/shared/lib/types'
-import { cn, formatUsd } from '@/shared/lib/utils'
+import type { CatalogItem, DemoRole, FlightInstance, Guest } from '@/shared/lib/types'
+import { cn } from '@/shared/lib/utils'
 import { DatePickerGridInput } from '@/shared/ui/date-picker'
+import { CancellationPolicyControl } from './CancellationPolicyControl'
+import { ExtrasTab } from './ExtrasTab'
 import { LocationDropdown } from './LocationDropdown'
+import { OptionInclusions } from './OptionInclusions'
 import { SupplierPicker } from './SupplierPicker'
-import { FLIGHT_SERVICES, asCustomExtras, asExtraIds, extraObjects, flightAutoQty } from './builderUtils'
+import {
+  FLIGHT_SERVICES,
+  addableFlightOptions,
+  asCustomExtras,
+  asExtraIds,
+  asFlights,
+  extraObjects,
+  findFlightServiceOption,
+  findGuest,
+  flightDepartMeta,
+  formatFlightOptionDays,
+  formatFlightOptionLabel,
+  formatFlightOptionWindow,
+  guestChipStyle,
+  isDepartDateOnFlightOptionDay,
+  isDepartTimeInFlightOptionWindow,
+  usedGuestIds,
+  autoAssignByCapacity,
+} from './builderUtils'
+import { resolveServiceOption } from './serviceOptions'
+import { CustomExtraModal, GuestChip } from './BuilderModals'
 
-type FlightTab = 'policy' | 'extras' | 'promotions'
+type FlightTab = 'policy' | 'extras' | 'promotions' | 'notes'
 const PAX_BANDS: { key: 'adult' | 'youth' | 'child' | 'infant'; label: string }[] = [
   { key: 'adult', label: 'Adult' },
   { key: 'youth', label: 'Youth' },
   { key: 'child', label: 'Child' },
   { key: 'infant', label: 'Infant' },
 ]
-
-function PanelHeading({
-  icon: Icon,
-  title,
-  description,
-}: {
-  icon: typeof Search
-  title: string
-  description: string
-}) {
-  return (
-    <div className="mb-3 flex items-center gap-2">
-      <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-[#E8EEF3] text-[#64748B]">
-        <Icon className="size-3.5" />
-      </span>
-      <h3 className="text-[12px] font-bold uppercase tracking-wide text-[#334155]">{title}</h3>
-      <span className="text-[11.5px] text-[#A7AFBA]">{description}</span>
-    </div>
-  )
-}
 
 function routePatch(service: string, location: string) {
   const normalized = service.replace(/\s+OW$/i, '')
@@ -58,12 +62,17 @@ export function FlightPanel({
   draft,
   patch,
   guests = [],
+  demoRole,
+  isDraftItinerary,
 }: {
   draft: Record<string, unknown>
   patch: (p: Record<string, unknown>) => void
   guests?: Guest[]
+  demoRole: DemoRole
+  isDraftItinerary: boolean
 }) {
   const [rightTab, setRightTab] = useState<FlightTab>('extras')
+  const [ceOpen, setCeOpen] = useState(false)
   const partyPax = useMemo(() => {
     const next = { adult: 0, youth: 0, child: 0, infant: 0 }
     for (const guest of guests) {
@@ -71,26 +80,41 @@ export function FlightPanel({
     }
     return next
   }, [guests])
-  const totalPax = PAX_BANDS.reduce((s, b) => s + (partyPax[b.key] || 0), 0)
-  const capMin = Math.max(1, Number(draft.capMin) || Number(draft.minSeats) || 2)
   const capMax = Math.max(1, Number(draft.capMax) || Number(draft.capacity) || 5)
-  const overflowMode = draft.overflowMode === 'squeeze' ? 'squeeze' : 'split'
-  const capacityDraft = { ...draft, pax: partyPax, capacity: capMax, capMax, overflowMode }
-  const autoQty = flightAutoQty(capacityDraft)
-  const totalCapacity = capMax * autoQty
-  const isOverCapacity = totalPax > capMax
-  const excessPax = Math.max(0, totalPax - capMax)
-  const squeeze = overflowMode === 'squeeze'
-  const eligible = totalPax > 0 && totalPax <= totalCapacity
-  const partySummary = PAX_BANDS
-    .filter((band) => (partyPax[band.key] || 0) > 0)
-    .map((band) => `${partyPax[band.key]} ${band.label}`)
-    .join(' · ')
+  const capMin = Math.max(1, Number(draft.capMin) || Number(draft.minSeats) || 2)
+  const flights = asFlights(draft)
+  const used = usedGuestIds(flights)
   const extras = extraObjects(draft)
   const extraIds = asExtraIds(draft)
   const customExtras = asCustomExtras(draft)
   const service = String(draft.service || '')
-  const isCharter = /charter/i.test(service)
+  const serviceId = String(draft.serviceId || '')
+  const flightOptions = addableFlightOptions(service)
+
+  function setFlights(next: FlightInstance[]) {
+    patch({ flights: next, flightOptionId: '', ...flightDepartMeta(next) })
+  }
+
+  function autoAssign() {
+    setFlights(autoAssignByCapacity(flights, guests, (f) => f.cap))
+  }
+
+  function addFlightFromOption(optionId: string) {
+    const option = findFlightServiceOption(service, optionId)
+    if (!option) return
+    setFlights([
+      ...flights,
+      {
+        id: `f${Date.now()}`,
+        cap: capMax,
+        guestIds: [],
+        optionId: option.id,
+        optionName: option.name,
+        departDate: String(draft.departDate || ''),
+        departTime: '',
+      },
+    ])
+  }
 
   useEffect(() => {
     const current = (draft.pax || {}) as Record<string, number>
@@ -101,21 +125,6 @@ export function FlightPanel({
       Number(draft.capMin) !== capMin
     if (changed) patch({ pax: partyPax, capacity: capMax, capMin, capMax })
   }, [partyPax, capMax, capMin, draft.pax, draft.capacity, draft.capMax, draft.capMin, patch])
-
-  const eligibilityText =
-    totalPax === 0
-      ? 'Set passenger counts below'
-      : isOverCapacity && squeeze
-        ? `${totalPax} PAX seated on 1 flight — ${excessPax} over the ${capMax}-seat maximum, subject to supplier approval`
-        : `${totalPax} PAX · ${autoQty} ${autoQty === 1 ? 'flight' : 'flights'} · ${totalCapacity} seats available${
-            totalPax < capMin ? ` · below the ${capMin}-seat minimum, inducement fee may apply` : ''
-          }`
-  const eligibilityBg =
-    totalPax === 0 ? '#F3F4F6' : eligible ? '#D1FAE5' : squeeze ? '#FFFBEB' : '#FEE2E2'
-  const eligibilityBorder =
-    totalPax === 0 ? '#E5E7EB' : eligible ? '#A7F3D0' : squeeze ? '#FDE68A' : '#FECACA'
-  const eligibilityColor =
-    totalPax === 0 ? '#525252' : eligible ? '#059669' : squeeze ? '#B45309' : '#DC2626'
 
   const tabBtn = (key: FlightTab, label: string, badge?: number) => (
     <button
@@ -143,11 +152,12 @@ export function FlightPanel({
   return (
     <div className="space-y-4">
       <section className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-4 shadow-sm">
-        <PanelHeading
-          icon={Search}
-          title="Supplier & flight details"
-          description="Pick the location, supplier and service"
-        />
+        <div className="mb-3">
+          <h3 className="text-[12px] font-bold uppercase tracking-wide text-[#334155]">
+            Supplier & service
+          </h3>
+          <p className="text-[11.5px] text-[#94A3B8]">Pick location, supplier and service</p>
+        </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="grid gap-1.5">
             <Label>Location</Label>
@@ -160,6 +170,9 @@ export function FlightPanel({
                   flightTo: '',
                   supplier: '',
                   service: '',
+                  serviceId: '',
+                  flightOptionId: '',
+                  flights: [],
                 })
               }
             />
@@ -172,6 +185,9 @@ export function FlightPanel({
               onPick={(item: CatalogItem) =>
                 patch({
                   supplier: item.name,
+                  serviceId: item.id,
+                  flightOptionId: '',
+                  flights: [],
                   ...routePatch(item.service, String(draft.location || draft.flightFrom || '')),
                 })
               }
@@ -181,9 +197,21 @@ export function FlightPanel({
             <Label>Service</Label>
             <Select
               value={String(draft.service || '') || undefined}
-              onValueChange={(value) =>
-                patch(routePatch(value, String(draft.location || draft.flightFrom || '')))
-              }
+              onValueChange={(value) => {
+                const match = CATALOG.flight.find(
+                  (c) =>
+                    c.service === value ||
+                    (value === 'Scheduled Economy' && c.service === 'Scheduled Economy (Y Class)') ||
+                    (value === 'Private Charter' &&
+                      (c.service === 'Charter Flight' || c.service === 'Charter flight')),
+                )
+                patch({
+                  ...routePatch(value, String(draft.location || draft.flightFrom || '')),
+                  serviceId: match?.id ?? '',
+                  flightOptionId: '',
+                  flights: [],
+                })
+              }}
             >
               <SelectTrigger className="bg-white">
                 <SelectValue placeholder="Select a service" />
@@ -200,231 +228,254 @@ export function FlightPanel({
         </div>
       </section>
 
-      <section className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-4 shadow-sm">
-        <PanelHeading
-          icon={CalendarDays}
-          title="Departure"
-          description="Set the departure date and time"
-        />
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="grid gap-1.5">
-            <Label>Departure date</Label>
-            <DatePickerGridInput
-              value={String(draft.departDate || '')}
-              onChange={(value) => patch({ departDate: value })}
-              className="bg-white"
-            />
-          </div>
-          <div className="grid gap-1.5">
-            <Label>Departure time</Label>
-            <Input
-              type="time"
-              value={String(draft.departTime || '')}
-              onChange={(e) => patch({ departTime: e.target.value })}
-              className="bg-white"
-            />
+      <section>
+        <div className="mb-2.5 flex items-center justify-between">
+          <h3 className="text-[13.5px] font-bold text-[#171717]">Flights &amp; PAX</h3>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={autoAssign}
+              disabled={flights.length === 0}
+              className="h-7 border-[#931115] text-xs font-semibold text-[#931115]"
+            >
+              <RefreshCw className="size-3.5" />
+              Auto-assign
+            </Button>
+            <Select
+              key={`add-flight-${service}-${flights.length}`}
+              value={undefined}
+              disabled={flightOptions.length === 0}
+              onValueChange={addFlightFromOption}
+            >
+              <SelectTrigger className="h-7 w-auto gap-1 border-[#931115] bg-white px-2.5 text-xs font-semibold text-[#931115] shadow-none disabled:opacity-40">
+                <Plus className="size-3.5" />
+                <SelectValue placeholder={service ? 'Add flight' : 'Select a service first'} />
+              </SelectTrigger>
+              <SelectContent align="end" className="max-w-[min(100vw-2rem,28rem)]">
+                {flightOptions.map((option) => (
+                  <SelectItem key={option.id} value={option.id}>
+                    {formatFlightOptionLabel(option)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
-      </section>
 
-      {isCharter ? (
-      <section className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-4 shadow-sm">
-        <PanelHeading icon={UsersRound} title="Charter & capacity" description="Capacity is set by the supplier" />
-        <div className="mb-3 flex flex-wrap gap-2.5">
-          <span className="inline-flex h-[38px] items-center gap-2 rounded-lg bg-[#F1F5F9] px-3 shadow-[inset_0_0_0_1px_#E2E8F0]">
-            <span className="text-[11px] font-bold uppercase tracking-wide text-[#94A3B8]">Min seats</span>
-            <span className="text-[15px] font-bold text-[#334155]">{capMin}</span>
-          </span>
-          <span className="inline-flex h-[38px] items-center gap-2 rounded-lg bg-[#F1F5F9] px-3 shadow-[inset_0_0_0_1px_#E2E8F0]">
-            <span className="text-[11px] font-bold uppercase tracking-wide text-[#94A3B8]">Max seats</span>
-            <span className="text-[15px] font-bold text-[#334155]">{capMax}</span>
-          </span>
-          <span className="inline-flex h-[38px] items-center gap-2 rounded-lg bg-white px-3 shadow-[inset_0_0_0_1px_#E2E8F0]">
-            <span className="text-[11px] font-bold uppercase tracking-wide text-[#94A3B8]">PAX</span>
-            <span className="text-[15px] font-bold text-[#334155]">{totalPax}</span>
-          </span>
-          <span className="inline-flex h-[38px] items-center gap-2 rounded-lg bg-[#EFF6FF] px-3 shadow-[inset_0_0_0_1px_#BFDBFE]">
-            <span className="text-[11px] font-bold uppercase tracking-wide text-[#60A5FA]">Flights</span>
-            <span className="text-[15px] font-bold text-[#1D4ED8]">×{autoQty}</span>
-          </span>
-        </div>
-        <p className="mb-3 text-[11.5px] text-[#94A3B8]">
-          PAX from the itinerary party — {partySummary || 'no guests'}
-        </p>
-        {isOverCapacity ? (
-          <div className="mb-2.5 rounded-lg bg-[#FFFBEB] p-[11px_12px] shadow-[inset_0_0_0_1px_#FDE68A]">
-            <div className="mb-2.5 flex items-start gap-2.5">
-              <AlertTriangle className="mt-px size-4 shrink-0 text-[#B45309]" />
-              <div>
-                <p className="text-[13px] font-bold text-[#92400E]">
-                  {totalPax} PAX exceeds the {capMax}-seat maximum by {excessPax}
-                </p>
-                <p className="mt-[3px] text-xs text-[#B45309]">Choose how to seat the remaining passengers.</p>
-              </div>
-            </div>
-            <div className="flex flex-col gap-2">
-              {(
-                [
-                  {
-                    mode: 'split' as const,
-                    on: !squeeze,
-                    label: 'Add another flight',
-                    note: `${Math.ceil(totalPax / capMax)} flights · ${excessPax} PAX move to the next departure`,
-                  },
-                  {
-                    mode: 'squeeze' as const,
-                    on: squeeze,
-                    label: 'Seat all PAX on this flight',
-                    note: `Over capacity by ${excessPax} — supplier approval required`,
-                  },
-                ] as const
-              ).map((choice) => (
-                <button
-                  key={choice.mode}
-                  type="button"
-                  onClick={() => patch({ overflowMode: choice.mode })}
-                  className="flex w-full items-start gap-2.5 rounded-lg px-3 py-2.5 text-left"
-                  style={{
-                    background: choice.on ? '#FFFFFF' : 'rgba(255,255,255,0.6)',
-                    boxShadow: `inset 0 0 0 ${choice.on ? '1.5px #931115' : '1px #FDE68A'}`,
-                  }}
-                >
+        <div className="space-y-2.5">
+          {flights.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-[#E5E7EB] bg-[#FAFAFB] px-3.5 py-6 text-center text-[12.5px] text-[#A1A1A1]">
+              {service
+                ? 'Use Add flight to pick a departure option for this service.'
+                : 'Select a service, then add flight options below.'}
+            </p>
+          ) : null}
+          {flights.map((f, i) => {
+            const avail = guests.filter((g) => !used.includes(g.id))
+            const over = f.guestIds.length > f.cap
+            const flightOption = findFlightServiceOption(service, String(f.optionId || ''))
+            const resolvedInclusions = resolveServiceOption(serviceId, String(f.optionId || ''))
+            const timeOut =
+              flightOption != null &&
+              Boolean(f.departTime) &&
+              !isDepartTimeInFlightOptionWindow(f.departTime || '', flightOption)
+            const dateOff =
+              flightOption != null &&
+              Boolean(f.departDate) &&
+              flightOption.days.length > 0 &&
+              !isDepartDateOnFlightOptionDay(f.departDate || '', flightOption)
+            return (
+              <div key={f.id} className="overflow-hidden rounded-lg border border-[#E5E7EB] bg-white">
+                <div className="flex flex-wrap items-center gap-2 bg-[#F9FAFB] px-[9px] py-[7px]">
+                  <span className="flex size-5 items-center justify-center rounded-[5px] border border-[#E5E7EB] bg-white text-[11px] font-bold text-[#525252]">
+                    {i + 1}
+                  </span>
+                  {flightOptions.length > 0 ? (
+                    <Select
+                      value={f.optionId || undefined}
+                      onValueChange={(value) => {
+                        const opt = findFlightServiceOption(service, value)
+                        if (!opt) return
+                        setFlights(
+                          flights.map((x) =>
+                            x.id === f.id
+                              ? { ...x, optionId: opt.id, optionName: opt.name }
+                              : x,
+                          ),
+                        )
+                      }}
+                    >
+                      <SelectTrigger className="h-7 max-w-[220px] bg-white px-2 text-[12.5px] font-semibold">
+                        <SelectValue placeholder="Flight option" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {flightOptions.map((option) => (
+                          <SelectItem key={option.id} value={option.id}>
+                            {option.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <span className="text-[12.5px] font-semibold text-[#171717]">
+                      {f.optionName || 'Flight'}
+                    </span>
+                  )}
                   <span
-                    className="mt-px flex size-[17px] shrink-0 items-center justify-center rounded"
-                    style={{
-                      background: choice.on ? '#931115' : '#FFFFFF',
-                      boxShadow: `inset 0 0 0 ${choice.on ? '1px #931115' : '1.5px #CBD5E1'}`,
-                    }}
+                    className="whitespace-nowrap text-xs font-semibold"
+                    style={{ color: over ? '#DC2626' : '#16A34A' }}
                   >
-                    {choice.on ? <Check className="size-[11px] text-white" strokeWidth={3.5} /> : null}
+                    {f.guestIds.length} / {f.cap} PAX
                   </span>
-                  <span className="min-w-0">
-                    <span className="block text-[13px] font-semibold text-[#171717]">{choice.label}</span>
-                    <span className="mt-0.5 block text-[11.5px] text-[#94A3B8]">{choice.note}</span>
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : null}
-        <div
-          className="flex items-start gap-2.5 rounded-lg px-3 py-2.5"
-          style={{
-            background: eligibilityBg,
-            boxShadow: `inset 0 0 0 1px ${eligibilityBorder}`,
-          }}
-        >
-          <Info className="mt-px size-4 shrink-0" style={{ color: eligibilityColor }} />
-          <span className="text-[13px] font-bold" style={{ color: eligibilityColor }}>
-            {eligibilityText}
-          </span>
+                  <OptionInclusions option={resolvedInclusions} />
+                  <div className="flex-1" />
+                  <button
+                    type="button"
+                    title="Remove flight"
+                    onClick={() => setFlights(flights.filter((x) => x.id !== f.id))}
+                    className="flex size-[26px] items-center justify-center rounded-md border border-[#E5E7EB] bg-white text-[#931115]"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                </div>
+                <div className="space-y-2.5 p-[9px]">
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div className="grid gap-1">
+                      <Label className="text-[11px] text-[#737373]">Departure date</Label>
+                      <DatePickerGridInput
+                        value={f.departDate || ''}
+                        onChange={(value) =>
+                          setFlights(
+                            flights.map((x) => (x.id === f.id ? { ...x, departDate: value } : x)),
+                          )
+                        }
+                        className="h-8 bg-white"
+                      />
+                      {dateOff && flightOption ? (
+                        <div className="flex items-start gap-1.5 rounded-md bg-[#FFFBEB] px-2 py-1.5 shadow-[inset_0_0_0_1px_#FDE68A]">
+                          <AlertTriangle className="mt-px size-3 shrink-0 text-[#B45309]" />
+                          <p className="text-[11px] font-medium text-[#92400E]">
+                            {flightOption.name} does not operate on this date (
+                            {formatFlightOptionDays(flightOption.days)}).
+                          </p>
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="grid gap-1">
+                      <Label className="text-[11px] text-[#737373]">Departure time</Label>
+                      <Input
+                        type="time"
+                        value={f.departTime || ''}
+                        onChange={(e) =>
+                          setFlights(
+                            flights.map((x) =>
+                              x.id === f.id ? { ...x, departTime: e.target.value } : x,
+                            ),
+                          )
+                        }
+                        className="h-8 bg-white"
+                      />
+                      {timeOut && flightOption ? (
+                        <div className="flex items-start gap-1.5 rounded-md bg-[#FFFBEB] px-2 py-1.5 shadow-[inset_0_0_0_1px_#FDE68A]">
+                          <AlertTriangle className="mt-px size-3 shrink-0 text-[#B45309]" />
+                          <p className="text-[11px] font-medium text-[#92400E]">
+                            Outside {flightOption.name}&apos;s window (
+                            {formatFlightOptionWindow(flightOption)}).
+                          </p>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {f.guestIds.map((gid) => {
+                      const g = findGuest(gid, guests)
+                      if (!g) return null
+                      const cs = guestChipStyle(g)
+                      return (
+                        <GuestChip
+                          key={gid}
+                          name={g.name}
+                          resLabel={cs.resLabel}
+                          resBg={cs.resBg}
+                          resFg={cs.resFg}
+                          bg={cs.bg}
+                          bd={cs.bd}
+                          onRemove={() =>
+                            setFlights(
+                              flights.map((x) =>
+                                x.id === f.id
+                                  ? { ...x, guestIds: x.guestIds.filter((id) => id !== gid) }
+                                  : x,
+                              ),
+                            )
+                          }
+                        />
+                      )
+                    })}
+                    <Select
+                      value={undefined}
+                      onValueChange={(value) => {
+                        const gid = Number(value)
+                        if (!gid) return
+                        setFlights(
+                          flights.map((x) =>
+                            x.id === f.id ? { ...x, guestIds: [...x.guestIds, gid] } : x,
+                          ),
+                        )
+                      }}
+                    >
+                      <SelectTrigger className="h-7 w-auto border-dashed border-[#C9CCD3] bg-white px-2 text-xs font-semibold text-[#525252]">
+                        <SelectValue placeholder="+ Add guest" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {avail.map((g) => (
+                          <SelectItem key={g.id} value={String(g.id)}>
+                            {g.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
         </div>
       </section>
-      ) : null}
 
       <div className="flex gap-1 border-b">
-        {tabBtn('policy', 'Policy')}
         {tabBtn('extras', 'Extras', extras.length)}
         {tabBtn('promotions', 'Special Offer(s)', PROMOTIONS.length)}
+        {tabBtn('policy', 'Policy')}
+        {tabBtn('notes', 'Notes')}
       </div>
 
       {rightTab === 'policy' ? (
-        <div>
-          <div className="mb-2 text-[14px] font-semibold text-[#171717]">Policy Information</div>
-          <div className="flex flex-col gap-1.5 rounded-lg bg-[#EFF6FF] p-3 shadow-[inset_0_0_0_1px_#BFDBFE]">
-            <p className="flex gap-2 text-[12.5px] leading-relaxed text-[#171717]">
-              <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-[#2563EB]" />
-              <span>
-                <b>Inducement fees</b> apply below the operator&apos;s minimum load factor.
-              </span>
-            </p>
-            <p className="flex gap-2 text-[12.5px] leading-relaxed text-[#171717]">
-              <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-[#2563EB]" />
-              <span>
-                <b>Seat requirements:</b> infants under 2 may travel on an adult&apos;s lap; all
-                other PAX need a full seat.
-              </span>
-            </p>
-            <p className="flex gap-2 text-[12.5px] leading-relaxed text-[#171717]">
-              <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-[#2563EB]" />
-              <span>
-                <b>Baggage:</b> soft bags only — 15kg checked + 5kg hand baggage per PAX.
-              </span>
-            </p>
-          </div>
-        </div>
+        <CancellationPolicyControl
+          tab="flight"
+          draft={draft}
+          patch={patch}
+          demoRole={demoRole}
+          isDraftItinerary={isDraftItinerary}
+        />
       ) : null}
 
       {rightTab === 'extras' ? (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-[13px] font-bold">Extras</span>
-            <button
-              type="button"
-              className="text-[12px] font-medium text-[#0369A1]"
-              onClick={() => {
-                const n = Number(draft.customExtraSeq) || 1
-                patch({
-                  customExtras: [
-                    ...customExtras,
-                    { id: `custom-f${n}`, title: 'Custom extra', price: 0, custom: true },
-                  ],
-                  customExtraSeq: n + 1,
-                })
-              }}
-            >
-              Add Custom Extra
-            </button>
-          </div>
-          {extras.map((ex) => (
-            <div key={ex.id} className="overflow-hidden rounded-lg border">
-              {ex.mandatory ? (
-                <div className="bg-[#E5E7EB] py-0.5 text-center text-[10px] font-bold text-[#525252]">
-                  Mandatory
-                </div>
-              ) : null}
-              <div className="flex items-center justify-between px-2.5 py-2">
-                <span className="text-[13px] font-bold">{ex.title}</span>
-                <div className="flex items-center gap-2">
-                  <span className="text-[13px] font-semibold">{formatUsd(ex.price)}</span>
-                  {!ex.mandatory ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (ex.custom) {
-                          patch({ customExtras: customExtras.filter((x) => x.id !== ex.id) })
-                        } else {
-                          patch({ extras: extraIds.filter((id) => id !== ex.id) })
-                        }
-                      }}
-                    >
-                      <Trash2 className="size-3.5 text-[#931115]" />
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-          ))}
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-[#A1A1A1]">
-            Catalog
-          </p>
-          {extrasForTab('flight')
-            .filter((c) => !extraIds.includes(c.id))
-            .map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => patch({ extras: [...extraIds, c.id] })}
-              className="flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left hover:bg-[#F9FAFB]"
-            >
-              <span className="text-[13px] font-semibold">{c.title}</span>
-              <span className="flex items-center gap-2 text-[12.5px] font-semibold text-[#525252]">
-                {formatUsd(c.price)}
-                <Plus className="size-3.5 text-[#931115]" />
-              </span>
-            </button>
-          ))}
-        </div>
+        <ExtrasTab
+          selected={extras}
+          catalog={extrasForTab('flight')}
+          extraIds={extraIds}
+          onAdd={(id) => patch({ extras: [...extraIds, id] })}
+          onRemove={(ex) => {
+            if (ex.custom) {
+              patch({ customExtras: customExtras.filter((x) => x.id !== ex.id) })
+            } else {
+              patch({ extras: extraIds.filter((id) => id !== ex.id) })
+            }
+          }}
+          onCustom={() => setCeOpen(true)}
+        />
       ) : null}
 
       {rightTab === 'promotions' ? (
@@ -458,19 +509,58 @@ export function FlightPanel({
         </div>
       ) : null}
 
-      <section className="mt-4">
-        <div className="mb-2 flex items-baseline gap-2">
-          <h3 className="text-[14px] font-semibold text-[#171717]">Internal notes</h3>
-          <span className="text-[12px] font-medium text-[#94A3B8]">Not shown to the client</span>
+      {rightTab === 'notes' ? (
+        <div className="space-y-4">
+          <div>
+            <p className="mb-2 text-[14px] font-bold text-[#171717]">Service Notes</p>
+            <textarea
+              readOnly
+              rows={3}
+              className="w-full resize-none rounded-lg border border-[#E5E7EB] bg-[#FAFAFB] p-2.5 text-[13px] text-[#525252]"
+              value="Baggage allowance and route timings are subject to operator confirmation. Soft product rules may apply on shared charters."
+            />
+          </div>
+          <div>
+            <div className="mb-2 flex items-baseline gap-2">
+              <h3 className="text-[14px] font-semibold text-[#171717]">Internal notes</h3>
+              <span className="text-[12px] font-medium text-[#94A3B8]">Not shown to the client</span>
+            </div>
+            <textarea
+              rows={3}
+              value={String(draft.notes || '')}
+              onChange={(e) => patch({ notes: e.target.value })}
+              className="w-full resize-y rounded-lg border border-[#E5E7EB] bg-[#FAFAFB] px-2.5 py-2 text-[13px] text-[#171717] outline-none placeholder:text-[#A1A1AA]"
+              placeholder="Anything the ops team should know about this service…"
+            />
+          </div>
         </div>
-        <textarea
-          rows={3}
-          value={String(draft.notes || '')}
-          onChange={(e) => patch({ notes: e.target.value })}
-          className="w-full resize-y rounded-lg border border-[#E5E7EB] bg-[#FAFAFB] px-2.5 py-2 text-[13px] text-[#171717] outline-none placeholder:text-[#A1A1AA]"
-          placeholder="Anything the ops team should know about this service…"
-        />
-      </section>
+      ) : null}
+
+      <CustomExtraModal
+        open={ceOpen}
+        onClose={() => setCeOpen(false)}
+        onSubmit={(extra) => {
+          const n = Number(draft.customExtraSeq) || 1
+          patch({
+            customExtras: [
+              ...customExtras,
+              {
+                id: `custom-f${n}`,
+                title: extra.title,
+                serviceType: extra.serviceType,
+                chargeType: extra.chargeType,
+                timeUnit: extra.timeUnit,
+                qty: extra.qty,
+                price: extra.price,
+                dateFrom: extra.dateFrom,
+                dateTo: extra.dateTo,
+                custom: true,
+              },
+            ],
+            customExtraSeq: n + 1,
+          })
+        }}
+      />
     </div>
   )
 }
