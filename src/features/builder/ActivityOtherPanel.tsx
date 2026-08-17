@@ -63,18 +63,33 @@ export function ActivityOtherPanel({
   const itemLabel = tab === 'other' ? 'item' : 'activity'
   const isActivity = tab === 'activity'
   const serviceId = String(draft.serviceId || '')
+  const service = String(draft.service || '')
   const typeCatalog = isActivity
     ? activityOptionsForService(serviceId)
     : otherOptionsForService(serviceId)
+  const selectedType = typeCatalog.find((t) => t.name === service || t.id === service)
+  const serviceOption = resolveServiceOption(serviceId, service)
   const extras = extraObjects(draft)
   const extraIds = asExtraIds(draft)
   const customExtras = asCustomExtras(draft)
   const catalogExtras = isActivity
-    ? extrasForActivityService('', activities.map((a) => a.name))
+    ? extrasForActivityService(service, activities.map((a) => a.name))
     : extrasForTab('other')
 
   function setActivities(next: ActivityItem[]) {
     patch({ activities: next })
+  }
+
+  function setServiceType(typeName: string) {
+    const found = typeCatalog.find((t) => t.name === typeName)
+    patch({
+      service: typeName,
+      activities: activities.map((a) => ({
+        ...a,
+        name: typeName,
+        rate: found ? found.rate : a.rate,
+      })),
+    })
   }
 
   function addAllGuests(activityId: string) {
@@ -115,13 +130,9 @@ export function ActivityOtherPanel({
       <section className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-4 shadow-sm">
         <div className="mb-3">
           <h3 className="text-[12px] font-bold uppercase tracking-wide text-[#334155]">
-            {tab === 'activity' ? 'Activity details' : 'Other line item'}
+            Supplier & service
           </h3>
-          <p className="text-[11.5px] text-[#94A3B8]">
-            {tab === 'activity'
-              ? 'Pick the location and supplier for this activity'
-              : 'Pick the location and supplier for this line item'}
-          </p>
+          <p className="text-[11.5px] text-[#94A3B8]">Pick location, supplier and service</p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="grid gap-1.5">
@@ -139,9 +150,35 @@ export function ActivityOtherPanel({
               tab={tab}
               value={String(draft.supplier || '')}
               onPick={(item: CatalogItem) =>
-                patch({ supplier: item.name, service: item.service, serviceId: item.id })
+                patch({ supplier: item.name, service: '', serviceId: item.id })
               }
             />
+          </div>
+          <div className="grid gap-1.5 sm:col-span-2">
+            <div className="flex items-center gap-2">
+              <Label>Service</Label>
+              <OptionInclusions option={serviceOption} />
+            </div>
+            <Select
+              value={service || undefined}
+              disabled={!serviceId || typeCatalog.length === 0}
+              onValueChange={setServiceType}
+            >
+              <SelectTrigger className="bg-white">
+                <SelectValue
+                  placeholder={
+                    serviceId ? 'Select a service' : 'Select a supplier first'
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent>
+                {typeCatalog.map((t) => (
+                  <SelectItem key={t.id} value={t.name}>
+                    {t.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
       </section>
@@ -151,7 +188,12 @@ export function ActivityOtherPanel({
           <h3 className="text-[13px] font-bold uppercase tracking-wide text-[#475569]">
             {tab === 'other' ? 'Items & PAX' : 'Activities & PAX'}
           </h3>
-          <Button size="sm" variant="outline" onClick={() => setActOpen(true)}>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!selectedType}
+            onClick={() => setActOpen(true)}
+          >
             <Plus className="size-3.5" />
             Add {itemLabel}
           </Button>
@@ -162,37 +204,15 @@ export function ActivityOtherPanel({
             const net = a.rate * a.guestIds.length
             const someToAdd = avail.length > 0
             const allAdded = guests.length > 0 && a.guestIds.length === guests.length
-            const typeOption = resolveServiceOption(serviceId, a.name)
             return (
               <div key={a.id} className="rounded-xl border bg-[#F9FAFB] p-3">
                 <div className="mb-2 flex flex-wrap items-center gap-2">
                   <span className="flex size-5 items-center justify-center rounded border bg-white text-[11px] font-bold">
                     {i + 1}
                   </span>
-                  <Select
-                    value={a.name || undefined}
-                    onValueChange={(value) => {
-                      const found = typeCatalog.find((t) => t.name === value)
-                      setActivities(
-                        activities.map((x) =>
-                          x.id === a.id
-                            ? { ...x, name: value, rate: found ? found.rate : x.rate }
-                            : x,
-                        ),
-                      )
-                    }}
-                  >
-                    <SelectTrigger className="h-7 min-w-[180px] flex-1 bg-white text-[12.5px] font-semibold">
-                      <SelectValue placeholder={isActivity ? 'Activity type' : 'Other type'} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {typeCatalog.map((t) => (
-                        <SelectItem key={t.id} value={t.name}>
-                          {t.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <span className="min-w-[180px] flex-1 text-[12.5px] font-semibold text-[#171717]">
+                    {a.name || service || (isActivity ? 'Activity' : 'Item')}
+                  </span>
                   <span className="rounded-md bg-white px-2 py-1 text-[11px] font-semibold text-[#525252] shadow-sm">
                     {formatDateRange(
                       a.start || String(draft.startDate || ''),
@@ -202,7 +222,6 @@ export function ActivityOtherPanel({
                   <span className="text-[12px] font-semibold text-[#525252]">
                     {a.guestIds.length} PAX
                   </span>
-                  <OptionInclusions option={typeOption} />
                   <button
                     type="button"
                     onClick={() => setActivities(activities.filter((x) => x.id !== a.id))}
@@ -408,6 +427,7 @@ export function ActivityOtherPanel({
         open={actOpen}
         onClose={() => setActOpen(false)}
         types={typeCatalog}
+        lockedType={selectedType}
         defaultStart={String(draft.startDate || '')}
         defaultEnd={String(draft.endDate || '')}
         title={isActivity ? 'Add activity' : 'Add Other'}

@@ -303,6 +303,7 @@ export function ActivityTypeModal({
   open,
   onClose,
   types,
+  lockedType,
   defaultStart,
   defaultEnd,
   onSubmit,
@@ -313,6 +314,8 @@ export function ActivityTypeModal({
   open: boolean
   onClose: () => void
   types: { id: string; name: string; rate: number; included: string; excluded: string }[]
+  /** When set (Service already chosen on the panel), hide the type picker. */
+  lockedType?: { id: string; name: string; rate: number; included: string; excluded: string }
   defaultStart: string
   defaultEnd: string
   onSubmit: (payload: { name: string; rate: number; start: string; end: string }) => void
@@ -323,8 +326,9 @@ export function ActivityTypeModal({
   const [actType, setActType] = useState('')
   const [actStart, setActStart] = useState(defaultStart)
   const [actEnd, setActEnd] = useState(defaultEnd)
-  const selected = types.find((t) => t.name === actType)
-  const valid = !!(actType && actStart)
+  const selected =
+    lockedType || types.find((t) => t.name === actType)
+  const valid = !!(selected && actStart)
 
   return (
     <Dialog
@@ -338,36 +342,49 @@ export function ActivityTypeModal({
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
         <div className="grid gap-3">
-          <div className="grid gap-1.5">
-            <div className="flex items-center gap-2">
-              <Label>{typeLabel}</Label>
-              {selected ? (
-                <OptionInclusions
-                  option={{
-                    id: selected.id,
-                    label: selected.name,
-                    included: selected.included,
-                    excluded: selected.excluded,
-                  }}
-                />
-              ) : null}
+          {lockedType ? (
+            <div className="flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-[#F9FAFB] px-3 py-2">
+              <span className="flex-1 text-[13px] font-semibold text-[#171717]">
+                {lockedType.name}
+              </span>
+              <OptionInclusions
+                option={{
+                  id: lockedType.id,
+                  label: lockedType.name,
+                  included: lockedType.included,
+                  excluded: lockedType.excluded,
+                }}
+              />
             </div>
-            <Select
-              value={actType || undefined}
-              onValueChange={setActType}
-            >
-              <SelectTrigger className="bg-white">
-                <SelectValue placeholder="Select…" />
-              </SelectTrigger>
-              <SelectContent>
-              {types.map((t) => (
-                <SelectItem key={t.id} value={t.name}>
-                  {t.name}
-                </SelectItem>
-              ))}
-              </SelectContent>
-            </Select>
-          </div>
+          ) : (
+            <div className="grid gap-1.5">
+              <div className="flex items-center gap-2">
+                <Label>{typeLabel}</Label>
+                {selected ? (
+                  <OptionInclusions
+                    option={{
+                      id: selected.id,
+                      label: selected.name,
+                      included: selected.included,
+                      excluded: selected.excluded,
+                    }}
+                  />
+                ) : null}
+              </div>
+              <Select value={actType || undefined} onValueChange={setActType}>
+                <SelectTrigger className="bg-white">
+                  <SelectValue placeholder="Select…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {types.map((t) => (
+                    <SelectItem key={t.id} value={t.name}>
+                      {t.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-1.5">
               <Label>Start</Label>
@@ -396,9 +413,13 @@ export function ActivityTypeModal({
             disabled={!valid}
             className="bg-[#931115] hover:bg-[#7a0e12]"
             onClick={() => {
-              if (!valid) return
-              const t = selected || { name: actType, rate: 60 }
-              onSubmit({ name: t.name, rate: t.rate, start: actStart, end: actEnd })
+              if (!valid || !selected) return
+              onSubmit({
+                name: selected.name,
+                rate: selected.rate,
+                start: actStart,
+                end: actEnd,
+              })
               setActType('')
               onClose()
             }}
