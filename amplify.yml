@@ -5,6 +5,10 @@ frontend:
       commands:
         # Amplify's build image ships npm/yarn but not pnpm, so install it before use.
         - npm install -g pnpm@11.13.1
+        - pnpm config set store-dir .pnpm-store
+        # Discard any node_modules restored from an old cache archive; install
+        # is fast anyway because packages come from the cached .pnpm-store.
+        - rm -rf node_modules
         - pnpm install --frozen-lockfile
     build:
       commands:
@@ -15,4 +19,7 @@ frontend:
       - '**/*'
   cache:
     paths:
-      - node_modules/**/*
+      # Cache pnpm's content-addressable store, NOT node_modules — pnpm's
+      # node_modules is a symlink tree that Amplify's cache restore corrupts,
+      # leaving stale packages that break tsc with phantom type errors.
+      - .pnpm-store/**/*
