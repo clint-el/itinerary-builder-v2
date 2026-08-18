@@ -57,7 +57,7 @@ function holdTone(text: string) {
   return '#C4C4C8'
 }
 
-function cellClass(align: 'l' | 'c' | 'r', dense: boolean, label: string) {
+function cellClass(align: 'l' | 'c' | 'r', dense: boolean, header: SummaryCell) {
   const base = cn(
     'flex min-w-0 items-center whitespace-nowrap text-[13px] text-[#171717]',
     dense ? 'py-1.5' : 'py-2',
@@ -65,11 +65,11 @@ function cellClass(align: 'l' | 'c' | 'r', dense: boolean, label: string) {
     align === 'c' && 'justify-center text-center',
     align === 'r' && 'justify-end pr-5 text-right tabular-nums',
   )
-  if (label === 'Hold') return cn(base, 'text-[11.5px] font-semibold')
-  if (label === 'Supplier') return cn(base, 'font-semibold')
-  if (label === 'Date') return cn(base, 'text-[#737373]')
-  if (label.includes('Per person')) return cn(base, 'text-[12px] text-[#737373]')
-  if (label.includes('Cost') || label.includes('Sell')) return cn(base, 'text-[12.5px] font-semibold')
+  if (header.kind === 'hold') return cn(base, 'text-[11.5px] font-semibold')
+  if (header.label === 'Supplier') return cn(base, 'font-semibold')
+  if (header.label === 'Date') return cn(base, 'text-[#737373]')
+  if (header.kind === 'unitPrice') return cn(base, 'text-[12px] text-[#737373]')
+  if (header.kind === 'totalPrice') return cn(base, 'text-[12.5px] font-semibold')
   return base
 }
 
@@ -1163,16 +1163,11 @@ function ServiceBlock({
         ) : (
           <div key={ri} className="grid" style={{ gridTemplateColumns: gridCols }}>
             {r.cells.map((cell, ci) => {
-              const header = headers[ci]
-              const align = header?.align ?? 'l'
-              const label = header?.label || ''
-              const cls = cellClass(align, dense, label)
-              const isPrice =
-                label.includes('Cost') ||
-                label.includes('Sell') ||
-                label.includes('Per person') ||
-                label === 'Hold'
-              if (label === 'Hold') return (
+              const header = headers[ci] ?? { label: '', align: 'l' as const, kind: 'label' as const }
+              const align = header.align
+              const cls = cellClass(align, dense, header)
+              const isPrice = header.kind !== 'label'
+              if (header.kind === 'hold') return (
                 <div key={ci} className={cls} style={{ color: holdTone(cell) }}>
                   {cell}
                 </div>

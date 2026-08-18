@@ -28,6 +28,8 @@ export type SummaryLine = {
   rack: number
   hold: 'held' | 'requested' | 'none'
   discount?: LineDiscount
+  /** How this line’s total was computed — drives the rate column, never invent a per-head split for `'unit'`. */
+  chargePer: 'person' | 'unit'
   ad?: number
   ch?: number
   // accommodation
@@ -90,6 +92,19 @@ function guestMix(ids: number[], guests: Guest[]): { ad: number; ch: number } {
     else ch += 1
   }
   return { ad, ch }
+}
+
+/** Age-band counts on a flight fare line → summary Ad/Ch buckets (youth with adults). */
+function fareBandMix(fare: {
+  adult?: number
+  youth?: number
+  child?: number
+  infant?: number
+}): { ad: number; ch: number } {
+  return {
+    ad: (fare.adult || 0) + (fare.youth || 0),
+    ch: (fare.child || 0) + (fare.infant || 0),
+  }
 }
 
 function holdOf(d: Record<string, unknown>): 'held' | 'requested' | 'none' {
@@ -183,6 +198,8 @@ export function linesFromServices(services: AddedService[], guests: Guest[]): Su
             ex.qtyLabel ||
             (ex.qty && ex.timeUnit ? `${ex.qty} ${ex.timeUnit}` : ex.qty ? String(ex.qty) : '1'),
           extraKind: ex.custom ? 'supplier' : 'service',
+          // Extras: absolute price × qty (units), never ÷ headcount — see computeDraftTotals.
+          chargePer: 'unit',
           net: ex.price,
           rack: ex.rack != null ? ex.rack : rackOf(ex.price),
           hold,
@@ -211,6 +228,7 @@ export function linesFromServices(services: AddedService[], guests: Guest[]): Su
           rooms: 1,
           pax: paxAll,
           nights: nights(start, end),
+          chargePer: 'person',
           net: parentNet,
           rack: parentRack,
           hold,
@@ -239,6 +257,7 @@ export function linesFromServices(services: AddedService[], guests: Guest[]): Su
             ad: mix.ad,
             ch: mix.ch,
             nights: nights(rStart, rEnd),
+            chargePer: 'person',
             net: Math.round(parentNet * share * 100) / 100,
             rack: Math.round(parentRack * share * 100) / 100,
             hold,
@@ -275,6 +294,7 @@ export function linesFromServices(services: AddedService[], guests: Guest[]): Su
               pax: vehicle.guestIds.length || paxCount,
               ad: mix.ad,
               ch: mix.ch,
+              chargePer: 'unit',
               net: lineNet,
               rack: rackOf(lineNet),
               hold,
@@ -302,6 +322,7 @@ export function linesFromServices(services: AddedService[], guests: Guest[]): Su
             pax: vehicle.guestIds.length || paxCount,
             ad: mix.ad,
             ch: mix.ch,
+            chargePer: 'unit',
             net: Math.round(parentNet * share * 100) / 100,
             rack: Math.round(parentRack * share * 100) / 100,
             hold,
@@ -336,6 +357,7 @@ export function linesFromServices(services: AddedService[], guests: Guest[]): Su
           pax: vehicle.guestIds.length || paxCount,
           ad: mix.ad,
           ch: mix.ch,
+          chargePer: 'unit',
           net: Math.round(parentNet * share * 100) / 100,
           rack: Math.round(parentRack * share * 100) / 100,
           hold,
@@ -362,10 +384,15 @@ export function linesFromServices(services: AddedService[], guests: Guest[]): Su
         pax: number
         net: number
         rack: number
+        adult?: number
+        youth?: number
+        child?: number
+        infant?: number
       }[]
       const groupStart = lines.length
       if (fareLines.length) {
         fareLines.forEach((fare) => {
+          const fareMix = fareBandMix(fare)
           lines.push({
             type,
             serviceId: svc.id,
@@ -376,8 +403,10 @@ export function linesFromServices(services: AddedService[], guests: Guest[]): Su
             depart: departTime,
             arrive: returnTime,
             pax: fare.pax,
-            ad: mix.ad,
-            ch: mix.ch,
+            ad: fareMix.ad,
+            ch: fareMix.ch,
+            // Scheduled fares are per-passenger today; `'unit'` remains available for charter later.
+            chargePer: 'person',
             net: fare.net,
             rack: fare.rack,
             hold,
@@ -396,6 +425,7 @@ export function linesFromServices(services: AddedService[], guests: Guest[]): Su
           pax: paxCount,
           ad: mix.ad,
           ch: mix.ch,
+          chargePer: 'person',
           net: parentNet,
           rack: parentRack,
           hold,
@@ -423,6 +453,7 @@ export function linesFromServices(services: AddedService[], guests: Guest[]): Su
             pax: a.guestIds.length || undefined,
             ad: mix.ad,
             ch: mix.ch,
+            chargePer: a.guestIds.length > 0 ? 'person' : 'unit',
             net: aNet,
             rack: aRack,
             hold,
@@ -436,6 +467,7 @@ export function linesFromServices(services: AddedService[], guests: Guest[]): Su
           supplier,
           service: String(d.service || svc.subtitle || 'Activity'),
           pax: undefined,
+          chargePer: 'unit',
           net: parentNet,
           rack: parentRack,
           hold,
@@ -463,12 +495,14 @@ export function linesFromServices(services: AddedService[], guests: Guest[]): Su
           ch: mix.ch,
           alloc: a.guestIds.length === 1 ? 'Single guest' : a.guestIds.length ? undefined : 'All guests',
           days: nightsBetween(String(a.start || d.startDate || ''), String(a.end || d.endDate || '')) || 1,
+          chargePer: a.guestIds.length > 0 ? 'person' : 'unit',
           net: aNet,
           rack: aNet,
           hold,
         })
       }
     } else {
+      // qty × price in computeDraftTotals — qty is units, not guest headcount.
       lines.push({
         type: 'other',
         serviceId: svc.id,
@@ -478,6 +512,7 @@ export function linesFromServices(services: AddedService[], guests: Guest[]): Su
         pax: Number(d.qty) || undefined,
         alloc: 'All guests',
         days: nightsBetween(String(d.startDate || ''), String(d.endDate || '')) || 1,
+        chargePer: 'unit',
         net: parentNet,
         rack: parentRack,
         hold,
@@ -494,6 +529,8 @@ export function linesFromQuoteGroups(groups: QuoteGroup[]): SummaryLine[] {
   for (const g of groups) {
     const type: SummaryServiceType =
       g.icon === 'flight' ? 'flight' : g.icon === 'vehicle' ? 'transportation' : 'accommodation'
+    const chargePer: SummaryLine['chargePer'] =
+      type === 'transportation' ? 'unit' : 'person'
     for (const sv of g.services) {
       const amount = parseMoney(sv.subtotal)
       const net = Math.round((amount / 1.3) * 100) / 100
@@ -515,6 +552,7 @@ export function linesFromQuoteGroups(groups: QuoteGroup[]): SummaryLine[] {
         dropoff: type === 'transportation' ? '—' : undefined,
         veh: type === 'transportation' ? Number(sv.qty) || 1 : undefined,
         service: sv.title,
+        chargePer,
         net,
         rack: amount,
         hold: 'none',
@@ -530,7 +568,9 @@ export function linesFromQuoteGroups(groups: QuoteGroup[]): SummaryLine[] {
 // columns instead of a single combined string.
 // ---------------------------------------------------------------------------
 
-export type SummaryCell = { label: string; align: 'l' | 'c' | 'r' }
+export type SummaryCellKind = 'hold' | 'unitPrice' | 'totalPrice' | 'label'
+
+export type SummaryCell = { label: string; align: 'l' | 'c' | 'r'; kind: SummaryCellKind }
 
 export type SummaryRow = {
   isChild: boolean
@@ -581,24 +621,31 @@ function guestsCell(l: SummaryLine): string {
   return l.pax != null ? String(l.pax) : '—'
 }
 
-/** Per-person unit rates (not totals). Child unit = 60% of adult on mixed rows. */
+function formatRatePair(cost: number, sell: number, mode: PriceDisplayMode) {
+  if (mode === 'cost') return wholeUsd(cost)
+  if (mode === 'sell') return wholeUsd(sell)
+  return `${wholeUsd(cost)} / ${wholeUsd(sell)}`
+}
+
+/**
+ * Rate column: per-person split when `chargePer === 'person'`; for `'unit'` lines show the
+ * line total again (never ÷ guest count — that fabricates a false per-head rate).
+ */
 function perGuestPriceCell(l: SummaryLine, mode: PriceDisplayMode = 'all'): string {
   const costEff = costEffOf(l)
   const sellEff = sellEffOf(l)
+  if (l.chargePer === 'unit') {
+    return formatRatePair(costEff, sellEff, mode)
+  }
   const adults = l.ad || 0
   const children = l.ch || 0
   const weightedGuests = adults + children * 0.6
   if (!weightedGuests) return '—'
   const costAdult = costEff / weightedGuests
   const sellAdult = sellEff / weightedGuests
-  const format = (cost: number, sell: number) => {
-    if (mode === 'cost') return wholeUsd(cost)
-    if (mode === 'sell') return wholeUsd(sell)
-    return `${wholeUsd(cost)} / ${wholeUsd(sell)}`
-  }
   const parts = []
-  if (adults) parts.push(`Ad ${format(costAdult, sellAdult)}`)
-  if (children) parts.push(`Ch ${format(costAdult * 0.6, sellAdult * 0.6)}`)
+  if (adults) parts.push(`Ad ${formatRatePair(costAdult, sellAdult, mode)}`)
+  if (children) parts.push(`Ch ${formatRatePair(costAdult * 0.6, sellAdult * 0.6, mode)}`)
   return parts.join(' · ')
 }
 
@@ -639,13 +686,28 @@ export const GRID: Record<SummaryServiceType, string> = {
   extra: gridForMode('extra', 'all'),
 }
 
-function priceColHeaders(mode: PriceDisplayMode): SummaryCell[] {
-  const perPerson =
+function hdr(label: string, align: 'l' | 'c' | 'r', kind: SummaryCellKind = 'label'): SummaryCell {
+  return { label, align, kind }
+}
+
+function rateBasisFor(type: SummaryServiceType, items: SummaryLine[]): 'person' | 'unit' | 'mixed' {
+  if (type === 'transportation' || type === 'extra') return 'unit'
+  if (type === 'accommodation' || type === 'flight') return 'person'
+  const kinds = new Set(items.map((l) => l.chargePer))
+  if (kinds.size === 1) return kinds.has('unit') ? 'unit' : 'person'
+  if (kinds.size === 0) return 'person'
+  return 'mixed'
+}
+
+function priceColHeaders(mode: PriceDisplayMode, rateBasis: 'person' | 'unit' | 'mixed'): SummaryCell[] {
+  const rateWord =
+    rateBasis === 'unit' ? 'Per unit' : rateBasis === 'mixed' ? 'Per person / unit' : 'Per person'
+  const rateLabel =
     mode === 'cost'
-      ? 'Per person cost'
+      ? `${rateWord} cost`
       : mode === 'sell'
-        ? 'Per person sell'
-        : 'Per person cost / sell'
+        ? `${rateWord} sell`
+        : `${rateWord} cost / sell`
   const total =
     mode === 'cost'
       ? 'Cost (USD)'
@@ -653,73 +715,77 @@ function priceColHeaders(mode: PriceDisplayMode): SummaryCell[] {
         ? 'Sell (USD)'
         : 'Cost / Sell · Margin (USD)'
   return [
-    { label: 'Hold', align: 'c' },
-    { label: perPerson, align: 'r' },
-    { label: total, align: 'r' },
+    hdr('Hold', 'c', 'hold'),
+    hdr(rateLabel, 'r', 'unitPrice'),
+    hdr(total, 'r', 'totalPrice'),
   ]
 }
 
-function headersFor(type: SummaryServiceType, mode: PriceDisplayMode): SummaryCell[] {
-  const price = priceColHeaders(mode)
+function headersFor(
+  type: SummaryServiceType,
+  mode: PriceDisplayMode,
+  items: SummaryLine[] = [],
+): SummaryCell[] {
+  const price = priceColHeaders(mode, rateBasisFor(type, items))
   switch (type) {
     case 'accommodation':
       return [
-        { label: 'Date', align: 'l' },
-        { label: 'Supplier', align: 'l' },
-        { label: 'Room Type', align: 'l' },
-        { label: 'Basis', align: 'c' },
-        { label: 'Rooms', align: 'c' },
-        { label: 'Pax', align: 'c' },
-        { label: 'Nights', align: 'c' },
+        hdr('Date', 'l'),
+        hdr('Supplier', 'l'),
+        hdr('Room Type', 'l'),
+        hdr('Basis', 'c'),
+        hdr('Rooms', 'c'),
+        hdr('Pax', 'c'),
+        hdr('Nights', 'c'),
         ...price,
       ]
     case 'flight':
       return [
-        { label: 'Date', align: 'l' },
-        { label: 'Supplier', align: 'l' },
-        { label: 'Charter / Schedule', align: 'c' },
-        { label: 'Route', align: 'l' },
-        { label: 'Flight Date & Time', align: 'l' },
-        { label: 'Pax', align: 'c' },
+        hdr('Date', 'l'),
+        hdr('Supplier', 'l'),
+        hdr('Charter / Schedule', 'c'),
+        hdr('Route', 'l'),
+        hdr('Flight Date & Time', 'l'),
+        hdr('Pax', 'c'),
         ...price,
       ]
     case 'transportation':
       return [
-        { label: 'Date', align: 'l' },
-        { label: 'Supplier', align: 'l' },
-        { label: 'V. Type', align: 'l' },
-        { label: 'Pick Up / At Disposal In', align: 'l' },
-        { label: 'Drop off', align: 'l' },
-        { label: 'Veh.', align: 'c' },
-        { label: 'Days', align: 'c' },
-        { label: 'Pax', align: 'c' },
+        hdr('Date', 'l'),
+        hdr('Supplier', 'l'),
+        hdr('V. Type', 'l'),
+        hdr('Pick Up / At Disposal In', 'l'),
+        hdr('Drop off', 'l'),
+        hdr('Veh.', 'c'),
+        hdr('Days', 'c'),
+        hdr('Pax', 'c'),
         ...price,
       ]
     case 'activity':
       return [
-        { label: 'Date', align: 'l' },
-        { label: 'Supplier', align: 'l' },
-        { label: 'Service', align: 'l' },
-        { label: 'Pax', align: 'c' },
+        hdr('Date', 'l'),
+        hdr('Supplier', 'l'),
+        hdr('Service', 'l'),
+        hdr('Pax', 'c'),
         ...price,
       ]
     case 'other':
       return [
-        { label: 'Date', align: 'l' },
-        { label: 'Supplier', align: 'l' },
-        { label: 'Service', align: 'l' },
-        { label: 'Pax', align: 'c' },
-        { label: 'Days', align: 'c' },
-        { label: 'Allocation', align: 'l' },
+        hdr('Date', 'l'),
+        hdr('Supplier', 'l'),
+        hdr('Service', 'l'),
+        hdr('Pax', 'c'),
+        hdr('Days', 'c'),
+        hdr('Allocation', 'l'),
         ...price,
       ]
     case 'extra':
       return [
-        { label: 'Date', align: 'l' },
-        { label: 'Supplier', align: 'l' },
-        { label: 'Extra', align: 'l' },
-        { label: 'Pax', align: 'c' },
-        { label: 'Qty', align: 'c' },
+        hdr('Date', 'l'),
+        hdr('Supplier', 'l'),
+        hdr('Extra', 'l'),
+        hdr('Pax', 'c'),
+        hdr('Qty', 'c'),
         ...price,
       ]
   }
@@ -912,7 +978,7 @@ export function buildSummaryCards(lines: SummaryLine[], mode: PriceDisplayMode =
       iconFg: m.iconFg,
       countLabel,
       subtotal: wholeUsd(cardSell),
-      headers: headersFor(type, mode),
+      headers: headersFor(type, mode, items),
       blocks,
     }
   }).filter(Boolean) as SummaryCard[]
