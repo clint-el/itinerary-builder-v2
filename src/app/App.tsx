@@ -6,13 +6,11 @@ import { InquiriesPage } from '@/features/inquiries/InquiriesPage'
 import { QuotePage } from '@/features/quote/QuotePage'
 import { QuoteDocPage } from '@/features/quote-doc/QuoteDocPage'
 import { SummaryPage } from '@/features/summary/SummaryPage'
-import { DevRoleBar } from '@/shared/ui/DevRoleBar'
 
 export function App() {
   return (
     <StoreProvider>
       <BrowserRouter>
-        {/* <DevRoleBar /> */}
         <Routes>
           <Route element={<AppShell />}>
             <Route path="/" element={<InquiriesPage />} />
