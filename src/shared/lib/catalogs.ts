@@ -716,7 +716,6 @@ export const SYSTEM_PRICE = [
   { label: 'Special Offer(s)', value: '--' },
   { label: 'Purchase price', value: '$2250' },
   { label: 'CPS margin 30%', value: '$675' },
-  { label: 'TC commission', value: '$0' },
   { label: 'Client price', value: '$3263', strong: true },
 ] as const
 
@@ -791,7 +790,6 @@ export function liveSystemPrice(
       label: `CPS margin ${marginPct}%`,
       value: formatUsdStatic(margin),
     },
-    { label: 'TC commission', value: '$0.00' },
     { label: 'Client price', value: formatUsdStatic(offer.sell), strong: true },
   ]
 }

@@ -690,24 +690,9 @@ function hdr(label: string, align: 'l' | 'c' | 'r', kind: SummaryCellKind = 'lab
   return { label, align, kind }
 }
 
-function rateBasisFor(type: SummaryServiceType, items: SummaryLine[]): 'person' | 'unit' | 'mixed' {
-  if (type === 'transportation' || type === 'extra') return 'unit'
-  if (type === 'accommodation' || type === 'flight') return 'person'
-  const kinds = new Set(items.map((l) => l.chargePer))
-  if (kinds.size === 1) return kinds.has('unit') ? 'unit' : 'person'
-  if (kinds.size === 0) return 'person'
-  return 'mixed'
-}
-
-function priceColHeaders(mode: PriceDisplayMode, rateBasis: 'person' | 'unit' | 'mixed'): SummaryCell[] {
-  const rateWord =
-    rateBasis === 'unit' ? 'Per unit' : rateBasis === 'mixed' ? 'Per person / unit' : 'Per person'
+function priceColHeaders(mode: PriceDisplayMode): SummaryCell[] {
   const rateLabel =
-    mode === 'cost'
-      ? `${rateWord} cost`
-      : mode === 'sell'
-        ? `${rateWord} sell`
-        : `${rateWord} cost / sell`
+    mode === 'cost' ? 'Rate cost' : mode === 'sell' ? 'Rate sell' : 'Rate cost / sell'
   const total =
     mode === 'cost'
       ? 'Cost (USD)'
@@ -721,12 +706,8 @@ function priceColHeaders(mode: PriceDisplayMode, rateBasis: 'person' | 'unit' | 
   ]
 }
 
-function headersFor(
-  type: SummaryServiceType,
-  mode: PriceDisplayMode,
-  items: SummaryLine[] = [],
-): SummaryCell[] {
-  const price = priceColHeaders(mode, rateBasisFor(type, items))
+function headersFor(type: SummaryServiceType, mode: PriceDisplayMode): SummaryCell[] {
+  const price = priceColHeaders(mode)
   switch (type) {
     case 'accommodation':
       return [
@@ -978,7 +959,7 @@ export function buildSummaryCards(lines: SummaryLine[], mode: PriceDisplayMode =
       iconFg: m.iconFg,
       countLabel,
       subtotal: wholeUsd(cardSell),
-      headers: headersFor(type, mode, items),
+      headers: headersFor(type, mode),
       blocks,
     }
   }).filter(Boolean) as SummaryCard[]
@@ -1141,7 +1122,6 @@ export function buildSummaryPricing(lines: SummaryLine[], totalGuests: number): 
 
   const margin = sell - netCost
   const marginPct = sell ? Math.round((margin / sell) * 100) : 0
-  const commission = Math.round(sell * 0.1)
 
   const groupTotals: SummaryGroupTotal[] = ORDER.map((type) => {
     const items = lines.filter((l) => l.type === type)
@@ -1173,7 +1153,6 @@ export function buildSummaryPricing(lines: SummaryLine[], totalGuests: number): 
         color: '#0369A1',
       },
       { label: `Margin (${marginPct}%)`, value: wholeUsd(margin), color: '#059669' },
-      { label: 'Agent commission (10%)', value: wholeUsd(commission), color: '#171717' },
     ],
   }
 }

@@ -41,7 +41,7 @@ export const RAIL: {
   { tab: 'other', label: 'Other', color: '#475569', iconBg: '#E2E8F0' },
 ]
 
-/** Hemingways transfer portfolio (cost pass-through — no markup/commission). */
+/** Hemingways transfer portfolio (cost pass-through — no markup). */
 export const TRANS_SERVICES = [
   // Nairobi airport / hotel
   { title: 'JKIA to Hemingways Nairobi (3-pax)', price: 55, unit: 'per transfer' },
