@@ -4,7 +4,7 @@ frontend:
     preBuild:
       commands:
         # Amplify's build image ships npm/yarn but not pnpm, so install it before use.
-        - npm install -g pnpm@11.12.0
+        - npm install -g pnpm@11.13.1
         - pnpm install --frozen-lockfile
     build:
       commands:
