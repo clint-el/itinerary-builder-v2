@@ -5,6 +5,7 @@ import { cn } from '@/shared/lib/utils'
 import {
   buildGuestIssues,
   coverageForGuest,
+  dietaryRequirementsLabel,
   guestDisplayName,
   guestInitials,
   isPlaceholderGuest,
@@ -205,7 +206,7 @@ export function GuestDetailsPanel({
               <div>Guest</div>
               <div>Role</div>
               <div>Age</div>
-              <div>Note</div>
+              <div>Requirements</div>
               <div className="text-center">Used on</div>
               <div className="text-right">Actions</div>
             </div>
@@ -284,7 +285,8 @@ function GuestRow({
   onDelete: () => void
 }) {
   const name = guestDisplayName(guest, all)
-  const notes = String(guest.note || '').trim()
+  const requirements = dietaryRequirementsLabel(guest)
+  const requirementsCaptured = requirements !== 'Not yet advised'
   const linesColor =
     coverage.assigned === 0 ? '#931115' : coverage.assigned < coverage.total ? '#B45309' : '#171717'
 
@@ -336,9 +338,9 @@ function GuestRow({
       <div className="min-w-0">
         <span
           className="block truncate text-[12.5px]"
-          style={{ color: notes ? '#525252' : '#D4D4D8' }}
+          style={{ color: requirementsCaptured ? '#525252' : '#D4D4D8' }}
         >
-          {notes || '—'}
+          {requirements}
         </span>
       </div>
       <div className="flex flex-col items-center gap-px text-center">

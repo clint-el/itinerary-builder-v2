@@ -9,6 +9,7 @@ import {
   blankGuest,
   collectServiceLines,
   guestDisplayName,
+  dietaryStatusOf,
   guestLineAssignments,
   isPlaceholderGuest,
   removeGuestFromServices,
@@ -28,6 +29,8 @@ interface GuestFormState {
   role: GuestRole
   age: string
   note: string
+  dietary: string
+  dietaryNone: boolean
 }
 
 interface GuestDetailsSheetProps {
@@ -128,6 +131,8 @@ export function GuestDetailsSheet({ open, onClose, itinerary, inline = false }: 
       role: 'Adult',
       age: '',
       note: '',
+      dietary: '',
+      dietaryNone: false,
     })
     setBreachAck(false)
   }
@@ -142,6 +147,8 @@ export function GuestDetailsSheet({ open, onClose, itinerary, inline = false }: 
       role: bandToRole(g.ageBand),
       age: g.age == null ? '' : String(g.age),
       note: g.note || '',
+      dietary: dietaryStatusOf(g) === 'recorded' ? g.dietary || '' : '',
+      dietaryNone: dietaryStatusOf(g) === 'none',
     })
     setBreachAck(false)
   }
@@ -190,6 +197,12 @@ export function GuestDetailsSheet({ open, onClose, itinerary, inline = false }: 
               ageBand: roleToBand(form.role),
               age,
               note: form.note,
+              dietary: form.dietaryNone ? '' : form.dietary.trim(),
+              dietaryStatus: form.dietaryNone
+                ? 'none'
+                : form.dietary.trim()
+                  ? 'recorded'
+                  : 'not_captured',
             },
       )
       persist(next)
@@ -213,6 +226,8 @@ export function GuestDetailsSheet({ open, onClose, itinerary, inline = false }: 
       g.lastName = form.last.trim()
       g.age = age
       g.note = form.note
+      g.dietary = form.dietaryNone ? '' : form.dietary.trim()
+      g.dietaryStatus = form.dietaryNone ? 'none' : form.dietary.trim() ? 'recorded' : 'not_captured'
       const next = [...guests, g]
       const nextServices = autoAllocateGuestOnServices(services, next.length)
       persist(next, nextServices)
@@ -422,7 +437,46 @@ export function GuestDetailsSheet({ open, onClose, itinerary, inline = false }: 
           <div className="border-t border-dashed border-[#E5E7EB]" />
 
           <section className="flex flex-col gap-2">
-            <span className="text-[11px] font-bold uppercase tracking-wide text-[#A1A1A1]">Note</span>
+            <span className="text-[11px] font-bold uppercase tracking-wide text-[#A1A1A1]">
+              Dietary &amp; special requirements
+            </span>
+            <label className="flex w-fit items-center gap-1.5 text-[12.5px] font-medium text-[#525252]">
+              <input
+                type="checkbox"
+                checked={form.dietaryNone}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    dietaryNone: e.target.checked,
+                    dietary: e.target.checked ? '' : form.dietary,
+                  })
+                }
+              />
+              No requirements
+            </label>
+            <textarea
+              value={form.dietary}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  dietary: e.target.value,
+                  dietaryNone: false,
+                })
+              }
+              disabled={form.dietaryNone}
+              placeholder={form.dietaryNone ? 'None — untick above to record a requirement' : 'No requirements'}
+              className={cn(
+                'min-h-[84px] resize-y rounded-lg border border-[#E5E7EB] bg-white px-3 py-2.5 text-sm leading-relaxed text-[#171717] outline-none',
+                form.dietaryNone && 'opacity-50',
+              )}
+            />
+            <span className="text-[11.5px] text-[#A1A1A1]">
+              Captured once here and reused on every voucher for this guest across all suppliers.
+            </span>
+          </section>
+
+          <section className="flex flex-col gap-2">
+            <span className="text-[11px] font-bold uppercase tracking-wide text-[#A1A1A1]">Internal note</span>
             <textarea
               value={form.note}
               onChange={(e) => {
@@ -430,11 +484,9 @@ export function GuestDetailsSheet({ open, onClose, itinerary, inline = false }: 
                 setBreachAck(false)
               }}
               placeholder="Type here"
-              className="min-h-[84px] resize-y rounded-lg border border-[#E5E7EB] bg-white px-3 py-2.5 text-sm leading-relaxed text-[#171717] outline-none"
+              className="min-h-[64px] resize-y rounded-lg border border-[#E5E7EB] bg-white px-3 py-2.5 text-sm leading-relaxed text-[#171717] outline-none"
             />
-            <span className="text-[11.5px] text-[#A1A1A1]">
-              Dietary, medical or accessibility requests — travels with the guest onto every service.
-            </span>
+            <span className="text-[11.5px] text-[#A1A1A1]">Planner-only — not printed on supplier vouchers.</span>
           </section>
 
           {!form.id ? (

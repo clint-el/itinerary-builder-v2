@@ -1,6 +1,21 @@
 import { nightsBetween, parseMoney, rackOf } from '@/shared/lib/helpers'
 import { applyOfferToCostAndSell, roomTypeLabel } from '@/shared/lib/catalogs'
-import type { AddedService, Guest, Hold, LifecycleLogEntry, QuoteGroup, ServiceTab } from '@/shared/lib/types'
+import { getPayableEntity, payableEntityFromSupplierName, reservationEmailFor } from '@/shared/lib/payableEntities'
+import { payableEntityIdOf } from '@/shared/lib/lifecycleRules'
+import type {
+  AddedService,
+  DietaryStatus,
+  Guest,
+  GuestDetail,
+  Hold,
+  LifecycleLogEntry,
+  QuoteGroup,
+  ServiceTab,
+  SupplierVoucherStatus,
+  VoucherLineAnswer,
+  VoucherLineOutcome,
+  VoucherMeta,
+} from '@/shared/lib/types'
 import {
   asActivities,
   asFlights,
@@ -22,11 +37,25 @@ export type LineDiscount = { label: string; sellDelta: number; costDelta: number
 export type SummaryLine = {
   type: SummaryServiceType
   serviceId: string
+  /** Stable id for exactly this row within its service (`${serviceId}#${n}`) — the unit a
+   *  supplier ticks on a voucher, since one AddedService can explode into several rows
+   *  (rooms, fare lines, vehicles, extras). Optional at push time — `linesFromServices` /
+   *  `linesFromQuoteGroups` always assign it via `assignLineIds` before returning. */
+  lineId?: string
   date: string
   supplier: string
+  /** Property / operating-unit display name on the line. */
+  propertyName?: string
+  payableEntityId?: string
+  payableEntityName?: string
   net: number
+  /** PR-F54 — destination line moved from another sub-quote. */
+  reconfirmRequired?: boolean
+  formerSourceRef?: string
   rack: number
   hold: 'held' | 'requested' | 'none'
+  /** Mirrors AddedService.depositPaid — drives the voucher deposit guard (BR-43). */
+  depositPaid?: boolean
   discount?: LineDiscount
   /** How this line’s total was computed — drives the rate column, never invent a per-head split for `'unit'`. */
   chargePer: 'person' | 'unit'
@@ -62,14 +91,14 @@ export type SummaryLine = {
 
 export const SUMMARY_TYPE_META: Record<
   SummaryServiceType,
-  { name: string; initial: string; iconBg: string; iconFg: string; noun: string }
+  { name: string; initial: string; iconBg: string; iconFg: string }
 > = {
-  accommodation: { name: 'Accommodation', initial: 'A', iconBg: '#ECFDF5', iconFg: '#059669', noun: 'stays' },
-  flight: { name: 'Flights', initial: 'F', iconBg: '#EFF6FF', iconFg: '#2563EB', noun: 'sectors' },
-  transportation: { name: 'Transportation', initial: 'T', iconBg: '#FEF3C7', iconFg: '#D97706', noun: 'services' },
-  activity: { name: 'Activities', initial: 'Ac', iconBg: '#F3E8FF', iconFg: '#7E22CE', noun: 'activities' },
-  extra: { name: 'Extras', initial: 'E', iconBg: '#E0F2FE', iconFg: '#0369A1', noun: 'extras' },
-  other: { name: 'Other Services', initial: 'O', iconBg: '#F1F5F9', iconFg: '#475569', noun: 'services' },
+  accommodation: { name: 'Accommodation', initial: 'A', iconBg: '#ECFDF5', iconFg: '#059669' },
+  flight: { name: 'Flights', initial: 'F', iconBg: '#EFF6FF', iconFg: '#2563EB' },
+  transportation: { name: 'Transportation', initial: 'T', iconBg: '#E0F2FE', iconFg: '#0369A1' },
+  activity: { name: 'Activities', initial: 'C', iconBg: '#FEF3C7', iconFg: '#B45309' },
+  extra: { name: 'Extras', initial: 'E', iconBg: '#E0F2FE', iconFg: '#0369A1' },
+  other: { name: 'Other services', initial: 'O', iconBg: '#F3F4F6', iconFg: '#525252' },
 }
 
 const ORDER: SummaryServiceType[] = ['accommodation', 'flight', 'transportation', 'activity', 'other']
@@ -520,6 +549,35 @@ export function linesFromServices(services: AddedService[], guests: Guest[]): Su
     }
     pushExtras(groupStart, String(d.startDate || ''), Number(d.qty) || 0, supplier)
   }
+
+  const depositPaidByService = new Map(services.map((svc) => [svc.id, !!svc.depositPaid]))
+  const draftByService = new Map(services.map((svc) => [svc.id, (svc.draft || {}) as Record<string, unknown>]))
+  for (const l of lines) {
+    l.depositPaid = depositPaidByService.get(l.serviceId) || undefined
+    l.propertyName = l.supplier
+    const d = draftByService.get(l.serviceId) || {}
+    const entityId = String(d.payableEntityId || '')
+    if (entityId) {
+      const entity = getPayableEntity(entityId)
+      l.payableEntityId = entity.id
+      l.payableEntityName = entity.legalName
+    } else {
+      const entity = payableEntityFromSupplierName(l.supplier)
+      l.payableEntityId = entity.id
+      l.payableEntityName = entity.legalName
+    }
+  }
+  return assignLineIds(lines)
+}
+
+/** Stable per-row id within a service (`${serviceId}#${n}`) — see SummaryLine.lineId. */
+function assignLineIds(lines: SummaryLine[]): SummaryLine[] {
+  const counters = new Map<string, number>()
+  for (const l of lines) {
+    const n = counters.get(l.serviceId) || 0
+    l.lineId = `${l.serviceId}#${n}`
+    counters.set(l.serviceId, n + 1)
+  }
   return lines
 }
 
@@ -559,61 +617,98 @@ export function linesFromQuoteGroups(groups: QuoteGroup[]): SummaryLine[] {
       })
     }
   }
-  return lines
+  return assignLineIds(lines)
 }
 
 // ---------------------------------------------------------------------------
-// Cards: type -> supplier/stay blocks -> rows (+ nested extras), matching the
-// v2 design's grouped layout. Every table gets Hold + separate Cost/Sell/Margin
-// columns instead of a single combined string.
+// Cards: one flat table per service type — Arrival → Departure, Supplier, the
+// type's own columns, Pax, Hold, then whichever value columns "Values shown"
+// asks for. Transfers and vehicles at disposal get a card each; service-scoped
+// extras hang off their parent stay as indented child rows.
 // ---------------------------------------------------------------------------
 
-export type SummaryCellKind = 'hold' | 'unitPrice' | 'totalPrice' | 'label'
+/** Card-level split of SummaryServiceType: transportation shows as two cards. */
+export type SummaryCardType =
+  | 'accommodation'
+  | 'flight'
+  | 'transfer'
+  | 'disposal'
+  | 'activity'
+  | 'extra'
+  | 'other'
 
-export type SummaryCell = { label: string; align: 'l' | 'c' | 'r'; kind: SummaryCellKind }
-
-export type SummaryRow = {
-  isChild: boolean
-  cells: string[]
-  meta?: string
-  kind?: 'service' | 'supplier'
+export const SUMMARY_CARD_META: Record<
+  SummaryCardType,
+  { name: string; initial: string; iconBg: string; iconFg: string; tint: string }
+> = {
+  accommodation: { name: 'Accommodation', initial: 'A', iconBg: '#ECFDF5', iconFg: '#059669', tint: '#F6FEFB' },
+  flight: { name: 'Flights', initial: 'F', iconBg: '#EFF6FF', iconFg: '#2563EB', tint: '#F8FAFF' },
+  transfer: { name: 'Transfers', initial: 'T', iconBg: '#E0F2FE', iconFg: '#0369A1', tint: '#F6FBFF' },
+  disposal: { name: 'Vehicles at disposal', initial: 'V', iconBg: '#F3E8FF', iconFg: '#7C3AED', tint: '#FBF8FF' },
+  activity: { name: 'Activities', initial: 'C', iconBg: '#FEF3C7', iconFg: '#B45309', tint: '#FFFDF5' },
+  extra: { name: 'Extras', initial: 'E', iconBg: '#E0F2FE', iconFg: '#0369A1', tint: '#F7FBFF' },
+  other: { name: 'Other services', initial: 'O', iconBg: '#F3F4F6', iconFg: '#525252', tint: '#FAFAFB' },
 }
 
-export type SummaryBlock = {
-  key: string
-  name: string
-  meta: string
-  subtotal: string
-  rows: SummaryRow[]
+const CARD_ORDER: SummaryCardType[] = [
+  'accommodation',
+  'flight',
+  'transfer',
+  'disposal',
+  'activity',
+  'extra',
+  'other',
+]
+
+export function cardTypeOf(l: SummaryLine): SummaryCardType {
+  if (l.type === 'transportation') return l.kind === 'disposal' ? 'disposal' : 'transfer'
+  return l.type
 }
 
-export type SummaryCard = {
-  type: SummaryServiceType
+type Align = 'l' | 'c' | 'r'
+
+/** Presentation hint for one body cell — the page maps it to type scale and colour. */
+export type SummaryCellTone = 'plain' | 'date' | 'name' | 'meta' | 'hold' | 'cost' | 'sell' | 'margin'
+
+export type SummaryHeaderCell = { label: string; align: Align }
+
+export type SummaryBodyCell = { value: string; align: Align; tone: SummaryCellTone; color?: string }
+
+export type SummaryTableRow =
+  | { kind: 'line'; key: string; cells: SummaryBodyCell[] }
+  | { kind: 'extra'; key: string; label: string; meta: string; value: string }
+
+export type SummaryTable = {
+  gridCols: string
+  headers: SummaryHeaderCell[]
+  rows: SummaryTableRow[]
+}
+
+export type SummaryCard = SummaryTable & {
+  type: SummaryCardType
   name: string
   initial: string
   iconBg: string
   iconFg: string
+  tint: string
   countLabel: string
-  subtotal: string
-  headers: SummaryCell[]
-  blocks: SummaryBlock[]
 }
 
 function mgnPct(net: number, rack: number) {
   return rack > 0 ? Math.round(((rack - net) / rack) * 100) : 0
 }
 
-function priceCells(l: SummaryLine): string[] {
-  const costEff = costEffOf(l)
-  const sellEff = sellEffOf(l)
-  const pct = mgnPct(costEff, sellEff)
-  const holdLabel = l.hold === 'held' ? 'On hold' : l.hold === 'requested' ? 'Requested' : '—'
-  let marginCell = pct ? `${pct}%` : '—'
-  if (l.discount) {
-    const discPct = l.rack > 0 ? Math.round((l.discount.sellDelta / l.rack) * 100) : 0
-    marginCell += `  ·  ↓${discPct}%`
-  }
-  return [holdLabel, wholeUsd(costEff), wholeUsd(sellEff), marginCell]
+function marginColor(pct: number) {
+  if (pct >= 30) return '#059669'
+  if (pct >= 15) return '#B45309'
+  if (pct > 0) return '#931115'
+  return '#A1A1A1'
+}
+
+function holdCell(l: SummaryLine): { value: string; color: string } {
+  if (l.hold === 'held') return { value: 'On hold', color: '#0369A1' }
+  if (l.hold === 'requested') return { value: 'Requested', color: '#B45309' }
+  return { value: '—', color: '#A1A1A1' }
 }
 
 function guestsCell(l: SummaryLine): string {
@@ -621,234 +716,220 @@ function guestsCell(l: SummaryLine): string {
   return l.pax != null ? String(l.pax) : '—'
 }
 
-function formatRatePair(cost: number, sell: number, mode: PriceDisplayMode) {
-  if (mode === 'cost') return wholeUsd(cost)
-  if (mode === 'sell') return wholeUsd(sell)
-  return `${wholeUsd(cost)} / ${wholeUsd(sell)}`
-}
-
-/**
- * Rate column: per-person split when `chargePer === 'person'`; for `'unit'` lines show the
- * line total again (never ÷ guest count — that fabricates a false per-head rate).
- */
-function perGuestPriceCell(l: SummaryLine, mode: PriceDisplayMode = 'all'): string {
-  const costEff = costEffOf(l)
-  const sellEff = sellEffOf(l)
-  if (l.chargePer === 'unit') {
-    return formatRatePair(costEff, sellEff, mode)
-  }
-  const adults = l.ad || 0
-  const children = l.ch || 0
-  const weightedGuests = adults + children * 0.6
-  if (!weightedGuests) return '—'
-  const costAdult = costEff / weightedGuests
-  const sellAdult = sellEff / weightedGuests
-  const parts = []
-  if (adults) parts.push(`Ad ${formatRatePair(costAdult, sellAdult, mode)}`)
-  if (children) parts.push(`Ch ${formatRatePair(costAdult * 0.6, sellAdult * 0.6, mode)}`)
-  return parts.join(' · ')
-}
-
-function combinedPriceCell(l: SummaryLine, mode: PriceDisplayMode = 'all'): string {
-  const costEff = costEffOf(l)
-  const sellEff = sellEffOf(l)
-  const margin = mgnPct(costEff, sellEff)
-  const discount = l.discount && l.rack > 0 ? ` · ↓${Math.round((l.discount.sellDelta / l.rack) * 100)}%` : ''
-  if (mode === 'cost') return `${wholeUsd(costEff)}${discount}`
-  if (mode === 'sell') return `${wholeUsd(sellEff)}${discount}`
-  return `${wholeUsd(costEff)} / ${wholeUsd(sellEff)} · ${margin}%${discount}`
-}
-
 export type PriceDisplayMode = 'cost' | 'sell' | 'all'
 
-const GRID_BASE: Record<SummaryServiceType, string> = {
-  accommodation: '76px minmax(160px,1.5fr) minmax(170px,1.7fr) 56px 58px 88px 58px 78px',
-  flight: '76px minmax(160px,1.5fr) 104px minmax(132px,1.2fr) minmax(150px,1.4fr) 88px 78px',
-  transportation:
-    '76px minmax(160px,1.4fr) minmax(90px,1fr) minmax(130px,1.3fr) minmax(120px,1.2fr) 58px 58px 72px 78px',
-  activity: '76px minmax(160px,1.5fr) minmax(200px,2fr) 88px 78px',
-  other: '76px minmax(160px,1.5fr) minmax(180px,1.8fr) 72px 58px minmax(110px,1fr) 78px',
-  extra: '76px minmax(160px,1.5fr) minmax(200px,2fr) 72px 84px 78px',
+/** Departure of a line: stays run to the last night, multi-day disposals to the final day. */
+function lineEndDate(l: SummaryLine): string {
+  if (l.end) return l.end
+  const span = l.nights || (l.days ? l.days - 1 : 0)
+  if (!span || !l.date) return l.date
+  return isoAddDaysLocal(l.date, span)
 }
 
-export function gridForMode(type: SummaryServiceType, mode: PriceDisplayMode): string {
-  const priceTracks = mode === 'all' ? '220px 240px' : '140px 150px'
-  return `${GRID_BASE[type]} ${priceTracks}`
-}
-
-/** @deprecated Prefer gridForMode — kept for callers that expect a static map. */
-export const GRID: Record<SummaryServiceType, string> = {
-  accommodation: gridForMode('accommodation', 'all'),
-  flight: gridForMode('flight', 'all'),
-  transportation: gridForMode('transportation', 'all'),
-  activity: gridForMode('activity', 'all'),
-  other: gridForMode('other', 'all'),
-  extra: gridForMode('extra', 'all'),
-}
-
-function hdr(label: string, align: 'l' | 'c' | 'r', kind: SummaryCellKind = 'label'): SummaryCell {
-  return { label, align, kind }
-}
-
-function priceColHeaders(mode: PriceDisplayMode): SummaryCell[] {
-  const rateLabel =
-    mode === 'cost' ? 'Rate cost' : mode === 'sell' ? 'Rate sell' : 'Rate cost / sell'
-  const total =
-    mode === 'cost'
-      ? 'Cost (USD)'
-      : mode === 'sell'
-        ? 'Sell (USD)'
-        : 'Cost / Sell · Margin (USD)'
-  return [
-    hdr('Hold', 'c', 'hold'),
-    hdr(rateLabel, 'r', 'unitPrice'),
-    hdr(total, 'r', 'totalPrice'),
-  ]
-}
-
-function headersFor(type: SummaryServiceType, mode: PriceDisplayMode): SummaryCell[] {
-  const price = priceColHeaders(mode)
-  switch (type) {
+function serviceDescOf(l: SummaryLine): string {
+  switch (l.type) {
     case 'accommodation':
-      return [
-        hdr('Date', 'l'),
-        hdr('Supplier', 'l'),
-        hdr('Room Type', 'l'),
-        hdr('Basis', 'c'),
-        hdr('Rooms', 'c'),
-        hdr('Pax', 'c'),
-        hdr('Nights', 'c'),
-        ...price,
-      ]
+      return l.roomType || 'Room'
     case 'flight':
-      return [
-        hdr('Date', 'l'),
-        hdr('Supplier', 'l'),
-        hdr('Charter / Schedule', 'c'),
-        hdr('Route', 'l'),
-        hdr('Flight Date & Time', 'l'),
-        hdr('Pax', 'c'),
-        ...price,
-      ]
+      return l.route || '—'
     case 'transportation':
-      return [
-        hdr('Date', 'l'),
-        hdr('Supplier', 'l'),
-        hdr('V. Type', 'l'),
-        hdr('Pick Up / At Disposal In', 'l'),
-        hdr('Drop off', 'l'),
-        hdr('Veh.', 'c'),
-        hdr('Days', 'c'),
-        hdr('Pax', 'c'),
-        ...price,
-      ]
-    case 'activity':
-      return [
-        hdr('Date', 'l'),
-        hdr('Supplier', 'l'),
-        hdr('Service', 'l'),
-        hdr('Pax', 'c'),
-        ...price,
-      ]
-    case 'other':
-      return [
-        hdr('Date', 'l'),
-        hdr('Supplier', 'l'),
-        hdr('Service', 'l'),
-        hdr('Pax', 'c'),
-        hdr('Days', 'c'),
-        hdr('Allocation', 'l'),
-        ...price,
-      ]
-    case 'extra':
-      return [
-        hdr('Date', 'l'),
-        hdr('Supplier', 'l'),
-        hdr('Extra', 'l'),
-        hdr('Pax', 'c'),
-        hdr('Qty', 'c'),
-        ...price,
-      ]
+      return l.kind === 'disposal'
+        ? `${l.vType || 'Vehicle'} at disposal · ${l.location || '—'}`
+        : `${l.pickup || '—'} → ${l.dropoff || '—'}`
+    default:
+      return l.service || '—'
   }
 }
 
-function rowCells(type: SummaryServiceType, l: SummaryLine, mode: PriceDisplayMode = 'all'): string[] {
-  const hold = priceCells(l)[0]
-  const perPerson = perGuestPriceCell(l, mode)
-  const total = combinedPriceCell(l, mode)
-  switch (type) {
-    case 'accommodation':
-      return [
-        fmtShortDate(l.date),
-        l.supplier,
-        l.roomType || '—',
-        l.basis || '—',
-        String(l.rooms ?? '—'),
-        guestsCell(l),
-        String(l.nights ?? '—'),
-        hold,
-        perPerson,
-        total,
-      ]
-    case 'flight':
-      return [
-        fmtShortDate(l.date),
-        l.supplier,
-        l.charter || '—',
-        l.route || '—',
-        `${fmtShortDate(l.date)} · ${l.depart || '—'} → ${l.arrive || '—'}`,
-        guestsCell(l),
-        hold,
-        perPerson,
-        total,
-      ]
-    case 'transportation':
-      return [
-        fmtShortDate(l.date),
-        l.supplier,
-        l.vType || '—',
-        l.kind === 'disposal' ? l.location || '—' : l.pickup || '—',
-        l.kind === 'disposal' ? '—' : l.dropoff || '—',
-        String(l.veh ?? '—'),
-        String(l.days ?? '—'),
-        guestsCell(l),
-        hold,
-        perPerson,
-        total,
-      ]
-    case 'activity':
-      return [
-        fmtShortDate(l.date),
-        l.supplier,
-        l.service || '—',
-        guestsCell(l),
-        hold,
-        perPerson,
-        total,
-      ]
-    case 'other':
-      return [
-        fmtShortDate(l.date),
-        l.supplier,
-        l.service || '—',
-        guestsCell(l),
-        String(l.days ?? '—'),
-        l.alloc || 'All guests',
-        hold,
-        perPerson,
-        total,
-      ]
-    case 'extra':
-      return [
-        fmtShortDate(l.date),
-        l.supplier,
-        l.service || '—',
-        guestsCell(l),
-        l.qty || '—',
-        hold,
-        perPerson,
-        total,
-      ]
+type Column = {
+  label: string
+  align: Align
+  track: string
+  tone: SummaryCellTone
+  value: (l: SummaryLine) => string
+  color?: (l: SummaryLine) => string
+}
+
+const COL_DATES: Column = {
+  label: 'Arrival → Departure',
+  align: 'l',
+  track: '156px',
+  tone: 'date',
+  value: (l) => `${fmtShortDate(l.date)}  →  ${fmtShortDate(lineEndDate(l))}`,
+}
+
+const COL_SUPPLIER: Column = {
+  label: 'Supplier',
+  align: 'l',
+  track: 'minmax(150px,1.3fr)',
+  tone: 'name',
+  value: (l) => l.supplier,
+}
+
+const COL_SERVICE: Column = {
+  label: 'Service',
+  align: 'l',
+  track: 'minmax(190px,2fr)',
+  tone: 'name',
+  value: serviceDescOf,
+}
+
+const COL_PAX: Column = {
+  label: 'Pax',
+  align: 'c',
+  track: '96px',
+  tone: 'meta',
+  value: guestsCell,
+}
+
+const COL_HOLD: Column = {
+  label: 'Hold',
+  align: 'c',
+  track: '96px',
+  tone: 'hold',
+  value: (l) => holdCell(l).value,
+  color: (l) => holdCell(l).color,
+}
+
+function columnsFor(type: SummaryCardType, mode: PriceDisplayMode): Column[] {
+  const base: Column[] = (() => {
+    switch (type) {
+      case 'accommodation':
+        return [
+          COL_DATES,
+          COL_SUPPLIER,
+          {
+            label: 'Room / basis',
+            align: 'l',
+            track: 'minmax(190px,2fr)',
+            tone: 'name',
+            value: (l) => [l.roomType, l.basis].filter(Boolean).join('  ·  ') || '—',
+          },
+          { label: 'Nights', align: 'c', track: '74px', tone: 'plain', value: (l) => (l.nights ? String(l.nights) : '—') },
+          { label: 'Rooms', align: 'c', track: '70px', tone: 'plain', value: (l) => (l.rooms ? String(l.rooms) : '—') },
+          COL_PAX,
+          COL_HOLD,
+        ]
+      case 'flight':
+        return [
+          COL_DATES,
+          COL_SUPPLIER,
+          COL_SERVICE,
+          {
+            label: 'Times',
+            align: 'c',
+            track: '116px',
+            tone: 'meta',
+            value: (l) => (l.depart && l.arrive ? `${l.depart} → ${l.arrive}` : l.depart || '—'),
+          },
+          COL_PAX,
+          COL_HOLD,
+        ]
+      case 'transfer':
+        return [
+          COL_DATES,
+          COL_SUPPLIER,
+          COL_SERVICE,
+          { label: 'Vehicle', align: 'l', track: 'minmax(110px,1fr)', tone: 'plain', value: (l) => l.vType || '—' },
+          COL_PAX,
+          COL_HOLD,
+        ]
+      case 'disposal':
+        return [
+          COL_DATES,
+          COL_SUPPLIER,
+          COL_SERVICE,
+          { label: 'Days', align: 'c', track: '70px', tone: 'plain', value: (l) => (l.days ? String(l.days) : '—') },
+          COL_PAX,
+          COL_HOLD,
+        ]
+      case 'extra':
+        return [
+          COL_DATES,
+          COL_SUPPLIER,
+          COL_SERVICE,
+          { label: 'Qty', align: 'c', track: '92px', tone: 'meta', value: (l) => l.qty || '—' },
+          COL_PAX,
+          COL_HOLD,
+        ]
+      case 'other':
+        return [
+          COL_DATES,
+          COL_SUPPLIER,
+          COL_SERVICE,
+          {
+            label: 'Allocation',
+            align: 'l',
+            track: 'minmax(130px,1.1fr)',
+            tone: 'plain',
+            value: (l) => l.alloc || 'All guests',
+          },
+          COL_PAX,
+          COL_HOLD,
+        ]
+      default:
+        return [COL_DATES, COL_SUPPLIER, COL_SERVICE, COL_PAX, COL_HOLD]
+    }
+  })()
+
+  const value: Column[] = []
+  if (mode === 'cost' || mode === 'all') {
+    value.push({ label: 'Cost', align: 'r', track: '104px', tone: 'cost', value: (l) => wholeUsd(costEffOf(l)) })
+  }
+  if (mode === 'sell' || mode === 'all') {
+    value.push({ label: 'Sell', align: 'r', track: '104px', tone: 'sell', value: (l) => wholeUsd(sellEffOf(l)) })
+  }
+  if (mode === 'all') {
+    value.push({
+      label: 'Margin',
+      align: 'r',
+      track: '92px',
+      tone: 'margin',
+      value: (l) => {
+        const pct = mgnPct(costEffOf(l), sellEffOf(l))
+        return pct ? `${pct}%` : '—'
+      },
+      color: (l) => marginColor(mgnPct(costEffOf(l), sellEffOf(l))),
+    })
+  }
+  return base.concat(value)
+}
+
+/** One table for a set of lines of the same card type, with optional nested extras. */
+function buildTable(
+  type: SummaryCardType,
+  items: SummaryLine[],
+  mode: PriceDisplayMode,
+  extrasByLine: Map<string, SummaryLine[]> | null,
+): SummaryTable {
+  const cols = columnsFor(type, mode)
+  const rows: SummaryTableRow[] = []
+  items.forEach((l, i) => {
+    const key = l.lineId || `${l.serviceId}#${i}`
+    rows.push({
+      kind: 'line',
+      key,
+      cells: cols.map((c) => ({
+        value: c.value(l) || '—',
+        align: c.align,
+        tone: c.tone,
+        color: c.color?.(l),
+      })),
+    })
+    for (const [j, x] of (extrasByLine?.get(key) || []).entries()) {
+      rows.push({
+        kind: 'extra',
+        key: `${key}-x${j}`,
+        label: x.service || 'Extra',
+        meta: [x.qty, fmtShortDate(x.date)].filter(Boolean).join('  ·  '),
+        value: wholeUsd(mode === 'sell' ? sellEffOf(x) : costEffOf(x)),
+      })
+    }
+  })
+  return {
+    gridCols: cols.map((c) => c.track).join(' '),
+    headers: cols.map((c) => ({ label: c.label, align: c.align })),
+    rows,
   }
 }
 
@@ -860,109 +941,159 @@ function costEffOf(l: SummaryLine) {
   return l.net - (l.discount?.costDelta || 0)
 }
 
-function blockKey(type: SummaryServiceType, l: SummaryLine) {
-  return type === 'accommodation' ? `${l.supplier}|${l.date}` : l.supplier
-}
-
-function blockMeta(type: SummaryServiceType, group: SummaryLine[]): string {
-  const first = group[0]
-  if (type === 'accommodation') {
-    return `${fmtShortDate(first.date)} – ${fmtShortDate(first.end)}  ·  ${first.nights} ${first.nights === 1 ? 'night' : 'nights'}  ·  ${first.basis}`
+/**
+ * Extras that belong to one stay sit under it as child rows; supplier-wide extras (and extras
+ * on anything other than a stay) get their own card, matching the Summary Layout doc.
+ */
+function splitExtras(lines: SummaryLine[]): {
+  nested: Map<string, SummaryLine[]>
+  loose: SummaryLine[]
+} {
+  const staysByService = new Map<string, SummaryLine>()
+  for (const l of lines) {
+    if (l.type === 'accommodation' && !staysByService.has(l.serviceId)) staysByService.set(l.serviceId, l)
   }
-  if (type === 'flight') {
-    return `${group.length} ${group.length === 1 ? 'sector' : 'sectors'}`
+  const nested = new Map<string, SummaryLine[]>()
+  const loose: SummaryLine[] = []
+  for (const x of lines.filter((l) => l.type === 'extra')) {
+    const parent = x.extraKind === 'supplier' ? undefined : staysByService.get(x.serviceId)
+    if (!parent?.lineId) {
+      loose.push(x)
+      continue
+    }
+    const arr = nested.get(parent.lineId) || []
+    arr.push(x)
+    nested.set(parent.lineId, arr)
   }
-  const dates = group.map((l) => l.date).filter(Boolean).sort()
-  if (!dates.length) return '—'
-  return dates[0] === dates[dates.length - 1] ? fmtShortDate(dates[0]) : `${fmtShortDate(dates[0])} – ${fmtShortDate(dates[dates.length - 1])}`
-}
-
-function extraChildRow(e: SummaryLine, mode: PriceDisplayMode = 'all'): SummaryRow {
-  return {
-    isChild: true,
-    kind: e.extraKind || 'service',
-    meta: `${e.pax ?? 0} pax${e.qty ? `  ·  ${e.qty}` : ''}`,
-    cells: [e.service || 'Extra', combinedPriceCell(e, mode)],
-  }
+  return { nested, loose }
 }
 
 export function buildSummaryCards(lines: SummaryLine[], mode: PriceDisplayMode = 'all'): SummaryCard[] {
-  const extrasByService = new Map<string, SummaryLine[]>()
-  for (const l of lines.filter((s) => s.type === 'extra')) {
-    const arr = extrasByService.get(l.serviceId) || []
-    arr.push(l)
-    extrasByService.set(l.serviceId, arr)
-  }
+  const { nested, loose } = splitExtras(lines)
 
-  const emittedExtras = new Set<string>()
-  return ORDER.map((type) => {
-    const items = lines.filter((s) => s.type === type).slice().sort((a, b) => a.date.localeCompare(b.date))
+  return CARD_ORDER.map((type) => {
+    const items =
+      type === 'extra'
+        ? loose.slice()
+        : lines.filter((l) => l.type !== 'extra' && cardTypeOf(l) === type).slice()
     if (!items.length) return null
-    const m = SUMMARY_TYPE_META[type]
+    items.sort((a, b) => (a.date || '').localeCompare(b.date || ''))
 
-    const order: string[] = []
-    const byKey = new Map<string, SummaryLine[]>()
-    for (const l of items) {
-      const k = blockKey(type, l)
-      if (!byKey.has(k)) {
-        order.push(k)
-        byKey.set(k, [])
-      }
-      byKey.get(k)!.push(l)
-    }
-
-    const blocks: SummaryBlock[] = order.map((k) => {
-      const group = byKey.get(k)!
-      const first = group[0]
-      const rows: SummaryRow[] = []
-      let blockSell = 0
-      for (const [index, l] of group.entries()) {
-        const cells = rowCells(type, l, mode)
-        const previous = group[index - 1]
-        if (previous?.date === l.date) cells[0] = ''
-        if (previous?.supplier === l.supplier) cells[1] = ''
-        rows.push({ isChild: false, cells })
-        blockSell += sellEffOf(l)
-      }
-      for (const l of group) {
-        if (emittedExtras.has(l.serviceId)) continue
-        emittedExtras.add(l.serviceId)
-        for (const extra of extrasByService.get(l.serviceId) || []) {
-          rows.push(extraChildRow(extra, mode))
-          blockSell += sellEffOf(extra)
-        }
-      }
-      return {
-        key: k,
-        name: first.supplier,
-        meta: blockMeta(type, group),
-        subtotal: wholeUsd(blockSell),
-        rows,
-      }
-    })
-
-    const cardSell = blocks.reduce((a, b) => a + parseMoney(b.subtotal), 0)
-    const countLabel =
-      type === 'accommodation'
-        ? (() => {
-            const stayCount = order.length
-            const nts = order.reduce((a, k) => a + (byKey.get(k)![0].nights || 0), 0)
-            return `${stayCount} ${stayCount === 1 ? 'stay' : 'stays'}  ·  ${nts} ${nts === 1 ? 'night' : 'nights'}`
-          })()
-        : `${items.length} ${items.length === 1 ? m.noun.replace(/s$/, '') : m.noun}`
+    const m = SUMMARY_CARD_META[type]
+    const table = buildTable(type, items, mode, type === 'accommodation' ? nested : null)
+    const nestedCount =
+      type === 'accommodation' ? table.rows.filter((r) => r.kind === 'extra').length : 0
 
     return {
+      ...table,
       type,
       name: m.name,
       initial: m.initial,
       iconBg: m.iconBg,
       iconFg: m.iconFg,
-      countLabel,
-      subtotal: wholeUsd(cardSell),
-      headers: headersFor(type, mode),
-      blocks,
+      tint: m.tint,
+      countLabel:
+        `${items.length} ${items.length === 1 ? 'line' : 'lines'}` +
+        (nestedCount ? `  ·  ${nestedCount} extras` : ''),
     }
   }).filter(Boolean) as SummaryCard[]
+}
+
+export type SummaryDayGroup = SummaryTable & {
+  key: string
+  name: string
+  initial: string
+  iconBg: string
+  iconFg: string
+  tint: string
+}
+
+export type SummaryDayBlock = {
+  key: string
+  dayNum: string
+  dateLabel: string
+  weekday: string
+  groups: SummaryDayGroup[]
+}
+
+/** Day-by-day view: the same per-type tables, cut by date instead of by service type. */
+export function buildSummaryDayGroups(
+  lines: SummaryLine[],
+  mode: PriceDisplayMode = 'all',
+): SummaryDayBlock[] {
+  const dates = [...new Set(lines.map((l) => l.date).filter(Boolean))].sort()
+  const first = dates[0]
+  if (!first) return []
+  const dayNo = (iso: string) =>
+    Math.round(
+      (new Date(`${iso}T00:00:00`).getTime() - new Date(`${first}T00:00:00`).getTime()) / 86400000,
+    ) + 1
+
+  return dates.map((date) => {
+    const onDay = lines.filter((l) => l.date === date)
+    return {
+      key: date,
+      dayNum: `Day ${dayNo(date)}`,
+      dateLabel: fmtShortDate(date),
+      weekday: weekday(date),
+      groups: CARD_ORDER.map((type) => {
+        const items = onDay.filter((l) => cardTypeOf(l) === type)
+        if (!items.length) return null
+        const m = SUMMARY_CARD_META[type]
+        return {
+          ...buildTable(type, items, mode, null),
+          key: date + type,
+          name: m.name,
+          initial: m.initial,
+          iconBg: m.iconBg,
+          iconFg: m.iconFg,
+          tint: m.tint,
+        }
+      }).filter(Boolean) as SummaryDayGroup[],
+    }
+  })
+}
+
+export type SummaryPriceGroupItem = { key: string; supplier: string; desc: string; value: string }
+
+export type SummaryPriceGroup = {
+  key: SummaryServiceType
+  name: string
+  subtotal: string
+  countLabel: string
+  items: SummaryPriceGroupItem[]
+  lines: SummaryLine[]
+}
+
+/** Pricing sidebar grouping — transfers and disposals roll up as one "Transportation". */
+export function buildPriceGroups(lines: SummaryLine[]): SummaryPriceGroup[] {
+  const order: SummaryServiceType[] = [
+    'accommodation',
+    'flight',
+    'transportation',
+    'activity',
+    'extra',
+    'other',
+  ]
+  return order
+    .map((type) => {
+      const items = lines.filter((l) => l.type === type)
+      if (!items.length) return null
+      return {
+        key: type,
+        name: SUMMARY_TYPE_META[type].name,
+        subtotal: wholeUsd(items.reduce((a, l) => a + sellEffOf(l), 0)),
+        countLabel: `${items.length} ${items.length === 1 ? 'item' : 'items'}`,
+        items: items.map((l, i) => ({
+          key: l.lineId || `${l.serviceId}#${i}`,
+          supplier: l.supplier,
+          desc: serviceDescOf(l),
+          value: wholeUsd(sellEffOf(l)),
+        })),
+        lines: items,
+      }
+    })
+    .filter(Boolean) as SummaryPriceGroup[]
 }
 
 // ---------------------------------------------------------------------------
@@ -1076,6 +1207,8 @@ export function buildSummaryDays(lines: SummaryLine[]): SummaryDay[] {
 export type SummaryDiscount = {
   label: string
   pct: string
+  note: string
+  noteColor: string
   sellDelta: string
   costDelta: string
 }
@@ -1113,12 +1246,17 @@ export function buildSummaryPricing(lines: SummaryLine[], totalGuests: number): 
     cur.costDelta += l.discount.costDelta
     byLabel.set(l.discount.label, cur)
   }
-  const discounts: SummaryDiscount[] = [...byLabel.entries()].map(([label, d]) => ({
-    label,
-    pct: grossSell > 0 ? `−${Math.round((d.sellDelta / grossSell) * 100)}%` : '—',
-    sellDelta: `−${wholeUsd(d.sellDelta)}`,
-    costDelta: d.costDelta > 0 ? `−${wholeUsd(d.costDelta)}` : 'Unchanged',
-  }))
+  const discounts: SummaryDiscount[] = [...byLabel.entries()].map(([label, d]) => {
+    const pct = grossSell > 0 ? `−${Math.round((d.sellDelta / grossSell) * 100)}%` : '—'
+    return {
+      label,
+      pct,
+      note: `Applied to cost & sell · ${pct}`,
+      noteColor: '#059669',
+      sellDelta: `−${wholeUsd(d.sellDelta)}`,
+      costDelta: d.costDelta > 0 ? `−${wholeUsd(d.costDelta)}` : 'Unchanged',
+    }
+  })
 
   const margin = sell - netCost
   const marginPct = sell ? Math.round((margin / sell) * 100) : 0
@@ -1441,6 +1579,8 @@ export function buildDepositSummary(lines: SummaryLine[], sellTotal?: number): D
 export type VoucherValueMode = 'cost' | 'sell' | 'none'
 
 export type VoucherRow = {
+  lineId: string
+  serviceId: string
   date: string
   typeLabel: string
   service: string
@@ -1448,12 +1588,35 @@ export type VoucherRow = {
   pax: string
   value: string
   isExtra: boolean
+  parentLineId?: string
+  propertyName?: string
+  outcome: VoucherLineOutcome | 'pending'
+  reason?: string
+  depositPaid: boolean
+  reconfirmRequired?: boolean
+  formerSourceRef?: string
 }
 
+export type VoucherResponseState =
+  | 'Not issued'
+  | 'Awaiting supplier'
+  | 'Supplier submitted'
+  | 'Recorded by planner'
+
+export type VoucherGuestRow = { name: string; role: string; status: DietaryStatus; text: string }
+
+export type VoucherRoomRow = { room: string; who: string; meta: string }
+
+export type VoucherNote = { key: string; label: string; text: string }
+
 export type VoucherCard = {
+  entityId: string
   supplier: string
+  supplierEmail: string
+  propertyNames: string[]
   initials: string
   ref: string
+  kind: 'standard' | 'cancellation_only'
   dateRange: string
   countLabel: string
   holdLabel: string
@@ -1463,12 +1626,49 @@ export type VoucherCard = {
   totalLabel: string
   total: string
   totalNum: number
+  gridCols: string
+  headers: SummaryHeaderCell[]
   rows: VoucherRow[]
   deposit: string
   depositRule: string
   depositDue: string
   issued: boolean
-  voucherStatus?: 'Raised' | 'Confirmed' | 'Rejected' | null
+  /** Current non-superseded token, for building the demo "open supplier link" URL. */
+  activeToken?: string
+  voucherStatus?: SupplierVoucherStatus | null
+  responseState: VoucherResponseState
+  changedSinceIssued: boolean
+  depositGuardCount: number
+  note: string
+  issuedAt?: string
+  issuedTo: string[]
+  resendCount: number
+  submittedByName?: string
+  submittedByEmail?: string
+  leadGuest: string
+  partyMix: string
+  agency: string
+  rooms: VoucherRoomRow[]
+  guestRoster: VoucherGuestRow[]
+  guestCoverageLabel: string
+  /** Requirement coverage as the voucher header states it, with its own tone. */
+  dietLine: string
+  dietColor: string
+  paxRows: { key: string; name: string; bandLabel: string }[]
+  /** Notes captured on this supplier's service lines and printed on the request. */
+  supplierNotes: VoucherNote[]
+  hasDiscount: boolean
+  discountRows: { key: string; label: string; from: string; to: string; tag: string }[]
+  discountNote: string
+  emailLine: string
+  sendHistory: { recipient: string; sentAt: string; deliveryStatus: string; via: string }[]
+  pendingRequestLatest: boolean
+  responsePill: { label: string; bg: string; fg: string }
+  responseHint: string
+  responseSummary: string
+  /** Lines the supplier could not hold — recorded, never removed from the itinerary (RU-08). */
+  responseRejected: { key: string; text: string }[]
+  responseAwaitText: string
 }
 
 function voucherDesc(l: SummaryLine) {
@@ -1526,44 +1726,235 @@ function supplierInitials(name: string) {
     .toUpperCase()
 }
 
-/** One voucher per invoiceable supplier, cutting across the whole itinerary. */
+/** Demo reservations email — prefers payable entity address. */
+export function supplierEmailFor(nameOrEntityId: string): string {
+  if (nameOrEntityId.startsWith('pe-')) {
+    return reservationEmailFor(getPayableEntity(nameOrEntityId))
+  }
+  return reservationEmailFor(payableEntityFromSupplierName(nameOrEntityId))
+}
+
+/** Guests served by a payable entity across all its property lines. */
+export function guestsServedByEntity(
+  services: AddedService[],
+  entityId: string,
+  guests: Guest[],
+): Guest[] {
+  const ids = new Set<number>()
+  for (const svc of services) {
+    if (payableEntityIdOf(svc) !== entityId) continue
+    const d = (svc.draft || {}) as Record<string, unknown>
+    for (const r of asRooms(d)) r.guestIds.forEach((id) => ids.add(id))
+    for (const v of asVehicles(d)) v.guestIds.forEach((id) => ids.add(id))
+    for (const a of asActivities(d)) a.guestIds.forEach((id) => ids.add(id))
+  }
+  const served = guests.filter((g) => ids.has(g.id))
+  return served.length ? served : guests
+}
+
+/** @deprecated Use guestsServedByEntity — kept for transitional call sites. */
+export function guestsServedBySupplier(
+  services: AddedService[],
+  supplier: string,
+  guests: Guest[],
+): Guest[] {
+  const entity = payableEntityFromSupplierName(supplier)
+  return guestsServedByEntity(services, entity.id, guests)
+}
+
+function dietaryStatusOf(gd: GuestDetail | undefined): DietaryStatus {
+  if (!gd) return 'not_captured'
+  if (gd.dietaryStatus) return gd.dietaryStatus
+  return gd.dietary ? 'recorded' : 'not_captured'
+}
+
+function dietaryPrintText(status: DietaryStatus, text?: string): string {
+  if (status === 'recorded') return text || ''
+  if (status === 'none') return 'No special requirements'
+  return 'Not yet advised — to follow'
+}
+
+/** Every guest a supplier serves, each carrying its three-state requirement (BR-21/22). */
+export function buildVoucherGuestRoster(
+  served: Guest[],
+  guestDetails: GuestDetail[],
+): { rows: VoucherGuestRow[]; recordedCount: number; total: number } {
+  const rows: VoucherGuestRow[] = served.map((g) => {
+    const gd = guestDetails[g.id - 1]
+    const status = dietaryStatusOf(gd)
+    return {
+      name: g.name,
+      role: g.type === 'youth' ? 'Child' : g.type[0].toUpperCase() + g.type.slice(1),
+      status,
+      text: dietaryPrintText(status, gd?.dietary),
+    }
+  })
+  return { rows, recordedCount: rows.filter((r) => r.status === 'recorded').length, total: rows.length }
+}
+
+/** Signature of served-guest requirement state — a later add/edit compared to this is what
+ *  "changed since issued" means (BR-24/29), not merely "some rows are still blank". */
+export function voucherGuestSignature(served: Guest[], guestDetails: GuestDetail[]): string {
+  return served
+    .map((g) => {
+      const gd = guestDetails[g.id - 1]
+      const status = dietaryStatusOf(gd)
+      return `${g.id}:${status}:${status === 'recorded' ? gd?.dietary || '' : ''}`
+    })
+    .join('|')
+}
+
+/** Full issue snapshot — guest requirements + commercial line facts (PR-F24). */
+export function voucherIssueSignature(
+  lines: SummaryLine[],
+  served: Guest[],
+  guestDetails: GuestDetail[],
+): string {
+  const guestPart = voucherGuestSignature(served, guestDetails)
+  const linePart = lines
+    .map((l) =>
+      [l.lineId, l.serviceId, l.date, l.net, l.rack, l.pax, l.propertyName || l.supplier].join(':'),
+    )
+    .sort()
+    .join('|')
+  return `${guestPart}||${linePart}`
+}
+
+export function isPayableVoucherLine(l: SummaryLine): boolean {
+  return costEffOf(l) > 0
+}
+
+export type VoucherOutstandingSummary = { issued: number; awaiting: number; label: string }
+
+export function voucherOutstandingSummary(
+  voucherMeta: Record<string, VoucherMeta> = {},
+): VoucherOutstandingSummary {
+  const entries = Object.values(voucherMeta).filter((m) => m.issued)
+  const awaiting = entries.filter((m) => !m.submittedAt).length
+  const issued = entries.length
+  const label =
+    issued === 0
+      ? 'No vouchers issued'
+      : awaiting
+        ? `${awaiting} of ${issued} voucher${issued === 1 ? '' : 's'} awaiting supplier`
+        : `${issued} voucher${issued === 1 ? '' : 's'} answered`
+  return { issued, awaiting, label }
+}
+
+function voucherRoomRowsForEntity(
+  items: SummaryLine[],
+  services: AddedService[],
+  entityId: string,
+  guests: Guest[],
+): VoucherRoomRow[] {
+  const rooms: { line: SummaryLine; guestIds: number[] }[] = []
+  for (const svc of services) {
+    if (payableEntityIdOf(svc) !== entityId) continue
+    const d = (svc.draft || {}) as Record<string, unknown>
+    const svcRooms = asRooms(d)
+    const stayLines = items.filter((l) => l.type === 'accommodation' && l.serviceId === svc.id)
+    stayLines.forEach((line, i) => rooms.push({ line, guestIds: svcRooms[i]?.guestIds || [] }))
+  }
+  return rooms.map(({ line, guestIds }) => {
+    const names = guestIds.map((id) => guests.find((g) => g.id === id)?.name).filter(Boolean) as string[]
+    const expected = (line.ad || 0) + (line.ch || 0)
+    const who =
+      names.length && names.length === expected
+        ? names.join(', ')
+        : names.length
+          ? `${names.join(', ')} — allocation to confirm`
+          : 'Allocation to confirm'
+    return {
+      room: line.roomType || 'Room',
+      who,
+      meta: [fmtShortDate(line.date), line.nights ? `${line.nights} nights` : null, line.basis]
+        .filter(Boolean)
+        .join('  ·  '),
+    }
+  })
+}
+
+function parentLineIdForExtra(
+  extra: SummaryLine,
+  sorted: SummaryLine[],
+): string | undefined {
+  if (extra.type !== 'extra' || extra.extraKind === 'supplier') return undefined
+  const parent = sorted.find(
+    (l) => l.serviceId === extra.serviceId && l.type === 'accommodation' && l.lineId,
+  )
+  return parent?.lineId
+}
+
+/** One voucher per payable legal entity (PR-F02), omitting $0 lines (PR-F04). */
 export function buildVouchers(
   lines: SummaryLine[],
   mode: VoucherValueMode,
   metaRef: string,
-  issued: Record<string, boolean> = {},
-  supplierVouchers: Record<string, 'Raised' | 'Confirmed' | 'Rejected'> = {},
+  services: AddedService[],
+  guests: Guest[],
+  guestDetails: GuestDetail[],
+  agency: string,
+  supplierVouchers: Record<string, SupplierVoucherStatus> = {},
+  voucherLineAnswers: Record<string, VoucherLineAnswer> = {},
+  voucherMeta: Record<string, VoucherMeta> = {},
 ): VoucherCard[] {
   const show = mode !== 'none'
-  const bySup = new Map<string, SummaryLine[]>()
-  for (const l of lines) {
-    const arr = bySup.get(l.supplier) || []
+  const payableLines = lines.filter(isPayableVoucherLine)
+  const byEntity = new Map<string, SummaryLine[]>()
+  for (const l of payableLines) {
+    const entityId = l.payableEntityId || payableEntityFromSupplierName(l.supplier).id
+    const arr = byEntity.get(entityId) || []
     arr.push(l)
-    bySup.set(l.supplier, arr)
+    byEntity.set(entityId, arr)
   }
 
-  const cards = [...bySup.entries()].map(([name, items]) => {
+  const sortedEntityIds = [...byEntity.keys()].sort((a, b) => {
+    const aFirst = byEntity.get(a)?.find((l) => l.date)?.date || ''
+    const bFirst = byEntity.get(b)?.find((l) => l.date)?.date || ''
+    return aFirst.localeCompare(bFirst)
+  })
+
+  const seqByEntity = new Map<string, number>()
+  sortedEntityIds.forEach((entityId, index) => {
+    const persisted = voucherMeta[entityId]?.voucherSeq
+    seqByEntity.set(entityId, persisted ?? index + 1)
+  })
+
+  const cards = sortedEntityIds.map((entityId) => {
+    const items = byEntity.get(entityId) || []
+    const legalName = items[0]?.payableEntityName || getPayableEntity(entityId).legalName
+    const propertyNames = [...new Set(items.map((l) => l.propertyName || l.supplier).filter(Boolean))]
     const sorted = items.slice().sort((a, b) => (a.date || '').localeCompare(b.date || ''))
     const valueOf = (l: SummaryLine) => (mode === 'sell' ? sellEffOf(l) : costEffOf(l))
     const cost = sorted.reduce((a, l) => a + costEffOf(l), 0)
     const totalNum = sorted.reduce((a, l) => a + valueOf(l), 0)
-    const rule = depositRuleFor(name)
+    const rule = depositRuleFor(legalName)
     const first = sorted.find((l) => l.date)?.date || ''
     const last = [...sorted].reverse().find((l) => l.date)?.date || first
-    const voucherStatus = supplierVouchers[name] || null
-    const isIssued = !!issued[name] || !!voucherStatus
-    const holds = sorted.map((l) => l.hold)
+    const meta = voucherMeta[entityId]
+    const isIssued = !!meta?.issued
+    const voucherStatus = supplierVouchers[entityId] || null
+    const kind = meta?.kind || 'standard'
+    const seq = seqByEntity.get(entityId) || 1
+    const ref = meta?.voucherRef || `${metaRef} / V${String(seq).padStart(2, '0')}`
+
+    const responseState: VoucherResponseState = !isIssued
+      ? 'Not issued'
+      : !meta?.submittedAt
+        ? 'Awaiting supplier'
+        : meta.submittedVia === 'staff'
+          ? 'Recorded by planner'
+          : 'Supplier submitted'
+
     const [holdLabel, holdFg, holdBg] = voucherStatus === 'Confirmed'
-      ? (['Supplier confirmed', '#15803D', '#DCFCE7'] as const)
+      ? (['Supplier hold — confirmed', '#15803D', '#DCFCE7'] as const)
       : voucherStatus === 'Rejected'
         ? (['Supplier rejected', '#B91C1C', '#FEE2E2'] as const)
-        : voucherStatus === 'Raised' || isIssued
-          ? (['Voucher raised', '#15803D', '#DCFCE7'] as const)
-          : holds.includes('requested')
+        : voucherStatus === 'Partial'
+          ? (['Partial hold', '#B45309', '#FEF3C7'] as const)
+          : isIssued
             ? (['Hold requested', '#B45309', '#FEF3C7'] as const)
-            : holds.includes('held')
-              ? (['On hold', '#0369A1', '#E0F2FE'] as const)
-              : (['No hold', '#A1A1A1', '#F1F5F9'] as const)
+            : (['No hold', '#A1A1A1', '#F1F5F9'] as const)
 
     const year = (last || first || '').slice(0, 4) || ''
     const dateRange =
@@ -1571,9 +1962,99 @@ export function buildVouchers(
         ? `${fmtShortDate(first)} – ${fmtShortDate(last)}${year ? ` ${year}` : ''}`
         : 'Dates TBC'
 
+    const served = guestsServedByEntity(services, entityId, guests)
+    const roster = buildVoucherGuestRoster(served, guestDetails)
+    const servedAdults = served.filter((g) => g.type === 'adult' || g.type === 'youth').length
+    const servedChildren = served.length - servedAdults
+    const partyMix =
+      `${served.length} guest${served.length === 1 ? '' : 's'}` +
+      (servedAdults || servedChildren
+        ? ` · ${[servedAdults ? `${servedAdults} adult${servedAdults === 1 ? '' : 's'}` : null, servedChildren ? `${servedChildren} child${servedChildren === 1 ? '' : 'ren'}` : null].filter(Boolean).join(' · ')}`
+        : '')
+    const currentContentSig = voucherIssueSignature(sorted, served, guestDetails)
+    const changedSinceIssued =
+      isIssued && !!meta?.contentSignature && meta.contentSignature !== currentContentSig
+
+    let depositGuardCount = 0
+    const rows: VoucherRow[] = sorted.map((l) => {
+      const answer = l.lineId ? voucherLineAnswers[l.lineId] : undefined
+      const outcome: VoucherRow['outcome'] = answer?.outcome ?? 'pending'
+      if (outcome === 'deposit_held_back') depositGuardCount += 1
+      const end = lineEndDate(l)
+      const propertyPrefix =
+        propertyNames.length > 1 && l.propertyName ? `${l.propertyName} · ` : ''
+      return {
+        lineId: l.lineId || `${l.serviceId}#0`,
+        serviceId: l.serviceId,
+        date:
+          end && end !== l.date ? `${fmtShortDate(l.date)} → ${fmtShortDate(end)}` : fmtShortDate(l.date),
+        typeLabel: voucherTypeLabel(l),
+        service: `${propertyPrefix}${voucherDesc(l)}`,
+        detail: voucherDetail(l) || '—',
+        pax: l.pax != null ? String(l.pax) : '—',
+        value: wholeUsd(valueOf(l)),
+        isExtra: l.type === 'extra',
+        parentLineId: parentLineIdForExtra(l, sorted),
+        propertyName: l.propertyName || l.supplier,
+        outcome,
+        reason: answer?.reason,
+        depositPaid: !!l.depositPaid,
+        reconfirmRequired: l.reconfirmRequired,
+        formerSourceRef: l.formerSourceRef,
+      }
+    })
+
+    const notCaptured = roster.rows.filter((r) => r.status === 'not_captured').length
+    const dietLine = notCaptured
+      ? `${notCaptured} of ${roster.total} guest${roster.total === 1 ? '' : 's'} dietary & requirements missing`
+      : roster.recordedCount
+        ? `${roster.recordedCount} of ${roster.total} guest${roster.total === 1 ? '' : 's'} with dietary & requirements recorded`
+        : `No dietary & requirements recorded for any of the ${roster.total} guest${roster.total === 1 ? '' : 's'}`
+
+    const discountLines = sorted.filter((l) => (l.discount?.costDelta || 0) > 0)
+
+    const supplierNotes: VoucherNote[] = []
+    for (const svc of services) {
+      if (payableEntityIdOf(svc) !== entityId) continue
+      const d = (svc.draft || {}) as Record<string, unknown>
+      const text = String(d.notes || '').trim()
+      if (!text) continue
+      const line = sorted.find((l) => l.serviceId === svc.id)
+      supplierNotes.push({
+        key: svc.id,
+        label: line ? `${fmtShortDate(line.date)} · ${voucherDesc(line)}` : svc.title,
+        text,
+      })
+    }
+
+    const heldCount = rows.filter((r) => r.outcome === 'held').length
+    const rejected = rows.filter((r) => r.outcome === 'rejected')
+    const answeredOn = meta?.submittedAt ? fmtPayDate(meta.submittedAt.slice(0, 10)) : ''
+    const responsePill =
+      responseState === 'Not issued'
+        ? { label: responseState, bg: '#F1F5F9', fg: '#64748B' }
+        : responseState === 'Awaiting supplier'
+          ? { label: responseState, bg: '#FEF3C7', fg: '#B45309' }
+          : { label: responseState, bg: '#DCFCE7', fg: '#15803D' }
+
+    const pendingRequestLatest = !!meta?.plannerNotifications?.some(
+      (n) => n.kind === 'request_latest' && !n.read,
+    )
+    const sendHistory = (meta?.sendHistory || []).map((s) => ({
+      recipient: s.recipient,
+      sentAt: s.sentAt,
+      deliveryStatus: s.deliveryStatus,
+      via: s.via,
+    }))
+
     return {
-      supplier: name,
-      initials: supplierInitials(name),
+      entityId,
+      supplier: legalName,
+      supplierEmail: supplierEmailFor(entityId),
+      propertyNames,
+      initials: supplierInitials(legalName),
+      ref,
+      kind,
       first,
       dateRange,
       countLabel: `${sorted.length} service line${sorted.length === 1 ? '' : 's'}`,
@@ -1584,45 +2065,87 @@ export function buildVouchers(
       totalLabel: mode === 'sell' ? 'Sell total' : 'Cost total',
       total: wholeUsd(totalNum),
       totalNum,
-      rows: sorted.map((l) => ({
-        date: fmtShortDate(l.date),
-        typeLabel: voucherTypeLabel(l),
-        service: voucherDesc(l),
-        detail: voucherDetail(l) || '—',
-        pax: l.pax != null ? String(l.pax) : '—',
-        value: wholeUsd(valueOf(l)),
-        isExtra: l.type === 'extra',
-      })),
+      gridCols:
+        `132px 152px minmax(170px,1.3fr) minmax(190px,1.9fr) 74px` + (show ? ' 118px' : ''),
+      headers: [
+        { label: 'Dates', align: 'l' as Align },
+        { label: 'Type', align: 'l' as Align },
+        { label: 'Service', align: 'l' as Align },
+        { label: 'Detail', align: 'l' as Align },
+        { label: 'Pax', align: 'c' as Align },
+        ...(show ? [{ label: mode === 'sell' ? 'Sell' : 'Cost', align: 'r' as Align }] : []),
+      ],
+      rows,
       deposit: wholeUsd(Math.round(cost * (rule.pct / 100))),
       depositRule: rule.label,
       depositDue: fmtDepositDue(first, rule),
       issued: isIssued,
+      activeToken: meta?.tokens.slice().reverse().find((t) => !t.supersededAt)?.token,
       voucherStatus,
+      responseState,
+      changedSinceIssued,
+      depositGuardCount,
+      note: meta?.note || '',
+      issuedAt: meta?.issuedAt,
+      issuedTo: meta?.issuedTo || [],
+      resendCount: meta?.resendCount || 0,
+      submittedByName: meta?.submittedByName,
+      submittedByEmail: meta?.submittedByEmail,
+      leadGuest: guests.find((g) => g.lead)?.name || guests[0]?.name || '',
+      partyMix,
+      agency,
+      rooms: voucherRoomRowsForEntity(sorted, services, entityId, guests),
+      guestRoster: roster.rows,
+      guestCoverageLabel: `Recorded for ${roster.recordedCount} of ${roster.total} guest${roster.total === 1 ? '' : 's'}`,
+      dietLine,
+      dietColor: notCaptured ? '#B45309' : '#15803D',
+      paxRows: served.map((g) => {
+        const band = g.type === 'infant' ? 'Infant' : g.type === 'adult' ? 'Adult' : 'Child'
+        return {
+          key: String(g.id),
+          name: g.name,
+          bandLabel: g.lead ? `${band} Lead` : band,
+        }
+      }),
+      supplierNotes,
+      hasDiscount: discountLines.length > 0,
+      discountRows: discountLines.map((l, i) => ({
+        key: l.lineId || `${l.serviceId}#${i}`,
+        label: `${fmtShortDate(l.date)} · ${voucherDesc(l)}`,
+        from: wholeUsd(l.net),
+        to: wholeUsd(costEffOf(l)),
+        tag: l.discount?.label || '',
+      })),
+      discountNote:
+        'The supplier is paid the adjusted cost — agree it with them before they invoice.',
+      emailLine: meta?.issuedAt
+        ? `Request sent ${fmtPayDate(meta.issuedAt.slice(0, 10))} to ${meta.issuedTo.join(', ') || supplierEmailFor(entityId)}` +
+          (meta.resendCount ? `  ·  resent ${meta.resendCount}×` : '') +
+          '  ·  confirmation link included'
+        : '',
+      sendHistory,
+      pendingRequestLatest,
+      responsePill,
+      responseHint:
+        responseState === 'Awaiting supplier'
+          ? 'Supplier ticks the lines they can hold and submits from the link'
+          : responseState === 'Not issued'
+            ? ''
+            : 'Per-line outcome recorded against the itinerary',
+      responseSummary: meta?.submittedAt
+        ? `${heldCount} service line${heldCount === 1 ? '' : 's'} on hold  ·  ` +
+          `${rejected.length ? `${rejected.length} rejected` : 'nothing rejected'}  ·  ` +
+          `${responseState === 'Recorded by planner' ? 'recorded by planner ' : 'submitted by supplier '}${answeredOn}`
+        : '',
+      responseRejected: rejected.map((r) => ({
+        key: r.lineId,
+        text: `${r.date} · ${r.service}${r.reason ? ` — ${r.reason}` : ''}`,
+      })),
+      responseAwaitText: `Waiting on ${legalName} to submit from the link in their email. If they reply by email instead, record their per-line answer here.`,
     }
   })
 
-  return cards
-    .sort((a, b) => (a.first || '').localeCompare(b.first || ''))
-    .map((card, index) => ({
-      supplier: card.supplier,
-      initials: card.initials,
-      ref: `${metaRef} / V${String(index + 1).padStart(2, '0')}`,
-      dateRange: card.dateRange,
-      countLabel: card.countLabel,
-      holdLabel: card.holdLabel,
-      holdFg: card.holdFg,
-      holdBg: card.holdBg,
-      showValue: card.showValue,
-      totalLabel: card.totalLabel,
-      total: card.total,
-      totalNum: card.totalNum,
-      rows: card.rows,
-      deposit: card.deposit,
-      depositRule: card.depositRule,
-      depositDue: card.depositDue,
-      issued: card.issued,
-      voucherStatus: card.voucherStatus,
-    }))
+  return cards.sort((a, b) => (a.first || '').localeCompare(b.first || ''))
 }
 
 export type InclusionParagraph = { supplier: string; body: string }

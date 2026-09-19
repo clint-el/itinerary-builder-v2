@@ -26,7 +26,132 @@ export type LineStatus = 'New' | 'Confirmed' | 'Cancelled'
 
 export type SupplierStatus = 'None' | 'NeedsRequest' | 'Waiting' | 'Booked' | 'Rejected'
 
-export type SupplierVoucherStatus = 'Raised' | 'Confirmed' | 'Rejected'
+/** 'Partial' = some lines on the voucher held, some not — not itself a confirmed/rejected outcome. */
+export type SupplierVoucherStatus = 'Raised' | 'Confirmed' | 'Rejected' | 'Partial'
+
+/** Per-service-line supplier answer. 'deposit_held_back' = the deposit guard fired: the line
+ *  couldn't be rejected because a deposit is already paid against it, so it's left for the
+ *  planner to resolve directly rather than counted as a reject or a hold. */
+export type VoucherLineOutcome = 'held' | 'rejected' | 'deposit_held_back'
+
+export interface VoucherLineAnswer {
+  outcome: VoucherLineOutcome
+  /** Required when outcome === 'rejected'. */
+  reason?: string
+  at: string
+}
+
+export interface PayableEntity {
+  id: string
+  legalName: string
+  reservationEmail?: string
+  headOffice?: string
+}
+
+export interface VoucherToken {
+  token: string
+  recipientEmail: string
+  createdAt: string
+  expiresAt: string
+  usedAt?: string
+  supersededAt?: string
+  /** Version this token was issued under — for superseded page display. */
+  version?: number
+}
+
+export type VoucherKind = 'standard' | 'cancellation_only'
+
+export type VoucherDeliveryStatus = 'queued' | 'sent' | 'failed'
+
+export interface VoucherSendRecord {
+  id: string
+  recipient: string
+  sentAt: string
+  deliveryStatus: VoucherDeliveryStatus
+  token: string
+  expiresAt: string
+  via: 'issue' | 'resend' | 'reissue'
+  from: string
+  cc: string[]
+  replyTo: string
+  messageId?: string
+}
+
+export interface VoucherLineDecision {
+  lineId: string
+  outcome: VoucherLineOutcome
+  reason?: string
+}
+
+export interface VoucherAnswerRecord {
+  id: string
+  at: string
+  actorType: 'supplier-link' | 'staff' | 'acknowledge'
+  actorEmail?: string
+  tokenId?: string
+  userAgent?: string
+  ip?: string | null
+  courtesyName?: string
+  lineDecisions: VoucherLineDecision[]
+}
+
+export interface PlannerNotification {
+  id: string
+  at: string
+  kind: 'all_confirmed' | 'all_rejected' | 'partial' | 'request_latest'
+  entityId: string
+  message: string
+  read?: boolean
+}
+
+export interface VoucherChaseSchedule {
+  nextAt: string
+  sentCount: number
+}
+
+export interface VoucherMeta {
+  issued: boolean
+  issuedAt?: string
+  issuedTo: string[]
+  /** Stable business reference — assigned on first issue, unchanged on re-issue (PR-F10). */
+  voucherRef?: string
+  voucherSeq?: number
+  kind?: VoucherKind
+  /** Signature of served-guest dietary state at issue time. */
+  requirementsSignature?: string
+  /** Full commercial + line snapshot at issue (PR-F24). */
+  contentSignature?: string
+  tokens: VoucherToken[]
+  resendCount: number
+  lastResendAt?: string
+  version: number
+  submittedAt?: string
+  submittedVia?: 'link' | 'staff' | 'acknowledge'
+  submittedByEmail?: string
+  submittedByName?: string
+  note?: string
+  supplierBookingRef?: string
+  sendHistory?: VoucherSendRecord[]
+  answerHistory?: VoucherAnswerRecord[]
+  plannerNotifications?: PlannerNotification[]
+  chaseSchedule?: VoucherChaseSchedule
+  /** Issuing planner email for CC/Reply-To stubs. */
+  issuingPlannerEmail?: string
+}
+
+export type MandatoryFollowUpKind = 'source_reissue' | 'source_cancellation' | 'destination_issue'
+
+export interface MandatoryFollowUp {
+  id: string
+  kind: MandatoryFollowUpKind
+  entityId: string
+  fromItineraryId: string
+  toItineraryId?: string
+  lineIds: string[]
+  formerSourceRef?: string
+  status: 'open' | 'completed'
+  createdAt: string
+}
 
 export type DemoRole =
   | 'Safari.Planner'
@@ -77,12 +202,17 @@ export interface Itinerary {
   quoteFingerprint?: string
   /** Commercial fingerprint covered by the latest generated invoice. */
   invoiceFingerprint?: string
-  /** Per-supplier voucher outcome after Invoiced → Vouchered. */
+  /** Per payable-entity voucher outcome — keyed by PayableEntity.id (PR-F02). */
   supplierVouchers?: Record<string, SupplierVoucherStatus>
+  /** Per-entity issue/token/response tracking — keyed by PayableEntity.id. */
+  voucherMeta?: Record<string, VoucherMeta>
+  voucherLineAnswers?: Record<string, VoucherLineAnswer>
+  mandatoryFollowUps?: MandatoryFollowUp[]
   lastTransitionReason?: string
-  /** Append-only lifecycle status transitions (MVP Activity Log). */
   lifecycleLog?: LifecycleLogEntry[]
 }
+
+export type LifecycleLogCategory = 'status' | 'voucher-send' | 'supplier-link' | 'voucher-staff'
 
 export interface LifecycleLogEntry {
   id: string
@@ -92,6 +222,9 @@ export interface LifecycleLogEntry {
   to: ItineraryStatus
   label?: string
   reason?: string
+  category?: LifecycleLogCategory
+  entityId?: string
+  detail?: string
 }
 
 export interface CatalogItem {
@@ -117,6 +250,11 @@ export interface Guest {
 }
 
 export type GuestResidency = 'citizen' | 'resident' | 'nonResident'
+
+/** Three-state guest requirement model (BR-21) — a blank string must never stand in for
+ *  "none required": 'recorded' prints the text verbatim, 'none' prints "No special
+ *  requirements", 'not_captured' (the true default) prints "Not yet advised — to follow". */
+export type DietaryStatus = 'recorded' | 'none' | 'not_captured'
 
 export interface Room {
   id: string
@@ -222,6 +360,9 @@ export interface AddedService {
   /** Commercial fingerprint captured when the line was Confirmed. */
   confirmedFp?: string
   opsReady?: boolean
+  /** A deposit has already been paid against this service — the voucher deposit guard (BR-43)
+   *  blocks a supplier reject on any of its lines from deleting/losing the deposit silently. */
+  depositPaid?: boolean
 }
 
 export interface QuoteExtra {
@@ -279,6 +420,9 @@ export interface GuestDetail {
   residency?: GuestResidency
   flight?: string
   dietary?: string
+  /** Explicit tri-state for `dietary` — undefined/back-compat reads as 'recorded' when
+   *  `dietary` has text, else 'not_captured'. See DietaryStatus. */
+  dietaryStatus?: DietaryStatus
   preferences?: string
   note?: string
   lead?: boolean

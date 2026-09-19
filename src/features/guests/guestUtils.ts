@@ -324,6 +324,18 @@ export function blankGuest(role: GuestRole = 'Adult'): GuestDetail {
   }
 }
 
+export function dietaryStatusOf(g: GuestDetail): 'recorded' | 'none' | 'not_captured' {
+  if (g.dietaryStatus) return g.dietaryStatus
+  return g.dietary ? 'recorded' : 'not_captured'
+}
+
+export function dietaryRequirementsLabel(g: GuestDetail): string {
+  const status = dietaryStatusOf(g)
+  if (status === 'recorded') return g.dietary?.trim() || '—'
+  if (status === 'none') return 'No requirements'
+  return 'Not yet advised'
+}
+
 export function roleChipClass(role: GuestRole): string {
   if (role === 'Adult') return 'bg-[#EEF2FF] text-[#3730A3]'
   if (role === 'Child') return 'bg-[#ECFDF5] text-[#047857]'

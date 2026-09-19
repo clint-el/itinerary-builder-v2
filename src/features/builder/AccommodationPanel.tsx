@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { payableEntityForCatalogItem } from '@/shared/lib/payableEntities'
 import type { DemoRole, Guest, Hold, Room } from '@/shared/lib/types'
 import { cn, formatUsd } from '@/shared/lib/utils'
 import { DatePickerGridInput } from '@/shared/ui/date-picker'
@@ -192,9 +193,16 @@ export function AccommodationPanel({
             <SupplierPicker
               tab="accommodation"
               value={String(draft.supplier || '')}
-              onPick={(item: CatalogItem) =>
-                patch({ supplier: item.name, service: item.service, serviceId: item.id })
-              }
+              onPick={(item: CatalogItem) => {
+                const entity = payableEntityForCatalogItem(item)
+                patch({
+                  supplier: item.name,
+                  service: item.service,
+                  serviceId: item.id,
+                  payableEntityId: entity.id,
+                  payableEntityName: entity.legalName,
+                })
+              }}
             />
           </div>
         </div>

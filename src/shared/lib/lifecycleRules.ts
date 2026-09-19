@@ -1,11 +1,16 @@
+import { getPayableEntity, payableEntityFromSupplierName } from './payableEntities'
 import type {
   AddedService,
   DemoRole,
   Itinerary,
   ItineraryStatus,
   LineStatus,
+  PayableEntity,
   SupplierStatus,
   SupplierVoucherStatus,
+  VoucherLineAnswer,
+  VoucherLineOutcome,
+  VoucherMeta,
 } from './types'
 
 export type GateResult = { ok: true } | { ok: false; ruleId: string; reason: string }
@@ -94,6 +99,18 @@ export function supplierNameOf(service: AddedService): string {
   return String(draft.supplier || draft.service || service.title || 'Supplier')
 }
 
+/** Payable legal entity for voucher grouping (PR-F02). */
+export function payableEntityOf(service: AddedService): PayableEntity {
+  const draft = service.draft || {}
+  const id = String(draft.payableEntityId || '')
+  if (id) return getPayableEntity(id)
+  return payableEntityFromSupplierName(supplierNameOf(service))
+}
+
+export function payableEntityIdOf(service: AddedService): string {
+  return payableEntityOf(service).id
+}
+
 export function hasUnresolvedRejection(services: AddedService[]): boolean {
   return billableServices(services).some((s) => supplierStatusOf(s) === 'Rejected')
 }
@@ -169,12 +186,20 @@ export function roleAllowsLineAction(
   return false
 }
 
+/**
+ * 'issue'/'resend' — planner sends the confirmation request (RU-01: the planner issues,
+ * never an automatic side-effect). 'recordOnBehalf' — staff enter a supplier's phone/email
+ * reply on their behalf (BR-38); still requires the same operational roles as issuing.
+ * Submitting *through the supplier's own link* is deliberately not gated here — that page
+ * is reached by token, not by demo role (RU-12: a token authorizes, it does not authenticate).
+ */
 export function roleAllowsVoucherAction(
   role: DemoRole,
-  action: 'confirm' | 'reject' | 'issue',
+  action: 'issue' | 'resend' | 'recordOnBehalf',
 ): boolean {
   if (role === 'Admin') return true
   if (role === 'Operations') return true
+  if (role === 'Safari.Planner') return true
   if (role === 'Finance' && action === 'issue') return true
   return false
 }
@@ -424,10 +449,10 @@ export function raiseVouchers(
 
     if (lineStatusOf(service) !== 'Confirmed') return service
 
-    const supplier = supplierNameOf(service)
-    const existing = vouchers[supplier]
+    const entityId = payableEntityIdOf(service)
+    const existing = vouchers[entityId]
     if (existing !== 'Confirmed' && existing !== 'Rejected') {
-      vouchers[supplier] = 'Raised'
+      vouchers[entityId] = 'Raised'
     }
 
     if (service.tab === 'other') {
@@ -442,23 +467,118 @@ export function raiseVouchers(
   return { services: next, supplierVouchers: vouchers }
 }
 
-export function setSupplierVoucherOutcome(
+/** Minimal per-line projection `applyVoucherLineSubmit` needs — avoids a summaryModel import. */
+export type VoucherLineInput = {
+  lineId: string
+  serviceId: string
+  depositPaid?: boolean
+  isExtra?: boolean
+  parentLineId?: string
+}
+
+/**
+ * Applies one atomic per-line tick submit for a supplier's voucher (BR-30/31/32). Ticked lines
+ * go on hold; unticked lines are recorded rejected and left exactly where they are on the
+ * itinerary — never deleted (RU-08). A line with a deposit already paid can't be rejected by a
+ * submit (BR-43): the tick still "fails" toward reject, but the line is left for the planner
+ * to resolve directly rather than either held or rejected. The whole-voucher roll-up is derived,
+ * never chosen directly: Confirmed only when every line is held, Rejected only when every line
+ * is rejected, Partial otherwise (RU-18).
+ */
+export function applyVoucherLineSubmit(
   services: AddedService[],
   supplierVouchers: Record<string, SupplierVoucherStatus>,
-  supplier: string,
-  outcome: 'Confirmed' | 'Rejected',
-): { services: AddedService[]; supplierVouchers: Record<string, SupplierVoucherStatus> } {
-  const nextVouchers = { ...supplierVouchers, [supplier]: outcome }
+  voucherLineAnswers: Record<string, VoucherLineAnswer>,
+  entityId: string,
+  lines: VoucherLineInput[],
+  ticks: Record<string, boolean>,
+  reasons: Record<string, string>,
+  at: string,
+): {
+  services: AddedService[]
+  supplierVouchers: Record<string, SupplierVoucherStatus>
+  voucherLineAnswers: Record<string, VoucherLineAnswer>
+  depositGuardLineIds: string[]
+} {
+  const nextAnswers = { ...voucherLineAnswers }
+  const depositGuardLineIds: string[] = []
+
+  for (const line of lines) {
+    let wantsHold = ticks[line.lineId] !== false
+    if (line.isExtra && line.parentLineId) {
+      const parentHeld = ticks[line.parentLineId] !== false
+      if (wantsHold && !parentHeld) wantsHold = false
+    }
+    let outcome: VoucherLineOutcome
+    if (!wantsHold && line.depositPaid) {
+      outcome = 'deposit_held_back'
+      depositGuardLineIds.push(line.lineId)
+    } else {
+      outcome = wantsHold ? 'held' : 'rejected'
+    }
+    nextAnswers[line.lineId] = {
+      outcome,
+      reason: outcome === 'rejected' ? reasons[line.lineId] : undefined,
+      at,
+    }
+  }
+
+  const outcomesByService = new Map<string, VoucherLineOutcome[]>()
+  for (const line of lines) {
+    const arr = outcomesByService.get(line.serviceId) || []
+    arr.push(nextAnswers[line.lineId].outcome)
+    outcomesByService.set(line.serviceId, arr)
+  }
+
   const nextServices = services.map((service) => {
     if (!isBillable(service)) return service
-    if (supplierNameOf(service) !== supplier) return service
+    if (payableEntityIdOf(service) !== entityId) return service
     if (lineStatusOf(service) !== 'Confirmed') return service
-    return {
-      ...service,
-      supplierStatus: (outcome === 'Confirmed' ? 'Booked' : 'Rejected') as SupplierStatus,
-    }
+    const outcomes = outcomesByService.get(service.id)
+    if (!outcomes || !outcomes.length) return service
+    const hasRejected = outcomes.includes('rejected')
+    const allHeld = outcomes.every((o) => o === 'held')
+    let supplierStatus: SupplierStatus = service.supplierStatus ?? 'Waiting'
+    if (hasRejected) supplierStatus = 'Rejected'
+    else if (allHeld) supplierStatus = 'Booked'
+    else supplierStatus = 'Waiting' // deposit_held_back only — needs the planner, not a reject
+    return { ...service, supplierStatus }
   })
-  return { services: nextServices, supplierVouchers: nextVouchers }
+
+  const allOutcomes = lines.map((l) => nextAnswers[l.lineId].outcome)
+  const rollup: SupplierVoucherStatus = allOutcomes.every((o) => o === 'held')
+    ? 'Confirmed'
+    : allOutcomes.every((o) => o === 'rejected')
+      ? 'Rejected'
+      : 'Partial'
+
+  return {
+    services: nextServices,
+    supplierVouchers: { ...supplierVouchers, [entityId]: rollup },
+    voucherLineAnswers: nextAnswers,
+    depositGuardLineIds,
+  }
+}
+
+/** GET-safe read of what the supplier's own confirmation link would show (RU-11/RU-13/RU-14):
+ *  opening it never decides anything, so this is pure evaluation, no writes. */
+export type VoucherTokenState = 'ok' | 'expired' | 'used' | 'superseded' | 'invalid'
+
+export function evaluateVoucherToken(
+  meta: VoucherMeta | undefined,
+  token: string | null | undefined,
+  nowIso: string,
+): { state: VoucherTokenState; recipientEmail?: string } {
+  if (!meta || !token) return { state: 'invalid' }
+  const match = meta.tokens.find((t) => t.token === token)
+  if (!match) return { state: 'invalid' }
+  if (match.supersededAt) return { state: 'superseded', recipientEmail: match.recipientEmail }
+  if (match.usedAt) return { state: 'used', recipientEmail: match.recipientEmail }
+  if (meta.submittedAt && meta.tokens.every((t) => t.usedAt || t.supersededAt)) {
+    return { state: 'used', recipientEmail: match.recipientEmail }
+  }
+  if (match.expiresAt < nowIso) return { state: 'expired', recipientEmail: match.recipientEmail }
+  return { state: 'ok', recipientEmail: match.recipientEmail }
 }
 
 export function lineStatusLabel(status: LineStatus): string {

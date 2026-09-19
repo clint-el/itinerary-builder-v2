@@ -11,141 +11,41 @@ import {
   X,
 } from 'lucide-react'
 import { useStore } from '@/app/store'
-import africanStyleImg from '@/assets/African-Style.webp'
-import frontRowSeatsImg from '@/assets/Front-Row-Seats.webp'
-import plainsMajestyImg from '@/assets/Plains-Majesty.webp'
-import totallyFocusedImg from '@/assets/totally-focused.webp'
 import { Button } from '@/components/ui/button'
 import {
+  balanceDueDate,
+  buildLedgerCancellationRows,
+  buildLedgerOptionRows,
+  buildLedgerPaymentTerms,
+  buildLedgerScheduleGroups,
+  categoryGridFromGroups,
+  fmtLedgerAmount,
+  fmtLedgerDateLong,
+  fmtLedgerUsd,
+  GENERAL_LEDGER_EXCLUSIONS,
+  GENERAL_LEDGER_INCLUSIONS,
+  guestRosterRows,
+  itineraryTitle,
+  paxComposition,
+  quoteValidUntil,
+} from '@/features/quote-doc/quoteLedgerModel'
+import {
   buildDepositSummary,
-  buildInclusions,
-  buildSummaryCards,
-  buildSummaryDays,
+  buildPriceGroups,
   buildSummaryPricing,
   linesFromQuoteGroups,
   linesFromServices,
-  SUMMARY_TYPE_META,
-  type SummaryLine,
 } from '@/features/summary/summaryModel'
 import { nightsBetween, partyGuests } from '@/shared/lib/helpers'
-import type { AddedService, Hold, Itinerary } from '@/shared/lib/types'
-import { cn, formatDay, formatUsd } from '@/shared/lib/utils'
+import type { AddedService, Hold } from '@/shared/lib/types'
+import { cn } from '@/shared/lib/utils'
 
-const TERMS = [
-  {
-    title: 'Provisional holds',
-    body: 'Rooms and flights are held provisionally and are released automatically if the deposit is not received by the date shown. Availability cannot be guaranteed after release.',
-  },
-  {
-    title: 'Cancellation',
-    body: 'Cancellation more than 60 days before travel forfeits the deposit. Within 60 days, 100% of the total is payable. Individual properties may apply stricter terms in peak season.',
-  },
-  {
-    title: 'Rates and currency',
-    body: 'Rates are quoted in US dollars and are subject to change in the event of government-imposed increases in park fees, taxes or fuel levies before the deposit is received.',
-  },
-  {
-    title: 'Children',
-    body: 'Child rates apply to guests aged 12 and under sharing with two adults. Some properties operate minimum-age policies on game activities.',
-  },
-]
+const PAGE_W = 794
+const PAGE_H = 1123
+const MAROON = '#580B0B'
+const GRID_SCHEDULE = 'grid grid-cols-[52px_148px_minmax(0,1fr)_74px_26px_84px] gap-x-2'
 
-const PAGE_CLASS =
-  'qd-page mt-7 flex h-[1123px] w-[794px] shrink-0 flex-col bg-white px-14 pb-10 pt-14 shadow-[0_12px_32px_rgba(0,0,0,0.35)]'
-const TYPE_COLORS: Record<SummaryLine['type'], string> = {
-  accommodation: '#059669',
-  flight: '#2563EB',
-  transportation: '#D97706',
-  activity: '#7E22CE',
-  extra: '#0369A1',
-  other: '#475569',
-}
-const STAY_IMAGES = [africanStyleImg, totallyFocusedImg, frontRowSeatsImg, plainsMajestyImg]
-const MAX_DOC_DAYS = 60
-
-type BreakdownGroup = {
-  name: string
-  subtotal: number
-  lines: { label: string; detail: string; qty: string; amount: number }[]
-}
-
-function dateFromIso(iso: string) {
-  return iso ? new Date(`${iso}T00:00:00`) : new Date()
-}
-
-function addDays(iso: string, days: number) {
-  const dt = dateFromIso(iso)
-  dt.setDate(dt.getDate() + days)
-  return dt
-}
-
-/** Local-calendar date arithmetic — toISOString() would shift the day in non-UTC zones. */
-function isoAddDays(iso: string, days: number) {
-  const dt = addDays(iso, days)
-  const month = String(dt.getMonth() + 1).padStart(2, '0')
-  const day = String(dt.getDate()).padStart(2, '0')
-  return `${dt.getFullYear()}-${month}-${day}`
-}
-
-function fmtLongDate(dt: Date) {
-  return dt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-}
-
-function fmtDayDate(iso: string) {
-  if (!iso) return 'Date TBC'
-  return dateFromIso(iso).toLocaleDateString('en-GB', {
-    weekday: 'short',
-    day: '2-digit',
-    month: 'short',
-  })
-}
-
-function destinationLabel(itinerary: Pick<Itinerary, 'destinations' | 'destination'>) {
-  return (itinerary.destinations?.length ? itinerary.destinations.join(' & ') : itinerary.destination) || 'Destination TBC'
-}
-
-function lineLabel(line: SummaryLine) {
-  if (line.type === 'accommodation') return `${line.supplier} — ${line.roomType || 'Room'}`
-  if (line.type === 'flight') return line.route || line.supplier
-  if (line.type === 'transportation') {
-    return line.kind === 'disposal'
-      ? `${line.vType || 'Vehicle'} at disposal · ${line.location || line.supplier}`
-      : `${line.pickup || 'Pickup TBC'} → ${line.dropoff || 'Drop-off TBC'}`
-  }
-  return line.service || line.supplier
-}
-
-function lineDetail(line: SummaryLine) {
-  const bits = [line.date ? formatDay(line.date) : '', line.supplier]
-  if (line.type === 'accommodation') bits.push(line.basis || '')
-  if (line.type === 'flight') bits.push(line.charter || '')
-  return bits.filter(Boolean).join(' · ')
-}
-
-function lineQty(line: SummaryLine) {
-  if (line.type === 'accommodation') return `${line.nights || 1} night${line.nights === 1 ? '' : 's'}`
-  if (line.type === 'transportation') {
-    return line.kind === 'disposal'
-      ? `${line.days || 1} day${line.days === 1 ? '' : 's'}`
-      : `${line.veh || 1} vehicle${line.veh === 1 ? '' : 's'}`
-  }
-  if (line.qty) return line.qty
-  if (line.pax) return `${line.pax} pax`
-  return '1'
-}
-
-function dayItemDetail(line: SummaryLine) {
-  if (line.type === 'accommodation') {
-    return `${line.basis || 'Basis TBC'}${line.nights ? ` · ${line.nights} nights` : ''}`
-  }
-  if (line.type === 'flight') return [line.supplier, line.charter].filter(Boolean).join(' · ')
-  if (line.type === 'transportation') {
-    return line.kind === 'disposal'
-      ? [line.vType, `${line.days || 1} day(s)`].filter(Boolean).join(' · ')
-      : [line.vType, line.supplier].filter(Boolean).join(' · ')
-  }
-  return line.supplier
-}
+type PageDef = { key: number; label: string }
 
 export function QuoteDocPage() {
   const { id = '' } = useParams()
@@ -154,16 +54,14 @@ export function QuoteDocPage() {
   const itinerary = itineraries.find((item) => item.id === id)
   const services = getServices(id)
   const quoteGroups = getQuoteGroups(id)
+  const guestDetails = getGuestDetails(id)
   const guests = useMemo(
-    () => (itinerary ? partyGuests(itinerary, getGuestDetails(id)) : []),
-    [itinerary, id, getGuestDetails],
+    () => (itinerary ? partyGuests(itinerary, guestDetails) : []),
+    [itinerary, guestDetails],
   )
 
   const [zoom, setZoom] = useState(80)
   const [optionsOpen, setOptionsOpen] = useState(false)
-  const [showNarrative, setShowNarrative] = useState(true)
-  const [showImages, setShowImages] = useState(true)
-  const [showBreakdown, setShowBreakdown] = useState(true)
   const [showTerms, setShowTerms] = useState(true)
   const [priceMode, setPriceMode] = useState<'total' | 'pp'>('pp')
   const [warningDismissed, setWarningDismissed] = useState(false)
@@ -199,100 +97,52 @@ export function QuoteDocPage() {
     if (quoteGroups.length) return linesFromQuoteGroups(quoteGroups)
     return []
   }, [quoteGroups, services, guests])
-  const cards = useMemo(() => buildSummaryCards(lines), [lines])
-  const totalGuestsForPricing =
-    guests.length || (itinerary ? (itinerary.adults || 0) + (itinerary.children || 0) + (itinerary.infants || 0) : 0)
-  const pricing = useMemo(
-    () => buildSummaryPricing(lines, totalGuestsForPricing),
-    [lines, totalGuestsForPricing],
-  )
-  const deposits = useMemo(
-    () => buildDepositSummary(lines, pricing.sellNumber),
-    [lines, pricing.sellNumber],
-  )
-  const { inclusions, exclusionsBody } = useMemo(() => buildInclusions(lines), [lines])
-  const sortedLines = useMemo(
-    () => [...lines].sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999')),
-    [lines],
-  )
-  const accommodationLines = useMemo(
-    () => sortedLines.filter((line) => line.type === 'accommodation'),
-    [sortedLines],
-  )
-  const accommodationProperties = useMemo(() => {
-    const properties = new Map<string, SummaryLine[]>()
-    for (const line of accommodationLines) {
-      const existing = properties.get(line.supplier) || []
-      existing.push(line)
-      properties.set(line.supplier, existing)
-    }
-    return [...properties.entries()].map(([supplier, propertyLines]) => {
-      const first = propertyLines[0]
-      return {
-        ...first,
-        supplier,
-        roomType: [...new Set(propertyLines.map((line) => line.roomType).filter(Boolean))].join(' + '),
-        nights: Math.max(...propertyLines.map((line) => line.nights || 0)),
-      }
-    })
-  }, [accommodationLines])
-  const breakdownGroups = useMemo<BreakdownGroup[]>(
-    () =>
-      cards.map((card) => {
-        const categoryLines = sortedLines.filter((line) => line.type === card.type)
-        return {
-          name: card.name,
-          subtotal: categoryLines.reduce((sum, line) => sum + (line.rack || 0), 0),
-          lines: categoryLines.map((line) => ({
-            label: lineLabel(line),
-            detail: lineDetail(line),
-            qty: lineQty(line),
-            amount: line.rack || 0,
-          })),
-        }
-      }),
-    [cards, sortedLines],
-  )
-  const dayRows = useMemo(() => {
-    const start = itinerary?.travelDateFrom
-    const end = itinerary?.travelDateTo
-    if (!start || !end) {
-      return buildSummaryDays(lines).map((day) => ({
-        ...day,
-        date: sortedLines.find((line) => line.date && day.dateLabel.includes(formatDay(line.date)))?.date,
-        lines: sortedLines.filter((line) => line.date && day.dateLabel.includes(formatDay(line.date))),
-      }))
-    }
 
-    const totalDays = Math.max(1, Math.min(MAX_DOC_DAYS, nightsBetween(start, end) + 1))
-    return Array.from({ length: totalDays }, (_, offset) => {
-      const date = isoAddDays(start, offset)
-      const dated = sortedLines.filter((line) => line.date === date && line.type !== 'accommodation')
-      const stays = accommodationProperties.filter((line) => {
-        if (!line.date) return false
-        return date >= line.date && date < isoAddDays(line.date, line.nights || 1)
-      })
-      const unique = new Map<string, SummaryLine>()
-      for (const line of [...dated, ...stays]) {
-        const key = `${line.type}:${lineLabel(line)}`
-        if (!unique.has(key)) unique.set(key, line)
-      }
-      return {
-        dayNum: `Day ${offset + 1}`,
-        dateLabel: fmtDayDate(date),
-        weekday: '',
-        items: [],
-        date,
-        lines: [...unique.values()],
-      }
-    })
-  }, [accommodationProperties, itinerary?.travelDateFrom, itinerary?.travelDateTo, lines, sortedLines])
+  const priceGroups = useMemo(() => buildPriceGroups(lines), [lines])
+  const scheduleGroups = useMemo(() => buildLedgerScheduleGroups(lines), [lines])
+  const categoryGrid = useMemo(() => categoryGridFromGroups(priceGroups), [priceGroups])
+  const totalGuests =
+    guests.length ||
+    (itinerary ? (itinerary.adults || 0) + (itinerary.children || 0) + (itinerary.infants || 0) : 0)
+  const pricing = useMemo(() => buildSummaryPricing(lines, totalGuests), [lines, totalGuests])
+  const deposits = useMemo(() => buildDepositSummary(lines, pricing.sellNumber), [lines, pricing.sellNumber])
+  const optionRows = useMemo(() => buildLedgerOptionRows(lines, services), [lines, services])
+  const paymentTerms = useMemo(() => buildLedgerPaymentTerms(lines), [lines])
+  const cancellationRows = useMemo(
+    () =>
+      buildLedgerCancellationRows(
+        lines,
+        itinerary?.travelDateFrom || '',
+        itinerary?.travelDateTo || '',
+      ),
+    [lines, itinerary?.travelDateFrom, itinerary?.travelDateTo],
+  )
+
+  const grossSell = useMemo(() => lines.reduce((sum, l) => sum + (l.rack || 0), 0), [lines])
+
+  const pageDefs = useMemo<PageDef[]>(() => {
+    const base: PageDef[] = [
+      { key: 1, label: 'Cover' },
+      { key: 2, label: 'Schedule' },
+      { key: 3, label: 'Totals' },
+      { key: 4, label: 'Inclusions' },
+    ]
+    if (showTerms) base.push({ key: 5, label: 'Terms' })
+    return base
+  }, [showTerms])
+
+  const pageNumber = (key: number) => pageDefs.findIndex((page) => page.key === key) + 1
+  const totalPages = pageDefs.length
+  const versionLabel = `v${version}`
+  const refLabel = `${itinerary?.reference || id} · ${versionLabel}`
 
   if (!itinerary) {
     return (
       <div className="flex h-screen flex-col items-center justify-center gap-3 bg-[#3F3F46] text-white">
         <p className="text-sm text-white/70">Itinerary not found.</p>
-        <Button asChild variant="outline"><Link to="/">Back to inquiries</Link></Button>
+        <Button asChild variant="outline">
+          <Link to="/">Back to inquiries</Link>
+        </Button>
       </div>
     )
   }
@@ -310,45 +160,27 @@ export function QuoteDocPage() {
     (itinerary.infantsCitizen || 0) + (itinerary.infantsRes || 0) + (itinerary.infantsNonRes || 0)
   const nightsCount =
     nightsBetween(itinerary.travelDateFrom, itinerary.travelDateTo) ||
-    accommodationLines.reduce((sum, line) => sum + (line.nights || 0), 0)
-  const daysCount = nightsCount ? nightsCount + 1 : Math.max(dayRows.length, 1)
+    lines.filter((l) => l.type === 'accommodation').reduce((sum, l) => sum + (l.nights || 0), 0)
+  const daysCount = nightsCount ? nightsCount + 1 : 1
   const lead =
-    [itinerary.leadFirst, itinerary.leadLast].filter(Boolean).join(' ') || itinerary.title || 'Guest'
-  const guestsLabel =
-    itinerary.guestsLabel ||
-    [
-      adults ? `${adults} adult${adults === 1 ? '' : 's'}` : '',
-      children ? `${children} child${children === 1 ? '' : 'ren'}` : '',
-      infants ? `${infants} infant${infants === 1 ? '' : 's'}` : '',
-    ].filter(Boolean).join(', ') ||
-    '—'
-  const travelDates = itinerary.travelDateFrom
-    ? `${formatDay(itinerary.travelDateFrom)}${itinerary.travelDateTo ? ` – ${formatDay(itinerary.travelDateTo)}` : ''}`
-    : 'TBC'
-  const validUntil = fmtLongDate(addDays(new Date().toISOString().slice(0, 10), 14))
-  const balanceDue = itinerary.travelDateFrom
-    ? fmtLongDate(addDays(itinerary.travelDateFrom, -60))
-    : '60 days before travel'
+    [itinerary.leadFirst, itinerary.leadLast].filter(Boolean).join(' ') ||
+    itinerary.title ||
+    'Guest'
+  const familyLabel = itinerary.title || lead
+  const issuedOn = fmtLedgerDateLong(new Date().toISOString().slice(0, 10))
+  const validUntil = quoteValidUntil(new Date().toISOString().slice(0, 10))
+  const balanceDue = balanceDueDate(itinerary.travelDateFrom || '')
+  const perPerson = totalGuests ? pricing.sellNumber / totalGuests : 0
+  const countries =
+    itinerary.destinations?.length
+      ? itinerary.destinations.join(' · ')
+      : itinerary.destination || '—'
+  const roster = guestRosterRows(guests, guestDetails)
   const pendingHolds = services.reduce((count: number, service: AddedService) => {
     const holds = (service.draft?.holds as Hold[] | undefined) || []
     return count + holds.filter((hold) => hold.status === 'Requested').length
   }, 0)
-  const weightedGuests = adults + children * 0.7
-  const perAdult = weightedGuests ? pricing.sellNumber / weightedGuests : 0
-  const perChild = perAdult * 0.7
-  const versionLabel = `v${version}`
-  const pageDefs = [
-    { key: 1, label: 'Cover' },
-    { key: 2, label: 'Day 1 – 8' },
-    { key: 21, label: 'Day 9 onwards' },
-    ...(showNarrative ? [{ key: 3, label: 'Where you stay' }] : []),
-    { key: 4, label: 'Investment' },
-    { key: 42, label: 'Investment 2' },
-    { key: 41, label: 'Totals' },
-    { key: 43, label: 'Inclusions' },
-    ...(showTerms ? [{ key: 5, label: 'Terms' }] : []),
-  ]
-  const pageNumber = (key: number) => pageDefs.findIndex((page) => page.key === key) + 1
+
   const showFlash = (message: string) => {
     if (flashTimerRef.current) clearTimeout(flashTimerRef.current)
     setFlash(message)
@@ -362,7 +194,7 @@ export function QuoteDocPage() {
   }
   const fitWidth = () => {
     const width = viewportRef.current?.clientWidth || 0
-    if (width) setZoom(Math.max(40, Math.min(150, Math.floor(((width - 64) / 794) * 100))))
+    if (width) setZoom(Math.max(40, Math.min(150, Math.floor(((width - 64) / PAGE_W) * 100))))
   }
   const regenerate = () => {
     const next = version + 1
@@ -372,7 +204,7 @@ export function QuoteDocPage() {
   }
 
   return (
-    <div className="qd-shell flex h-screen flex-col overflow-hidden bg-[#3F3F46]">
+    <div className="qd-shell flex h-screen flex-col overflow-hidden bg-[#3F3F46] font-['IBM_Plex_Sans',system-ui,sans-serif] text-[#101010]">
       <style>{`
         @media print {
           @page { size: A4; margin: 0; }
@@ -418,21 +250,26 @@ export function QuoteDocPage() {
         <span className="h-6 w-px shrink-0 bg-[#E5E7EB]" />
         <div className="flex min-w-0 flex-col">
           <span className="truncate text-[13.5px] font-bold text-[#171717]">
-            Quote {itinerary.reference} · {versionLabel}
+            Quotation {itinerary.reference} · {versionLabel}
           </span>
           <span className="truncate text-[11.5px] text-[#A1A1A1]">
-            Generated {fmtLongDate(new Date())} by {itinerary.safariPlanner || 'Safari planner'}
+            Ledger layout · generated {issuedOn} by {itinerary.safariPlanner || 'Safari planner'}
           </span>
         </div>
-        <span className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full bg-[#F3E8FF] px-2.5 text-[11.5px] font-bold text-[#7E22CE]">
-          <span className="size-1.5 rounded-full bg-[#7E22CE]" /> Quoted
+        <span className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full bg-[#FDF2F2] px-2.5 text-[11.5px] font-bold text-[#931115]">
+          <span className="size-1.5 rounded-full bg-[#931115]" /> Quoted
         </span>
         <div className="flex-1" />
         <div className="flex shrink-0 items-center gap-0.5 rounded-lg bg-[#F4F4F5] p-[3px]">
           <ZoomButton title="Zoom out" onClick={() => setZoom((value) => Math.max(40, value - 10))}>
             <Minus className="size-3.5" />
           </ZoomButton>
-          <button type="button" title="Fit to width" onClick={fitWidth} className="h-[26px] min-w-12 rounded-md text-[12.5px] font-semibold hover:bg-white">
+          <button
+            type="button"
+            title="Fit to width"
+            onClick={fitWidth}
+            className="h-[26px] min-w-12 rounded-md text-[12.5px] font-semibold hover:bg-white"
+          >
             {zoom}%
           </button>
           <ZoomButton title="Zoom in" onClick={() => setZoom((value) => Math.min(150, value + 10))}>
@@ -450,10 +287,11 @@ export function QuoteDocPage() {
           {optionsOpen ? (
             <div className="absolute right-0 top-10 z-30 w-[308px] rounded-xl border bg-white p-4 shadow-xl">
               <p className="mb-2 text-[11.5px] font-bold uppercase tracking-wide text-[#A1A1A1]">Sections</p>
-              <OptionToggle label="Property narrative" on={showNarrative} onClick={() => setShowNarrative((value) => !value)} />
-              <OptionToggle label="Lodge imagery" on={showImages} onClick={() => setShowImages((value) => !value)} />
-              <OptionToggle label="Price breakdown by category" on={showBreakdown} onClick={() => setShowBreakdown((value) => !value)} />
-              <OptionToggle label="Payment schedule & terms" on={showTerms} onClick={() => setShowTerms((value) => !value)} />
+              <OptionToggle
+                label="Payment terms & cancellation"
+                on={showTerms}
+                onClick={() => setShowTerms((value) => !value)}
+              />
               <div className="my-3 h-px bg-[#E5E7EB]" />
               <p className="mb-2 text-[11.5px] font-bold uppercase tracking-wide text-[#A1A1A1]">Price display</p>
               <div className="flex gap-1.5">
@@ -496,11 +334,17 @@ export function QuoteDocPage() {
           <span className="text-[12.5px] font-semibold text-[#92400E]">
             {pendingHolds} service hold{pendingHolds === 1 ? '' : 's'} on this itinerary. Confirm before the agent accepts.
           </span>
-          <button type="button" onClick={() => navigate(`/build/${id}`)} className="text-[12.5px] font-bold text-[#92400E] underline">
+          <button
+            type="button"
+            onClick={() => navigate(`/build/${id}`)}
+            className="text-[12.5px] font-bold text-[#92400E] underline"
+          >
             Review holds
           </button>
           <div className="flex-1" />
-          <button type="button" onClick={() => setWarningDismissed(true)} className="text-[#92400E]"><X className="size-4" /></button>
+          <button type="button" onClick={() => setWarningDismissed(true)} className="text-[#92400E]">
+            <X className="size-4" />
+          </button>
         </div>
       ) : null}
 
@@ -515,11 +359,16 @@ export function QuoteDocPage() {
                 onClick={() => scrollToPage(page.key)}
                 className={cn('flex w-full flex-col items-center gap-1.5 px-3 py-2.5', active && 'bg-[#3F3F46]')}
               >
-                <span className={cn(
-                  'block h-[105px] w-[74px] overflow-hidden rounded-[3px] bg-white shadow-[0_2px_8px_rgba(0,0,0,.4)] outline',
-                  active ? 'outline-2 outline-[#931115]' : 'outline-1 outline-white/10',
-                )}>
-                  <span className={cn('block', page.key === 1 ? 'h-[46px] bg-[#E7E5E4]' : 'h-[10px] bg-[#931115]')} />
+                <span
+                  className={cn(
+                    'block h-[105px] w-[74px] overflow-hidden rounded-[3px] bg-white shadow-[0_2px_8px_rgba(0,0,0,.4)] outline',
+                    active ? 'outline-2 outline-[#931115]' : 'outline-1 outline-white/10',
+                  )}
+                >
+                  <span
+                    className="block h-[18px]"
+                    style={{ background: page.key === 1 ? MAROON : MAROON, height: page.key === 1 ? '46px' : '10px' }}
+                  />
                   <span className="mx-2.5 mt-2 block h-1.5 w-3/5 rounded-sm bg-[#E5E7EB]" />
                   <span className="mx-2.5 mt-1 block h-1 w-4/5 rounded-sm bg-[#EFEFF1]" />
                   <span className="mx-2.5 mt-1 block h-1 w-3/4 rounded-sm bg-[#EFEFF1]" />
@@ -533,228 +382,581 @@ export function QuoteDocPage() {
         </div>
 
         <div ref={viewportRef} className="qd-scroll min-w-0 flex-1 overflow-auto py-7">
-          <div className="qd-print-area mx-auto flex w-[794px] flex-col items-center" style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top center' }}>
-            <section data-qd-page="1" className="qd-page flex h-[1123px] w-[794px] shrink-0 flex-col overflow-hidden bg-white shadow-[0_12px_32px_rgba(0,0,0,0.35)]">
-              <div className="relative h-[470px] shrink-0 overflow-hidden bg-[#E7E5E4]">
-                <img src={plainsMajestyImg} alt="" className="absolute inset-0 size-full object-cover" />
-                <div className="absolute inset-0 bg-gradient-to-b from-black/45 via-black/5 to-transparent" />
-                <div className="absolute left-14 top-11 flex items-center gap-2.5">
-                  <img src="/assets/sol-logo.svg" alt="SOL" className="w-[38px]" />
-                  <span className="text-[15px] font-bold tracking-[2px] text-[#931115]">SOL</span>
-                </div>
-              </div>
-              <div className="flex flex-1 flex-col px-14 pb-11 pt-[52px]">
-                <span className="text-[12px] font-bold uppercase tracking-[2.4px] text-[#931115]">Safari proposal</span>
-                <h1 className="mt-4 text-[42px] font-bold leading-[1.12] tracking-[-0.8px] text-[#171717]">{destinationLabel(itinerary)}</h1>
-                <p className="mt-3.5 text-[17px] text-[#525252]">Prepared for {lead} · {daysCount} days, {nightsCount} nights</p>
-                <div className="my-8 h-px bg-[#E5E7EB]" />
-                <div className="grid grid-cols-3 gap-x-5 gap-y-6">
-                  <CoverMeta label="Reference" value={itinerary.reference} />
-                  <CoverMeta label="Travel dates" value={travelDates} />
-                  <CoverMeta label="Guests" value={guestsLabel} />
-                  <CoverMeta label="Prepared for" value={itinerary.agency || '—'} />
-                  <CoverMeta label="Safari planner" value={itinerary.safariPlanner || '—'} />
-                  <CoverMeta label="Quote valid until" value={validUntil} accent />
-                </div>
-                <div className="flex-1" />
-                <PageFooter left="Safari Operations Ltd · reservations@sol-safaris.com · +254 20 000 0000" right={`${versionLabel} · Page 1`} />
-              </div>
-            </section>
-
-            <DayPage
-              pageKey={2}
-              title="Your day by day"
-              rows={dayRows.slice(0, 8)}
-              reference={itinerary.reference}
-              version={versionLabel}
-              page={pageNumber(2)}
-              showLegend
-            />
-            <DayPage
-              pageKey={21}
-              title="Your day by day · continued"
-              rows={dayRows.slice(8)}
-              reference={itinerary.reference}
-              version={versionLabel}
-              page={pageNumber(21)}
-              stats={[
-                ['Duration', `${daysCount} days · ${nightsCount} nights`],
-                ['Properties', `${accommodationProperties.length} camps & lodges`],
-                ['Internal flights', `${lines.filter((line) => line.type === 'flight').length} sectors`],
-                ['Guests', guestsLabel],
-              ]}
-            />
-
-            {showNarrative ? (
-              <section data-qd-page="3" className={PAGE_CLASS}>
-                <PageHeading title="Where you'll stay" right={itinerary.reference} />
-                <div className="flex flex-col gap-[22px]">
-                  {accommodationProperties.slice(0, 5).map((line, index) => (
-                    <div key={`${line.supplier}-${line.date}-${index}`} className="flex gap-5">
-                      {showImages ? <img src={STAY_IMAGES[index % STAY_IMAGES.length]} alt="" className="h-[132px] w-[190px] shrink-0 rounded-[10px] object-cover" /> : null}
-                      <div className="min-w-0">
-                        <span className="text-[11px] font-bold uppercase tracking-wide text-[#931115]">
-                          {line.nights ? `${line.nights} night${line.nights === 1 ? '' : 's'}` : 'Stay'} · {line.date ? formatDay(line.date) : 'Dates TBC'}
-                        </span>
-                        <h3 className="mt-1.5 text-[17px] font-bold text-[#171717]">{line.supplier}</h3>
-                        <p className="mt-0.5 text-[12.5px] font-semibold text-[#A1A1A1]">{line.roomType || 'Room'} · {line.basis || 'Basis TBC'}</p>
-                        <p className="mt-2 text-[13px] leading-relaxed text-[#525252]">
-                          Enjoy {line.nights || 'your'} night{line.nights === 1 ? '' : 's'} at {line.supplier}, with the room and meal basis shown in your itinerary.
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                  {!accommodationProperties.length ? <EmptyCopy text="No accommodation services have been added yet." /> : null}
-                </div>
-                <div className="flex-1" />
-                <PageFooter left={`${itinerary.reference} · ${versionLabel}`} right={`Page ${pageNumber(3)}`} />
-              </section>
-            ) : null}
-
-            <BreakdownPage
-              pageKey={4}
-              title="Your investment"
-              groups={breakdownGroups.slice(0, 3)}
-              visible={showBreakdown}
-              reference={itinerary.reference}
-              version={versionLabel}
-              page={pageNumber(4)}
-            />
-            <BreakdownPage
-              pageKey={42}
-              title="Your investment · continued"
-              groups={breakdownGroups.slice(3)}
-              visible={showBreakdown}
-              reference={itinerary.reference}
-              version={versionLabel}
-              page={pageNumber(42)}
-            />
-
-            <section data-qd-page="41" className={PAGE_CLASS}>
-              <PageHeading title="What it comes to" right="All prices in USD" />
-              <div className="mb-4 flex items-baseline justify-between">
-                <span className="text-[13.5px] text-[#525252]">Itinerary subtotal</span>
-                <span className="text-[14px] font-semibold text-[#171717]">{pricing.sellTotal}</span>
-              </div>
-              <div className="flex items-center justify-between rounded-xl bg-[#931115] px-6 py-5">
-                <span className="text-[13px] font-semibold uppercase tracking-wide text-[#F5D3D4]">Total for the party</span>
-                <span className="text-[26px] font-bold tracking-[-0.5px] text-white">{pricing.sellTotal}</span>
-              </div>
-              {priceMode === 'pp' && weightedGuests > 0 ? (
-                <div className="mt-3.5 flex gap-3.5">
-                  {adults > 0 ? <PriceTile label="Per adult" value={formatUsd(perAdult)} /> : null}
-                  {children > 0 ? <PriceTile label={`Per child${itinerary.childAges?.length ? ` (${itinerary.childAges.join(', ')})` : ''}`} value={formatUsd(perChild)} /> : null}
-                </div>
-              ) : null}
-              {showBreakdown ? (
-                <>
-                  <p className="mb-1.5 mt-8 text-[10.5px] font-bold uppercase tracking-wide text-[#A1A1A1]">Summary by category</p>
-                  {breakdownGroups.map((group) => (
-                    <div key={group.name} className="flex items-baseline justify-between border-b border-[#F1F1F3] py-3">
-                      <span className="text-[14px] text-[#171717]">
-                        {group.name}
-                        <span className="mt-0.5 block text-[11.5px] text-[#A1A1A1]">{group.lines.length} service line{group.lines.length === 1 ? '' : 's'}</span>
-                      </span>
-                      <span className="text-[14.5px] font-semibold text-[#171717]">{formatUsd(group.subtotal)}</span>
-                    </div>
-                  ))}
-                </>
-              ) : null}
-              <div className="flex-1" />
-              <PageFooter left={`${itinerary.reference} · ${versionLabel}`} right={`Page ${pageNumber(41)}`} />
-            </section>
-
-            <section data-qd-page="43" className={PAGE_CLASS}>
-              <PageHeading title="What is included" right={itinerary.reference} />
-              <p className="mb-3.5 text-[10.5px] font-bold uppercase tracking-wide text-[#A1A1A1]">
-                What each supplier includes
-              </p>
-              <div className="flex flex-col gap-3">
-                {inclusions.length ? (
-                  inclusions.map((item) => (
-                    <p key={item.supplier} className="m-0 text-[12.5px] leading-relaxed text-[#525252]">
-                      <span className="font-bold text-[#171717]">{item.supplier}.</span> {item.body}
-                    </p>
-                  ))
-                ) : (
-                  <EmptyCopy text="No services have been added to describe inclusions." />
-                )}
-              </div>
-              <p className="mb-2 mt-[30px] text-[10.5px] font-bold uppercase tracking-wide text-[#A1A1A1]">
-                Not included
-              </p>
-              <p className="m-0 text-[12.5px] leading-relaxed text-[#525252]">{exclusionsBody}</p>
-              <div className="flex-1" />
-              <PageFooter left={`${itinerary.reference} · ${versionLabel}`} right={`Page ${pageNumber(43)}`} />
-            </section>
-
-            {showTerms ? (
-              <section data-qd-page="5" className={PAGE_CLASS}>
-                <PageHeading title="Payment & booking terms" right={itinerary.reference} />
-                <ScheduleRow
-                  label="Deposit on acceptance"
-                  due={`Calculated from each supplier’s own payment terms · ${deposits.depositPctOfSell}% of total`}
-                  amount={deposits.depositTotal}
-                />
-                <ScheduleRow
-                  label="Balance"
-                  due={`Due 60 days before travel · ${balanceDue}`}
-                  amount={deposits.depositBalance}
-                />
-                <p className="mb-2 mt-[18px] text-[10.5px] font-bold uppercase tracking-wide text-[#A1A1A1]">
-                  How the deposit is calculated
-                </p>
-                <p className="mb-2.5 text-[12px] leading-relaxed text-[#525252]">
-                  Deposits are not a flat percentage. Each supplier on this itinerary applies its own terms, and the
-                  amount below is the sum of those individual requirements.
-                </p>
-                <div className="overflow-hidden rounded-[10px] border border-[#E5E7EB]">
-                  {deposits.depositRows.map((row) => (
-                    <div
-                      key={row.supplier}
-                      className="grid grid-cols-[1fr_96px_84px] items-baseline gap-2.5 border-b border-[#F3F4F6] px-3.5 py-[7px] last:border-b-0"
-                    >
-                      <span className="truncate text-[12px] font-semibold text-[#171717]">{row.supplier}</span>
-                      <span className="text-[11px] text-[#A1A1A1]">{row.shortRule}</span>
-                      <span className="text-right text-[12px] font-semibold text-[#171717]">{row.amount}</span>
-                    </div>
-                  ))}
-                  <div className="grid grid-cols-[1fr_84px] gap-2.5 bg-[#F9FAFB] px-3.5 py-2.5">
-                    <span className="text-[12px] font-bold text-[#171717]">Total deposit payable on acceptance</span>
-                    <span className="text-right text-[12.5px] font-bold text-[#931115]">{deposits.depositTotal}</span>
+          <div
+            className="qd-print-area mx-auto flex flex-col items-center gap-7"
+            style={{ width: PAGE_W, transform: `scale(${zoom / 100})`, transformOrigin: 'top center' }}
+          >
+            {/* COVER */}
+            <section
+              data-qd-page="1"
+              className="qd-page flex shrink-0 flex-col overflow-hidden bg-white shadow-[0_12px_32px_rgba(0,0,0,0.35)]"
+              style={{ width: PAGE_W, height: PAGE_H }}
+            >
+              <div className="flex h-[296px] shrink-0 flex-col justify-between p-9 px-14" style={{ background: MAROON }}>
+                <div className="flex items-start justify-between gap-6">
+                  <img
+                    src="/assets/sol-logo.svg"
+                    alt="Cheli & Peacock Safaris"
+                    className="block h-auto w-44 brightness-0 invert"
+                  />
+                  <div className="text-right">
+                    <div className="text-[9.5px] font-semibold uppercase tracking-[1.6px] text-[#C79393]">Quotation</div>
+                    <div className="mt-0.5 font-['IBM_Plex_Mono'] text-lg font-medium text-white">{refLabel}</div>
                   </div>
                 </div>
-                <div className="mt-7 flex flex-col gap-4">
-                  {TERMS.map((term) => (
-                    <div key={term.title}>
-                      <p className="mb-1 text-[12.5px] font-bold text-[#171717]">{term.title}</p>
-                      <p className="text-[12.5px] leading-relaxed text-[#525252]">{term.body}</p>
+                <h1 className="m-0 text-[38px] font-semibold leading-[1.1] tracking-[-0.8px] text-white">
+                  {itineraryTitle(itinerary)}
+                  <br />
+                  <span className="text-xl font-normal tracking-normal text-[#E9CFCF]">
+                    {daysCount} days · {nightsCount} nights · {familyLabel}
+                  </span>
+                </h1>
+              </div>
+
+              <div className="flex flex-1 flex-col px-14 pb-9 pt-[26px]">
+                <div className="grid grid-cols-3 border-t border-[#101010]">
+                  <MetaColumn title="Document">
+                    <MetaRow label="Reference" value={itinerary.reference} mono />
+                    <MetaRow label="Version" value={versionLabel} mono />
+                    <MetaRow label="Issued" value={issuedOn} mono />
+                    <MetaRow label="Valid until" value={validUntil} mono accent />
+                  </MetaColumn>
+                  <MetaColumn title="Travel dates" bordered>
+                    <MetaRow
+                      label="Arrival"
+                      value={itinerary.travelDateFrom ? fmtLedgerDateLong(itinerary.travelDateFrom) : 'TBC'}
+                      mono
+                    />
+                    <MetaRow
+                      label="Departure"
+                      value={itinerary.travelDateTo ? fmtLedgerDateLong(itinerary.travelDateTo) : 'TBC'}
+                      mono
+                    />
+                    <MetaRow label="Duration" value={`${daysCount} d · ${nightsCount} n`} mono />
+                    <MetaRow label="Countries" value={countries} />
+                  </MetaColumn>
+                  <MetaColumn title="PAX details" last>
+                    <MetaRow label="Guests" value={String(totalGuests || '—')} mono />
+                    <MetaRow label="Composition" value={paxComposition(adults, children, infants)} mono />
+                    <MetaRow label="Lead guest" value={lead} />
+                    <MetaRow label="Planner" value={itinerary.safariPlanner || '—'} bold />
+                  </MetaColumn>
+                </div>
+
+                <div className="mt-8 grid grid-cols-2 gap-7">
+                  <div>
+                    <SectionLabel>Booking agent</SectionLabel>
+                    <div className="mt-2 text-[13px] font-semibold">{itinerary.agency || '—'}</div>
+                    <div className="mt-0.5 text-[11.5px] leading-relaxed text-[#555555]">
+                      {itinerary.agent || 'Contact your travel agent'}
+                    </div>
+                  </div>
+                  <div>
+                    <SectionLabel>Guest names</SectionLabel>
+                    <div className="mt-2 flex flex-col gap-0.5">
+                      {roster.length ? (
+                        roster.map((row) => (
+                          <div key={row.name} className="flex justify-between text-xs">
+                            <span>{row.name}</span>
+                            <span className="text-[#8A8A8A]">{row.suffix}</span>
+                          </div>
+                        ))
+                      ) : (
+                        <span className="text-xs text-[#8A8A8A]">Guest roster not captured</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-8 flex items-center justify-between gap-5 border border-[#101010] px-[22px] py-5">
+                  <div>
+                    <SectionLabel>Safari total</SectionLabel>
+                    <div className="mt-1 text-[11.5px] text-[#555555]">
+                      All prices in USD net · {totalGuests || '—'} guest{totalGuests === 1 ? '' : 's'}
+                    </div>
+                  </div>
+                  <div className="font-['IBM_Plex_Mono'] text-[32px] font-semibold tracking-[-0.5px]">
+                    {fmtLedgerUsd(pricing.sellNumber)}
+                  </div>
+                </div>
+
+                <div className="flex-1" />
+                <PageFooter
+                  left="info@chelipeacock.com · +254 730 721 000"
+                  right={`1 / ${totalPages}`}
+                />
+              </div>
+            </section>
+
+            {/* SCHEDULE */}
+            <section
+              data-qd-page="2"
+              className="qd-page flex shrink-0 flex-col overflow-hidden bg-white shadow-[0_12px_32px_rgba(0,0,0,0.35)]"
+              style={{ width: PAGE_W, minHeight: PAGE_H }}
+            >
+              <LedgerHeader title="Schedule of services" refLabel={refLabel} />
+              <div className="flex flex-1 flex-col px-14 pb-8 pt-[30px]">
+                <div className="flex items-baseline justify-between gap-4">
+                  <h2 className="m-0 text-[21px] font-semibold tracking-[-0.3px]">Safari Quotation</h2>
+                  <span className="text-[10px] font-semibold uppercase tracking-[1.4px] text-[#931115]">
+                    All prices in USD net
+                  </span>
+                </div>
+
+                <div
+                  className={cn(
+                    GRID_SCHEDULE,
+                    'mt-4 border-b border-t border-[#101010] py-[7px] text-[8.5px] font-semibold uppercase tracking-[0.9px] text-[#8A8A8A]',
+                  )}
+                >
+                  <span>Date</span>
+                  <span>Supplier</span>
+                  <span>Service</span>
+                  <span className="text-center">Pax</span>
+                  <span className="text-center">Qty</span>
+                  <span className="text-right">Amount</span>
+                </div>
+
+                {scheduleGroups.length ? (
+                  scheduleGroups.map((group) => (
+                    <div key={group.name}>
+                      <div className="flex items-baseline justify-between gap-2.5 border-b border-[#EDEDED] py-2 pb-1">
+                        <span className="text-[9.5px] font-semibold uppercase tracking-[1.3px]" style={{ color: MAROON }}>
+                          {group.name}
+                        </span>
+                        <span className="text-[11px] font-semibold" style={{ color: MAROON }}>
+                          {fmtLedgerAmount(group.subtotal)}
+                        </span>
+                      </div>
+                      {group.rows.map((row, i) => (
+                        <div
+                          key={`${group.name}-${i}`}
+                          className={cn(GRID_SCHEDULE, 'border-b border-[#F5F5F5] py-[5px] text-[10.5px] leading-snug')}
+                        >
+                          <span className="font-['IBM_Plex_Mono'] text-[#6E6E6E]">{row.date}</span>
+                          <span className="font-semibold">{row.supplier}</span>
+                          <span className="text-[#3D3D3D]">{row.service}</span>
+                          <span className="text-center text-[#6E6E6E]">{row.pax}</span>
+                          <span className="text-center font-['IBM_Plex_Mono'] text-[#6E6E6E]">{row.qty}</span>
+                          <span className="text-right font-medium">{fmtLedgerAmount(row.amount)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ))
+                ) : (
+                  <p className="py-8 text-[13px] text-[#8A8A8A]">No services have been added to this itinerary yet.</p>
+                )}
+
+                <div className="flex-1" />
+                <PageFooter
+                  left="Cost and margin are never shown on the client document."
+                  right={`2 / ${totalPages}`}
+                  bordered
+                />
+              </div>
+            </section>
+
+            {/* TOTALS */}
+            <section
+              data-qd-page="3"
+              className="qd-page flex shrink-0 flex-col overflow-hidden bg-white shadow-[0_12px_32px_rgba(0,0,0,0.35)]"
+              style={{ width: PAGE_W, height: PAGE_H }}
+            >
+              <LedgerHeader title="Totals and payment" refLabel={refLabel} />
+              <div className="flex flex-1 flex-col px-14 pb-8 pt-[34px]">
+                <div className="grid grid-cols-6 border border-[#101010]">
+                  {categoryGrid.map((cat, i) => (
+                    <div
+                      key={cat.name}
+                      className={cn(
+                        'col-span-2 px-4 py-3.5',
+                        i % 3 !== 2 && 'border-r border-[#E4E4E4]',
+                        i >= 3 && 'border-t border-[#E4E4E4]',
+                      )}
+                    >
+                      <div className="text-[9px] font-semibold uppercase tracking-[1.2px] text-[#8A8A8A]">{cat.name}</div>
+                      <div className="mt-1 font-['IBM_Plex_Mono'] text-[15px] font-medium">{fmtLedgerAmount(cat.amount)}</div>
                     </div>
                   ))}
                 </div>
-                <div className="mt-6 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-5 py-4">
-                  <p className="text-[12.5px] leading-relaxed text-[#525252]">
-                    This proposal is held provisionally and expires on <strong className="text-[#931115]">{validUntil}</strong>. Rooms and flights are subject to availability until deposit is received.
-                  </p>
+
+                <div className="mt-[22px]">
+                  <DottedTotalRow label="Itinerary subtotal" amount={fmtLedgerAmount(grossSell)} />
+                  {pricing.discounts.map((d) => (
+                    <DottedTotalRow
+                      key={d.label}
+                      label={d.label}
+                      amount={`−${d.sellDelta.replace(/^−/, '')}`}
+                      accent="#0369A1"
+                    />
+                  ))}
                 </div>
+
+                <div className="mt-5 flex items-end justify-between gap-5 border border-[#101010] bg-[#101010] px-[22px] py-[18px] text-white">
+                  <div>
+                    <div className="text-[9.5px] font-semibold uppercase tracking-[1.6px] text-[#B5B5B5]">Safari total</div>
+                    <div className="mt-1 text-[11px] text-[#B5B5B5]">
+                      All prices in USD net · {totalGuests} guest{totalGuests === 1 ? '' : 's'}
+                      {priceMode === 'pp' && totalGuests ? ` · ${fmtLedgerUsd(perPerson)} per person` : ''}
+                    </div>
+                  </div>
+                  <div className="font-['IBM_Plex_Mono'] text-[34px] font-semibold tracking-[-0.8px]">
+                    {fmtLedgerAmount(pricing.sellNumber)}
+                  </div>
+                </div>
+
+                <div className="mt-7">
+                  <SectionLabel>Payment schedule</SectionLabel>
+                  <div className="mt-2 grid grid-cols-[minmax(0,1fr)_200px_110px] gap-x-3 border-b border-[#F0F0F0] py-2 text-[8.5px] font-semibold uppercase tracking-[0.9px] text-[#8A8A8A]">
+                    <span>Instalment</span>
+                    <span>Basis</span>
+                    <span className="text-right">Amount</span>
+                  </div>
+                  <div className="grid grid-cols-[minmax(0,1fr)_200px_110px] gap-x-3 border-b border-[#F5F5F5] py-2 text-[11.5px]">
+                    <span className="font-semibold">Deposit on acceptance</span>
+                    <span className="text-[11px] text-[#6E6E6E]">
+                      Supplier terms · {deposits.depositPctOfSell}% of total
+                    </span>
+                    <span className="text-right font-medium">{deposits.depositTotal}</span>
+                  </div>
+                  <div className="grid grid-cols-[minmax(0,1fr)_200px_110px] gap-x-3 border-b border-[#F5F5F5] py-2 text-[11.5px]">
+                    <span className="font-semibold">Balance</span>
+                    <span className="text-[11px] text-[#6E6E6E]">60 days before arrival · {balanceDue}</span>
+                    <span className="text-right font-medium">{deposits.depositBalance}</span>
+                  </div>
+                </div>
+
+                <p className="mt-6 text-[11px] leading-relaxed text-[#8A8A8A]">
+                  Unit rate types differ across the itinerary — per person per day, per person per unit, per unit — so
+                  the per-person figure is an average across the party rather than a rate charged to any one guest.
+                </p>
+
                 <div className="flex-1" />
-                <PageFooter left={`${itinerary.reference} · ${versionLabel}`} right={`Page ${pageNumber(5)}`} />
+                <PageFooter left={`Quote valid until ${validUntil}`} right={`3 / ${totalPages}`} bordered />
+              </div>
+            </section>
+
+            {/* INCLUSIONS */}
+            <section
+              data-qd-page="4"
+              className="qd-page flex shrink-0 flex-col overflow-hidden bg-white shadow-[0_12px_32px_rgba(0,0,0,0.35)]"
+              style={{ width: PAGE_W, minHeight: PAGE_H }}
+            >
+              <LedgerHeader title="Inclusions and exclusions" refLabel={refLabel} />
+              <div className="flex flex-1 flex-col px-14 pb-8 pt-[34px]">
+                <h2 className="m-0 mb-[18px] text-[21px] font-semibold tracking-[-0.3px]">
+                  Safari Inclusions &amp; Exclusions
+                </h2>
+
+                <div className="grid grid-cols-2 border border-[#101010]">
+                  <div className="border-r border-[#E4E4E4] px-5 py-[18px]">
+                    <div className="text-[9px] font-semibold uppercase tracking-[1.2px] text-[#931115]">
+                      General inclusions
+                    </div>
+                    <div className="mt-1 text-[11px] leading-relaxed text-[#6E6E6E]">
+                      {GENERAL_LEDGER_INCLUSIONS[0]}
+                    </div>
+                    <div className="mt-3 flex flex-col gap-1">
+                      {GENERAL_LEDGER_INCLUSIONS.slice(1).map((item) => (
+                        <span key={item} className="text-[11.5px] leading-snug">
+                          {item}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="px-5 py-[18px]">
+                    <div className="text-[9px] font-semibold uppercase tracking-[1.2px] text-[#931115]">
+                      General exclusions
+                    </div>
+                    <div className="mt-1 text-[11px] leading-relaxed text-[#6E6E6E]">
+                      Unless otherwise specified in the schedule.
+                    </div>
+                    <div className="mt-3 flex flex-col gap-1">
+                      {GENERAL_LEDGER_EXCLUSIONS.map((item) => (
+                        <span key={item} className="text-[11.5px] leading-snug">
+                          {item}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <p className="mt-3.5 text-[11px] leading-relaxed text-[#8A8A8A]">
+                  These items are not included in bed and breakfast, half board or day room bookings. Inclusions and
+                  exclusions specific to each supplier service option are set out below.
+                </p>
+
+                <div className="mt-[26px]">
+                  <SectionLabel>By supplier service option</SectionLabel>
+                  <div className="mt-2 grid grid-cols-[150px_minmax(0,1fr)_minmax(0,1fr)] gap-x-3.5 border-b border-[#F0F0F0] py-2 text-[8.5px] font-semibold uppercase tracking-[0.9px] text-[#8A8A8A]">
+                    <span>Supplier / option</span>
+                    <span>Includes</span>
+                    <span>Excludes</span>
+                  </div>
+                  {optionRows.length ? (
+                    optionRows.map((row) => (
+                      <div
+                        key={`${row.supplier}-${row.option}`}
+                        className="grid grid-cols-[150px_minmax(0,1fr)_minmax(0,1fr)] gap-x-3.5 border-b border-[#F5F5F5] py-2.5 text-[11px] leading-snug"
+                      >
+                        <span>
+                          <b>{row.supplier}</b>
+                          <br />
+                          <span className="text-[#8A8A8A]">{row.option}</span>
+                        </span>
+                        <span className="text-[#3D3D3D]">{row.includes}</span>
+                        <span className="text-[#3D3D3D]">{row.excludes}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="py-4 text-[12px] text-[#8A8A8A]">Add services to populate per-option inclusions.</p>
+                  )}
+                </div>
+
+                <div className="flex-1" />
+                <PageFooter left="Full per-option terms continue on request" right={`4 / ${totalPages}`} bordered />
+              </div>
+            </section>
+
+            {/* TERMS */}
+            {showTerms ? (
+              <section
+                data-qd-page="5"
+                className="qd-page flex shrink-0 flex-col overflow-hidden bg-white shadow-[0_12px_32px_rgba(0,0,0,0.35)]"
+                style={{ width: PAGE_W, minHeight: PAGE_H }}
+              >
+                <LedgerHeader title="Payment terms and cancellation" refLabel={refLabel} />
+                <div className="flex flex-1 flex-col px-14 pb-8 pt-[34px]">
+                  <h2 className="m-0 mb-1.5 text-[21px] font-semibold tracking-[-0.3px]">
+                    Supplier Payment Terms &amp; Cancellation Policies
+                  </h2>
+                  <p className="m-0 mb-5 text-[11px] leading-relaxed text-[#8A8A8A]">
+                    Each supplier sets its own terms for the travel dates quoted. The payment schedule on page 3 takes
+                    the strictest of them — the highest deposit and the earliest balance date across the itinerary — so
+                    a single deposit settles every booking.
+                  </p>
+
+                  <SectionLabel>Payment terms</SectionLabel>
+                  <div className="mt-2 grid grid-cols-[minmax(0,1fr)_128px_62px_96px_62px] gap-x-3 border-b border-[#F0F0F0] py-2 text-[8.5px] font-semibold uppercase tracking-[0.9px] text-[#8A8A8A]">
+                    <span>Supplier / term</span>
+                    <span>Travel dates</span>
+                    <span className="text-right">Deposit</span>
+                    <span className="text-right">Balance due</span>
+                    <span className="text-right">Tax code</span>
+                  </div>
+                  {paymentTerms.rows.map((row) => (
+                    <div
+                      key={row.supplier}
+                      className="grid grid-cols-[minmax(0,1fr)_128px_62px_96px_62px] gap-x-3 border-b border-[#F5F5F5] py-2.5 text-[11px] leading-snug"
+                    >
+                      <span>
+                        <b>{row.supplier}</b>
+                        <br />
+                        <span className="text-[#8A8A8A]">{row.term}</span>
+                      </span>
+                      <span className="font-['IBM_Plex_Mono'] text-[10px] text-[#3D3D3D]">{row.travelDates}</span>
+                      <span className="text-right font-['IBM_Plex_Mono']">{row.deposit}</span>
+                      <span className="text-right text-[#3D3D3D]">{row.balanceDue}</span>
+                      <span className="text-right text-[10px] text-[#8A8A8A]">{row.taxCode}</span>
+                    </div>
+                  ))}
+                  <div className="grid grid-cols-[minmax(0,1fr)_128px_62px_96px_62px] gap-x-3 border-t border-[#101010] py-2 text-[11px]">
+                    <span className="font-semibold">Applied to this itinerary</span>
+                    <span className="text-[10px] text-[#8A8A8A]">Strictest across suppliers</span>
+                    <span className="text-right font-['IBM_Plex_Mono'] font-semibold">{paymentTerms.appliedDeposit}</span>
+                    <span className="text-right font-semibold">{paymentTerms.appliedBalance}</span>
+                    <span />
+                  </div>
+
+                  <div className="mt-[26px]">
+                    <SectionLabel>Cancellation policies</SectionLabel>
+                    <div className="mt-2 grid grid-cols-[148px_124px_104px_minmax(0,1fr)] gap-x-3.5 border-b border-[#F0F0F0] py-2 text-[8.5px] font-semibold uppercase tracking-[0.9px] text-[#8A8A8A]">
+                      <span>Supplier / contract</span>
+                      <span>Policy</span>
+                      <span>Travel dates</span>
+                      <span>Charge if cancelled</span>
+                    </div>
+                    {cancellationRows.length ? (
+                      cancellationRows.map((row) => (
+                        <div
+                          key={row.supplier}
+                          className="grid grid-cols-[148px_124px_104px_minmax(0,1fr)] gap-x-3.5 border-b border-[#F5F5F5] py-[11px] text-[11px] leading-snug"
+                        >
+                          <span>
+                            <b>{row.supplier}</b>
+                            <br />
+                            <span className="text-[#8A8A8A]">{row.contract}</span>
+                          </span>
+                          <span>
+                            {row.policy}
+                            <br />
+                            <span className={cn('text-[10px]', row.refundableTone === 'blue' ? 'text-[#0369A1]' : 'text-[#931115]')}>
+                              {row.refundableLabel}
+                            </span>
+                          </span>
+                          <span className="pt-px font-['IBM_Plex_Mono'] text-[10px] text-[#6E6E6E]">{row.travelDates}</span>
+                          <span className="flex flex-col gap-1">
+                            {row.charges.map((charge) => (
+                              <div key={charge.label} className="grid grid-cols-[minmax(0,1fr)_62px] gap-x-2.5 leading-snug">
+                                <span className="text-[#3D3D3D]">{charge.label}</span>
+                                <span className="text-right font-['IBM_Plex_Mono'] font-medium">{charge.amount}</span>
+                              </div>
+                            ))}
+                          </span>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="py-4 text-[12px] text-[#8A8A8A]">Cancellation policies appear once suppliers are on the itinerary.</p>
+                    )}
+                  </div>
+
+                  <p className="mt-4 text-[11px] leading-relaxed text-[#8A8A8A]">
+                    Charges are a percentage of the service value unless shown as a cash amount. Where a policy is marked
+                    non-refundable, no part of the service value is recoverable once the first charge band begins. Days
+                    are counted against the travel date of the service concerned, not the start of the safari.
+                  </p>
+
+                  <div className="flex-1" />
+                  <PageFooter
+                    left="Terms are those held against each supplier contract at the date of this quote"
+                    right={`5 / ${totalPages}`}
+                    bordered
+                  />
+                </div>
               </section>
             ) : null}
           </div>
         </div>
       </div>
+
       {flash ? (
-        <div className="qd-chrome fixed bottom-6 right-6 z-[95] flex items-center gap-2.5 rounded-lg bg-[#171717] px-4.5 py-3 text-[13.5px] font-semibold text-white shadow-2xl">
-          <span className="text-[#00D492]">✓</span>{flash}
+        <div className="qd-chrome fixed bottom-6 right-6 z-[95] flex items-center gap-2.5 rounded-lg bg-[#171717] px-4 py-3 text-[13.5px] font-semibold text-white shadow-2xl">
+          <span className="text-[#00D492]">✓</span>
+          {flash}
         </div>
       ) : null}
     </div>
   )
 }
 
+function LedgerHeader({ title, refLabel }: { title: string; refLabel: string }) {
+  return (
+    <div
+      className="flex h-[42px] shrink-0 items-center justify-between px-14"
+      style={{ background: MAROON }}
+    >
+      <span className="text-[9.5px] font-semibold uppercase tracking-[2px] text-[#E9CFCF]">{title}</span>
+      <span className="font-['IBM_Plex_Mono'] text-[11px] text-[#DFB9B9]">{refLabel}</span>
+    </div>
+  )
+}
+
+function MetaColumn({
+  title,
+  children,
+  bordered,
+  last,
+}: {
+  title: string
+  children: React.ReactNode
+  bordered?: boolean
+  last?: boolean
+}) {
+  return (
+    <div
+      className={cn(
+        'py-2.5',
+        bordered && 'border-x border-[#E4E4E4] px-[18px]',
+        last ? 'pl-[18px]' : 'pr-[18px]',
+      )}
+    >
+      <div className="text-[9px] font-semibold uppercase tracking-[1.2px] text-[#931115]">{title}</div>
+      <div className="mt-2 flex flex-col">{children}</div>
+    </div>
+  )
+}
+
+function MetaRow({
+  label,
+  value,
+  mono,
+  accent,
+  bold,
+}: {
+  label: string
+  value: string
+  mono?: boolean
+  accent?: boolean
+  bold?: boolean
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-2.5 border-b border-[#EFEFEF] py-[7px]">
+      <span className={cn('text-[10.5px]', accent ? 'text-[#931115]' : 'text-[#8A8A8A]')}>{label}</span>
+      <span
+        className={cn(
+          'text-[12.5px]',
+          mono && "font-['IBM_Plex_Mono'] text-[13px] font-medium",
+          accent && 'font-semibold text-[#931115]',
+          bold && 'font-semibold',
+        )}
+      >
+        {value}
+      </span>
+    </div>
+  )
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="border-b border-[#101010] pb-1.5 text-[9px] font-semibold uppercase tracking-[1.2px] text-[#8A8A8A]">
+      {children}
+    </div>
+  )
+}
+
+function PageFooter({ left, right, bordered }: { left: string; right: string; bordered?: boolean }) {
+  return (
+    <div
+      className={cn(
+        'flex justify-between text-[10.5px] text-[#8A8A8A]',
+        bordered && 'border-t border-[#E4E4E4] pt-2.5',
+      )}
+    >
+      <span>{left}</span>
+      <span className="font-['IBM_Plex_Mono']">{right}</span>
+    </div>
+  )
+}
+
+function DottedTotalRow({
+  label,
+  amount,
+  accent,
+}: {
+  label: string
+  amount: string
+  accent?: string
+}) {
+  return (
+    <div className="flex items-baseline gap-2.5 border-b border-[#EDEDED] py-2.5">
+      <span className="text-xs text-[#3D3D3D]">{label}</span>
+      <span className="flex-1 translate-y-[-3px] border-b border-dotted border-[#C9C9C9]" />
+      <span
+        className="font-['IBM_Plex_Mono'] text-[12.5px] font-medium"
+        style={{ color: accent || '#101010' }}
+      >
+        {amount}
+      </span>
+    </div>
+  )
+}
+
 function ZoomButton({ title, onClick, children }: { title: string; onClick: () => void; children: React.ReactNode }) {
-  return <button type="button" title={title} onClick={onClick} className="flex h-[26px] w-7 items-center justify-center rounded-md text-[#525252] hover:bg-white">{children}</button>
+  return (
+    <button type="button" title={title} onClick={onClick} className="flex h-[26px] w-7 items-center justify-center rounded-md text-[#525252] hover:bg-white">
+      {children}
+    </button>
+  )
 }
 
 function OptionToggle({ label, on, onClick }: { label: string; on: boolean; onClick: () => void }) {
@@ -765,165 +967,5 @@ function OptionToggle({ label, on, onClick }: { label: string; on: boolean; onCl
       </span>
       <span className="text-[13px] font-semibold text-[#171717]">{label}</span>
     </button>
-  )
-}
-
-function CoverMeta({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
-  return (
-    <div className="flex flex-col gap-1">
-      <span className="text-[11px] font-bold uppercase tracking-wide text-[#A1A1A1]">{label}</span>
-      <span className={cn('text-[15px] font-semibold', accent ? 'text-[#931115]' : 'text-[#171717]')}>{value}</span>
-    </div>
-  )
-}
-
-function PageHeading({ title, right }: { title: string; right: string }) {
-  return (
-    <>
-      <div className="flex items-baseline justify-between gap-4">
-        <h2 className="text-2xl font-bold tracking-[-0.3px] text-[#171717]">{title}</h2>
-        <span className="text-[11.5px] font-semibold text-[#A1A1A1]">{right}</span>
-      </div>
-      <div className="mb-[18px] mt-3 h-[3px] w-[52px] bg-[#931115]" />
-    </>
-  )
-}
-
-function PageFooter({ left, right }: { left: string; right: string }) {
-  return <div className="flex justify-between text-[11.5px] text-[#A1A1A1]"><span>{left}</span><span>{right}</span></div>
-}
-
-function EmptyCopy({ text }: { text: string }) {
-  return <p className="py-6 text-[13px] text-[#A1A1A1]">{text}</p>
-}
-
-function DayPage({
-  pageKey,
-  title,
-  rows,
-  reference,
-  version,
-  page,
-  showLegend,
-  stats,
-}: {
-  pageKey: number
-  title: string
-  rows: (ReturnType<typeof buildSummaryDays>[number] & { date?: string; lines: SummaryLine[] })[]
-  reference: string
-  version: string
-  page: number
-  showLegend?: boolean
-  stats?: string[][]
-}) {
-  return (
-    <section data-qd-page={pageKey} className={PAGE_CLASS}>
-      <PageHeading title={title} right={reference} />
-      {showLegend ? (
-        <div className="mb-1 flex items-center gap-4 border-b border-[#E5E7EB] pb-3">
-          {(['flight', 'transportation', 'activity', 'accommodation'] as const).map((type) => (
-            <span key={type} className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-wide text-[#A1A1A1]">
-              <span className="size-[7px] rounded-full" style={{ background: TYPE_COLORS[type] }} />
-              {type === 'accommodation' ? 'Stay' : SUMMARY_TYPE_META[type].name}
-            </span>
-          ))}
-        </div>
-      ) : null}
-      {rows.length ? rows.map((day) => (
-        <div key={`${day.dayNum}-${day.dateLabel}`} className="grid grid-cols-[92px_1fr] gap-3.5 border-b border-[#F4F4F5] py-[11px]">
-          <div>
-            <span className="block text-[12.5px] font-bold text-[#931115]">{day.dayNum}</span>
-            <span className="mt-0.5 block text-[11.5px] text-[#A1A1A1]">{day.date ? fmtDayDate(day.date) : day.dateLabel}</span>
-          </div>
-          <div className="flex min-w-0 flex-col gap-1.5">
-            {day.lines.map((line, index) => (
-              <div key={`${line.type}-${line.supplier}-${index}`} className="grid grid-cols-[10px_1fr_auto] items-baseline gap-2.5">
-                <span className="size-[7px] rounded-full" style={{ background: TYPE_COLORS[line.type] }} />
-                <span className="text-[13px] text-[#171717]">{lineLabel(line)}</span>
-                <span className="whitespace-nowrap text-[11.5px] text-[#A1A1A1]">{dayItemDetail(line)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )) : <EmptyCopy text="No services are available for this part of the itinerary." />}
-      <div className="flex-1" />
-      {stats ? (
-        <div className="mb-3.5 flex items-center gap-7 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-[22px] py-3.5">
-          {stats.map(([label, value]) => (
-            <span key={label} className="flex flex-col gap-0.5">
-              <span className="text-[10.5px] font-bold uppercase tracking-wide text-[#A1A1A1]">{label}</span>
-              <span className="text-[14px] font-bold text-[#171717]">{value}</span>
-            </span>
-          ))}
-        </div>
-      ) : null}
-      <PageFooter left={`${reference} · ${version}`} right={`Page ${page}`} />
-    </section>
-  )
-}
-
-function BreakdownPage({
-  pageKey,
-  title,
-  groups,
-  visible,
-  reference,
-  version,
-  page,
-}: {
-  pageKey: number
-  title: string
-  groups: BreakdownGroup[]
-  visible: boolean
-  reference: string
-  version: string
-  page: number
-}) {
-  return (
-    <section data-qd-page={pageKey} className={PAGE_CLASS}>
-      <PageHeading title={title} right="All prices in USD" />
-      {visible ? (
-        <>
-          <div className="grid grid-cols-[1fr_92px_96px] gap-x-3 border-b border-[#E5E7EB] pb-2 text-[10.5px] font-bold uppercase tracking-wide text-[#A1A1A1]">
-            <span>Service</span><span className="text-right">Qty</span><span className="text-right">Amount</span>
-          </div>
-          {groups.length ? groups.map((group) => (
-            <div key={group.name} className="mt-3.5">
-              <div className="grid grid-cols-[1fr_96px] items-baseline gap-3 border-b border-[#EDEFF2] pb-1.5">
-                <span className="text-[12px] font-bold uppercase tracking-wide text-[#931115]">{group.name}</span>
-                <span className="text-right text-[12.5px] font-bold text-[#931115]">{formatUsd(group.subtotal)}</span>
-              </div>
-              {group.lines.map((line, index) => (
-                <div key={`${line.label}-${index}`} className="grid grid-cols-[1fr_92px_96px] items-baseline gap-x-3 border-b border-[#F6F6F7] py-2">
-                  <span className="text-[13px] text-[#171717]">{line.label}<span className="mt-0.5 block text-[11px] text-[#A1A1A1]">{line.detail}</span></span>
-                  <span className="text-right text-[11.5px] text-[#737373]">{line.qty}</span>
-                  <span className="whitespace-nowrap text-right text-[13px] font-semibold text-[#171717]">{formatUsd(line.amount)}</span>
-                </div>
-              ))}
-            </div>
-          )) : <EmptyCopy text="No category detail is available for this page." />}
-        </>
-      ) : <EmptyCopy text="Price breakdown by category is hidden in document options." />}
-      <div className="flex-1" />
-      <PageFooter left={`${reference} · ${version}`} right={`Page ${page}`} />
-    </section>
-  )
-}
-
-function PriceTile({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex-1 rounded-xl border border-[#E5E7EB] px-[18px] py-4">
-      <span className="block text-[11.5px] font-bold uppercase tracking-wide text-[#A1A1A1]">{label}</span>
-      <span className="mt-1.5 block text-[20px] font-bold text-[#171717]">{value}</span>
-    </div>
-  )
-}
-
-function ScheduleRow({ label, due, amount }: { label: string; due: string; amount: string }) {
-  return (
-    <div className="flex items-baseline justify-between border-b border-[#F1F1F3] py-3">
-      <span className="text-[14px] font-semibold text-[#171717]">{label}<span className="mt-0.5 block text-[12px] font-medium text-[#A1A1A1]">{due}</span></span>
-      <span className="whitespace-nowrap text-[14.5px] font-semibold text-[#171717]">{amount}</span>
-    </div>
   )
 }

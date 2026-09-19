@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  applyVoucherLineSubmit,
   billableServices,
   cancelLine,
   confirmLine,
@@ -10,10 +11,12 @@ import {
   raiseVouchers,
   resetLine,
   roleAllowsTransition,
-  setSupplierVoucherOutcome,
   supplierStatusOf,
 } from '@/shared/lib/lifecycleRules'
+import { payableEntityFromSupplierName } from '@/shared/lib/payableEntities'
 import type { AddedService, Itinerary, ItineraryStatus } from '@/shared/lib/types'
+
+const TEST_ENTITY = payableEntityFromSupplierName('Test Lodge').id
 
 function svc(partial: Partial<AddedService> & Pick<AddedService, 'id'>): AddedService {
   return {
@@ -35,7 +38,7 @@ function svc(partial: Partial<AddedService> & Pick<AddedService, 'id'>): AddedSe
     bg: '#D1FAE5',
     initial: 'A',
     expanded: true,
-    draft: { supplier: 'Test Lodge' },
+    draft: { supplier: 'Test Lodge', payableEntityId: TEST_ENTITY },
     lineStatus: 'New',
     supplierStatus: 'None',
     ...partial,
@@ -122,7 +125,7 @@ describe('lifecycleRules', () => {
     )
     expect(gate.ok).toBe(true)
     const raised = raiseVouchers(services, itin({ status: 'INVOICED' }))
-    expect(raised.supplierVouchers['Test Lodge']).toBe('Raised')
+    expect(raised.supplierVouchers[TEST_ENTITY]).toBe('Raised')
     expect(supplierStatusOf(raised.services[0])).toBe('Waiting')
   })
 
@@ -150,14 +153,78 @@ describe('lifecycleRules', () => {
     expect(billableServices([cancelLine(waiting).service!])).toHaveLength(0)
   })
 
-  it('maps supplier confirm/reject onto Booked/Rejected', () => {
+  it('rolls up a per-line submit onto service supplierStatus and the voucher status', () => {
     const waiting = [
       svc({ id: 's1', lineStatus: 'Confirmed', supplierStatus: 'Waiting' }),
+      svc({ id: 's2', lineStatus: 'Confirmed', supplierStatus: 'Waiting', draft: { supplier: 'Test Lodge', payableEntityId: TEST_ENTITY } }),
     ]
-    const confirmed = setSupplierVoucherOutcome(waiting, { 'Test Lodge': 'Raised' }, 'Test Lodge', 'Confirmed')
-    expect(supplierStatusOf(confirmed.services[0])).toBe('Booked')
-    const rejected = setSupplierVoucherOutcome(waiting, { 'Test Lodge': 'Raised' }, 'Test Lodge', 'Rejected')
-    expect(supplierStatusOf(rejected.services[0])).toBe('Rejected')
+    const lines = [
+      { lineId: 's1#0', serviceId: 's1' },
+      { lineId: 's2#0', serviceId: 's2' },
+    ]
+
+    const allHeld = applyVoucherLineSubmit(
+      waiting,
+      { [TEST_ENTITY]: 'Raised' },
+      {},
+      TEST_ENTITY,
+      lines,
+      { 's1#0': true, 's2#0': true },
+      {},
+      '2026-01-01T00:00:00Z',
+    )
+    expect(supplierStatusOf(allHeld.services[0])).toBe('Booked')
+    expect(supplierStatusOf(allHeld.services[1])).toBe('Booked')
+    expect(allHeld.supplierVouchers[TEST_ENTITY]).toBe('Confirmed')
+
+    const allRejected = applyVoucherLineSubmit(
+      waiting,
+      { [TEST_ENTITY]: 'Raised' },
+      {},
+      TEST_ENTITY,
+      lines,
+      { 's1#0': false, 's2#0': false },
+      { 's1#0': 'Not available', 's2#0': 'Closed out' },
+      '2026-01-01T00:00:00Z',
+    )
+    expect(supplierStatusOf(allRejected.services[0])).toBe('Rejected')
+    expect(allRejected.supplierVouchers[TEST_ENTITY]).toBe('Rejected')
+
+    const partial = applyVoucherLineSubmit(
+      waiting,
+      { [TEST_ENTITY]: 'Raised' },
+      {},
+      TEST_ENTITY,
+      lines,
+      { 's1#0': true, 's2#0': false },
+      { 's2#0': 'Not available' },
+      '2026-01-01T00:00:00Z',
+    )
+    expect(supplierStatusOf(partial.services[0])).toBe('Booked')
+    expect(supplierStatusOf(partial.services[1])).toBe('Rejected')
+    expect(partial.supplierVouchers[TEST_ENTITY]).toBe('Partial')
+  })
+
+  it('deposit guard holds a rejected line back for the planner instead of deleting or rejecting it', () => {
+    const waiting = [
+      svc({ id: 's1', lineStatus: 'Confirmed', supplierStatus: 'Waiting', depositPaid: true }),
+    ]
+    const lines = [{ lineId: 's1#0', serviceId: 's1', depositPaid: true }]
+    const result = applyVoucherLineSubmit(
+      waiting,
+      { [TEST_ENTITY]: 'Raised' },
+      {},
+      TEST_ENTITY,
+      lines,
+      { 's1#0': false },
+      {},
+      '2026-01-01T00:00:00Z',
+    )
+    expect(result.voucherLineAnswers['s1#0'].outcome).toBe('deposit_held_back')
+    expect(result.depositGuardLineIds).toEqual(['s1#0'])
+    // Held back for the planner — never silently rejected, never removed from the itinerary.
+    expect(supplierStatusOf(result.services[0])).toBe('Waiting')
+    expect(result.services).toHaveLength(1)
   })
 
   it('restricts transitions by demo role', () => {

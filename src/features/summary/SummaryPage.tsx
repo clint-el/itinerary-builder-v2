@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { CalendarDays, ChevronLeft, ChevronRight, FileText, History, List, Lock, Ticket } from 'lucide-react'
+import {
+  ChevronLeft,
+  ChevronRight,
+  CornerDownLeft,
+  FileText,
+  History,
+  List,
+  Lock,
+  Ticket,
+} from 'lucide-react'
 import { useStore } from '@/app/store'
 import {
   GuestDetailsSheet,
@@ -9,9 +18,11 @@ import {
 } from '@/features/guests/GuestDetailsSheet'
 import { Button } from '@/components/ui/button'
 import {
+  depthOf,
   isBuilderStatus,
   isTerminalStatus,
   nightsBetween,
+  parentReference,
   partyGuests,
   statusMeta,
   transitions,
@@ -29,21 +40,22 @@ import {
   buildDepositSummary,
   buildLifecycleActivityLog,
   buildPaymentHistory,
+  buildPriceGroups,
   buildSummaryCards,
-  buildSummaryDays,
+  buildSummaryDayGroups,
   buildSummaryPricing,
   buildVouchers,
-  gridForMode,
   holdsSummaryOf,
   linesFromQuoteGroups,
   linesFromServices,
+  voucherOutstandingSummary,
   type PriceDisplayMode,
-  type SummaryBlock,
   type SummaryCard,
-  type SummaryCell,
-  type VoucherCard,
+  type SummaryCellTone,
+  type SummaryTable,
   type VoucherValueMode,
 } from './summaryModel'
+import { VouchersView } from './VouchersView'
 
 function transitionButtonClass(t: LifecycleTransition) {
   if (t.primary) return 'bg-sol-brand text-white hover:bg-sol-brand/90'
@@ -51,34 +63,96 @@ function transitionButtonClass(t: LifecycleTransition) {
   return 'border border-border bg-white text-neutral-900 hover:bg-neutral-50'
 }
 
-function holdTone(text: string) {
-  if (text === 'On hold') return '#0369A1'
-  if (text === 'Requested') return '#B45309'
-  return '#C4C4C8'
+const TONE_CLASS: Record<SummaryCellTone, string> = {
+  plain: '',
+  date: 'text-[12.5px] text-[#737373]',
+  name: 'font-semibold',
+  meta: 'text-[12.5px]',
+  hold: 'text-[11.5px] font-semibold',
+  cost: 'tabular-nums',
+  sell: 'font-semibold tabular-nums',
+  margin: 'text-[12.5px] font-semibold tabular-nums',
 }
 
-function cellClass(align: 'l' | 'c' | 'r', dense: boolean, header: SummaryCell) {
-  const base = cn(
-    'flex min-w-0 items-center whitespace-nowrap text-[13px] text-[#171717]',
-    dense ? 'py-1.5' : 'py-2',
-    'px-3.5',
-    align === 'c' && 'justify-center text-center',
-    align === 'r' && 'justify-end pr-5 text-right tabular-nums',
+function alignClass(align: 'l' | 'c' | 'r') {
+  if (align === 'c') return 'justify-center text-center'
+  if (align === 'r') return 'justify-end text-right'
+  return ''
+}
+
+const HEADER_CELL =
+  'flex items-center border-b border-[#EDEFF2] bg-[#FBFBFC] px-3.5 py-[9px] text-[10.5px] font-bold uppercase tracking-[0.4px] text-[#94A3B8]'
+
+const BODY_CELL =
+  'flex min-w-0 items-center border-b border-[#F3F4F6] px-3.5 py-[11px] text-[13px] text-[#171717]'
+
+/** Column headers + rows for one service-type table, shared by the summary and by-day views. */
+function SummaryTableView({ table }: { table: SummaryTable }) {
+  return (
+    <div style={{ minWidth: 'fit-content' }}>
+      <div className="grid items-stretch" style={{ gridTemplateColumns: table.gridCols }}>
+        {table.headers.map((h) => (
+          <div key={h.label} className={cn(HEADER_CELL, alignClass(h.align))}>
+            {h.label}
+          </div>
+        ))}
+      </div>
+      {table.rows.map((row) =>
+        row.kind === 'extra' ? (
+          <div
+            key={row.key}
+            className="grid items-center border-b border-[#F3F4F6] bg-[#FCFCFD]"
+            style={{ gridTemplateColumns: '92px minmax(0,1fr) 120px' }}
+          >
+            <span />
+            <div className="flex min-w-0 items-center gap-2 px-3.5 py-2">
+              <CornerDownLeft className="size-[13px] shrink-0 text-[#C4C4C8]" />
+              <span className="shrink-0 text-[10px] font-bold uppercase tracking-[0.3px] text-[#0369A1]">
+                Extra
+              </span>
+              <span className="truncate text-[12.5px] font-semibold text-[#171717]">{row.label}</span>
+              <span className="shrink-0 whitespace-nowrap text-[11.5px] font-medium text-[#A1A1A1]">
+                {row.meta}
+              </span>
+            </div>
+            <div className="px-3.5 py-2 text-right text-[12.5px] font-semibold tabular-nums text-[#171717]">
+              {row.value}
+            </div>
+          </div>
+        ) : (
+          <div key={row.key} className="grid items-stretch" style={{ gridTemplateColumns: table.gridCols }}>
+            {row.cells.map((cell, i) => (
+              <div key={i} className={cn(BODY_CELL, alignClass(cell.align))} style={{ color: cell.color }}>
+                <span className={cn('min-w-0 truncate', TONE_CLASS[cell.tone])} title={cell.value}>
+                  {cell.value}
+                </span>
+              </div>
+            ))}
+          </div>
+        ),
+      )}
+    </div>
   )
-  if (header.kind === 'hold') return cn(base, 'text-[11.5px] font-semibold')
-  if (header.label === 'Supplier') return cn(base, 'font-semibold')
-  if (header.label === 'Date') return cn(base, 'text-[#737373]')
-  if (header.kind === 'unitPrice') return cn(base, 'text-[12px] text-[#737373]')
-  if (header.kind === 'totalPrice') return cn(base, 'text-[12.5px] font-semibold')
-  return base
 }
 
-function headerClass(align: 'l' | 'c' | 'r', dense: boolean) {
-  return cn(
-    'flex items-center bg-[#FCFCFD] px-3.5 text-[10.5px] font-bold uppercase tracking-wide text-[#B4B4BA]',
-    dense ? 'py-[7px]' : 'py-[9px]',
-    align === 'c' && 'justify-center',
-    align === 'r' && 'justify-end pr-5',
+function ServiceCard({ card }: { card: SummaryCard }) {
+  return (
+    <section className="overflow-x-auto overflow-y-hidden rounded-lg border border-[#E5E7EB] bg-white">
+      <div
+        className="flex items-center gap-2.5 border-b border-[#EDEFF2] px-3.5 py-[11px]"
+        style={{ background: card.tint }}
+      >
+        <span
+          className="flex size-6 shrink-0 items-center justify-center rounded-md text-[11px] font-bold"
+          style={{ background: card.iconBg, color: card.iconFg }}
+        >
+          {card.initial}
+        </span>
+        <span className="text-[13.5px] font-bold text-[#171717]">{card.name}</span>
+        <span className="text-[11.5px] font-medium text-[#A1A1A1]">{card.countLabel}</span>
+      </div>
+      <SummaryTableView table={card} />
+    </section>
   )
 }
 
@@ -91,19 +165,21 @@ export function SummaryPage() {
     getQuoteGroups,
     getGuestDetails,
     applyLifecycleTransition,
-    confirmSupplierVoucher,
-    rejectSupplierVoucher,
+    issueSupplierVoucher,
+    resendSupplierVoucher,
+    submitVoucherAnswers,
+    clearVoucherReply,
     demoRole,
   } = useStore()
   const itinerary = itineraries.find((it) => it.id === id)
   const services = getServices(id)
   const quoteGroups = getQuoteGroups(id)
-  const [view, setView] = useState<'summary' | 'byday' | 'vouchers' | 'activity'>('summary')
+  const [view, setView] = useState<'summary' | 'vouchers' | 'activity'>('summary')
+  const [summaryMode, setSummaryMode] = useState<'service' | 'day'>('service')
   const [priceMode, setPriceMode] = useState<PriceDisplayMode>('all')
   const [openPriceGroups, setOpenPriceGroups] = useState<Record<string, boolean>>({})
   const [depositsOpen, setDepositsOpen] = useState(false)
   const [voucherMode, setVoucherMode] = useState<VoucherValueMode>('cost')
-  const [issued, setIssued] = useState<Record<string, boolean>>({})
   const [flash, setFlash] = useState<string | null>(null)
   const [guestSheetOpen, setGuestSheetOpen] = useState(false)
   const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -166,7 +242,8 @@ export function SummaryPage() {
   }, [services, quoteGroups, guests])
 
   const cards = useMemo(() => buildSummaryCards(lines, priceMode), [lines, priceMode])
-  const days = useMemo(() => buildSummaryDays(lines), [lines])
+  const dayBlocks = useMemo(() => buildSummaryDayGroups(lines, priceMode), [lines, priceMode])
+  const priceGroups = useMemo(() => buildPriceGroups(lines), [lines])
   const totalGuests =
     guests.length || (itinerary ? (itinerary.adults || 0) + (itinerary.children || 0) + (itinerary.infants || 0) : 0)
   const pricing = useMemo(() => buildSummaryPricing(lines, totalGuests), [lines, totalGuests])
@@ -184,37 +261,47 @@ export function SummaryPage() {
   )
   const vouchers = useMemo(
     () =>
-      view === 'vouchers'
+      view === 'vouchers' && itinerary
         ? buildVouchers(
             lines,
             voucherMode,
-            itinerary?.reference || itinerary?.id || 'CPS',
-            issued,
-            itinerary?.supplierVouchers || {},
+            itinerary.reference || itinerary.id || 'CPS',
+            services,
+            guests,
+            guestDetails,
+            itinerary.agency || '',
+            itinerary.supplierVouchers || {},
+            itinerary.voucherLineAnswers || {},
+            itinerary.voucherMeta || {},
           )
         : [],
-    [view, lines, voucherMode, itinerary?.reference, itinerary?.id, itinerary?.supplierVouchers, issued],
+    [
+      view,
+      lines,
+      voucherMode,
+      itinerary,
+      services,
+      guests,
+      guestDetails,
+    ],
   )
   const activityLog = useMemo(
     () => buildLifecycleActivityLog(itinerary?.lifecycleLog),
     [itinerary?.lifecycleLog],
   )
-  const showSidePanel = view !== 'vouchers' && view !== 'activity'
+  const showSidePanel = view === 'summary'
   const holdRollup = useMemo(() => holdsSummaryOf(lines), [lines])
-  const byDaySections = useMemo(() => {
-    const keys = [...new Set(lines.map((line) => line.date || 'undated'))].sort()
-    return days.map((day, index) => ({
-      ...day,
-      cards: buildSummaryCards(
-        lines.filter((line) => (line.date || 'undated') === keys[index]),
-        priceMode,
-      ),
-    }))
-  }, [days, lines, priceMode])
+  const voucherOutstanding = useMemo(
+    () => voucherOutstandingSummary(itinerary?.voucherMeta),
+    [itinerary?.voucherMeta],
+  )
+  const isSubQuote = itinerary ? depthOf(itinerary.reference) === 2 : false
+  const parentRef = itinerary ? parentReference(itinerary.reference) : ''
+  const grandRef = parentRef ? parentReference(parentRef) : ''
 
   if (!itinerary) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 bg-[#F6F6F7]">
+      <div className="flex h-full flex-col items-center justify-center gap-3 bg-[#F4F4F5]">
         <p className="text-sm text-muted-foreground">Itinerary not found.</p>
         <Button asChild variant="outline">
           <Link to="/">Back to inquiries</Link>
@@ -301,78 +388,82 @@ export function SummaryPage() {
     flashTimerRef.current = setTimeout(() => setFlash(null), 2800)
   }
 
-  function issueVoucher(card: VoucherCard) {
-    setIssued((current) => ({ ...current, [card.supplier]: true }))
-    showFlash(`Voucher ${card.ref} issued to ${card.supplier}`)
-  }
-
-  function onConfirmVoucher(card: VoucherCard) {
-    const result = confirmSupplierVoucher(id, card.supplier)
-    if (!result.ok) {
-      showFlash(result.reason)
-      return
-    }
-    showFlash(`${card.supplier} confirmed — lines Booked`)
-  }
-
-  function onRejectVoucher(card: VoucherCard) {
-    const result = rejectSupplierVoucher(id, card.supplier)
-    if (!result.ok) {
-      showFlash(result.reason)
-      return
-    }
-    showFlash(`${card.supplier} rejected — resolve before advancing`)
-  }
-
   const tabClass = (active: boolean) =>
     cn(
-      'inline-flex h-8 items-center gap-2 rounded-lg px-3.5 text-[13px] font-semibold',
-      active ? 'bg-[#931115] text-white' : 'bg-transparent text-[#71717A]',
+      'inline-flex h-9 items-center gap-2 rounded-lg px-4 text-[13px] font-semibold',
+      active ? 'bg-[#931115] text-white' : 'bg-transparent text-[#525252]',
+    )
+
+  const segClass = (active: boolean) =>
+    cn(
+      'h-7 rounded-[7px] border px-[13px] text-[12px] font-semibold',
+      active ? 'border-[#931115] bg-white text-[#931115]' : 'border-transparent bg-transparent text-[#737373]',
     )
 
   const valueModeClass = (active: boolean) =>
     cn(
-      'h-7 rounded-md px-3 text-[12px] font-semibold',
+      'h-7 rounded-[7px] px-3 text-[12px] font-semibold',
       active ? 'bg-white text-[#171717] shadow-sm' : 'bg-transparent text-[#737373]',
     )
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#F6F6F7]">
-      <div className="flex h-14 shrink-0 items-center gap-3.5 border-b border-[#E7E7EA] bg-white px-6">
+    <div className="flex min-h-screen flex-col bg-[#F4F4F5]">
+      <header className="flex h-14 shrink-0 items-center gap-3.5 border-b border-[#E5E7EB] bg-white px-6">
         <img src="/assets/sol-logo.svg" alt="SOL" className="h-auto w-[30px]" />
-        <div className="flex min-w-0 items-center gap-1.5 text-[13px] font-semibold text-[#A1A1A1]">
+        <div className="flex min-w-0 items-center gap-[7px] text-[13px] font-semibold text-[#A1A1A1]">
           <Link to="/" className="text-[#931115] hover:text-[#7a0e12]">
             Inquiries
           </Link>
-          <span className="text-neutral-300">/</span>
-          <span className="truncate">{itinerary.reference}</span>
-          <span className="text-neutral-300">/</span>
+          <ChevronRight className="size-3.5 shrink-0 text-[#D4D4D8]" />
+          {isSubQuote && grandRef ? (
+            <>
+              <span className="truncate">{grandRef}</span>
+              <ChevronRight className="size-3.5 shrink-0 text-[#D4D4D8]" />
+              <span className="truncate">{parentRef}</span>
+              <ChevronRight className="size-3.5 shrink-0 text-[#D4D4D8]" />
+            </>
+          ) : (
+            <span className="truncate">{itinerary.reference}</span>
+          )}
+          <ChevronRight className="size-3.5 shrink-0 text-[#D4D4D8]" />
           <span className="text-[#171717]">Summary</span>
         </div>
-      </div>
+      </header>
 
-      <div className="mx-auto flex w-full max-w-[1920px] flex-1 flex-col gap-4 px-6 py-6 pb-10">
+      <div className="mx-auto flex w-full max-w-[1920px] flex-1 flex-col gap-4 p-6">
         <section className="rounded-[14px] border border-[#E5E7EB] bg-white px-6 py-5">
           <div className="mb-4 flex items-start justify-between gap-4">
             <div className="min-w-0">
-              <h1 className="truncate text-[21px] font-bold text-[#171717]">
+              <h1 className="mb-[5px] truncate text-[21px] font-bold text-[#171717]">
                 {itinerary.title || 'Untitled itinerary'}
               </h1>
-              <div className="mt-1 text-[13px] font-medium text-[#A1A1A1]">
-                {itinerary.reference} · {destination}
+              <div className="flex flex-wrap items-center gap-2 text-[13px] font-medium text-[#A1A1A1]">
+                <span>
+                  {itinerary.reference} · {destination}
+                </span>
+                {isSubQuote ? (
+                  <span className="inline-flex h-[22px] items-center rounded-full bg-[#EFF6FF] px-2.5 text-[11px] font-bold text-[#1D4ED8]">
+                    Sub-quote
+                  </span>
+                ) : null}
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <span
-                className="inline-flex h-[26px] items-center gap-1.5 whitespace-nowrap rounded-full px-3 text-[12px] font-bold"
+                className="inline-flex h-[26px] items-center gap-1.5 whitespace-nowrap rounded-full px-3 text-[12.5px] font-bold"
                 style={{ background: holdRollup.bg, color: holdRollup.fg }}
               >
-                <span className="size-1.5 rounded-full" style={{ background: holdRollup.fg }} />
+                <span className="size-[7px] rounded-full" style={{ background: holdRollup.fg }} />
                 {holdRollup.chip}
               </span>
+              {voucherOutstanding.issued ? (
+                <span className="inline-flex h-[26px] items-center whitespace-nowrap rounded-full bg-[#FEF3C7] px-3 text-[12.5px] font-bold text-[#B45309]">
+                  {voucherOutstanding.label}
+                </span>
+              ) : null}
               <StatusChip status={itinerary.status} />
               {isStructureLocked(itinerary.status) ? (
-                <span className="inline-flex h-[26px] items-center gap-1.5 whitespace-nowrap rounded-full bg-[#FEF3C7] px-3 text-[12px] font-bold text-[#B45309]">
+                <span className="inline-flex h-[26px] items-center gap-1.5 whitespace-nowrap rounded-full bg-[#FEF3C7] px-3 text-[12.5px] font-bold text-[#B45309]">
                   <Lock className="size-3" />
                   Structure locked
                 </span>
@@ -399,46 +490,56 @@ export function SummaryPage() {
               <List className="size-3.5" />
               Summary
             </button>
-            <button type="button" className={tabClass(view === 'byday')} onClick={() => setView('byday')}>
-              <CalendarDays className="size-3.5" />
-              By Day
-            </button>
             <button type="button" className={tabClass(view === 'vouchers')} onClick={() => setView('vouchers')}>
               <Ticket className="size-3.5" />
               Vouchers
             </button>
             <button type="button" className={tabClass(view === 'activity')} onClick={() => setView('activity')}>
               <History className="size-3.5" />
-              Activity
+              Activities
             </button>
           </div>
-          {showSidePanel ? (
-            <div className="flex items-center gap-2.5">
-              <span className="text-[11.5px] font-semibold text-[#A1A1A1]">Values shown</span>
-              <div className="flex gap-0.5 rounded-[9px] border border-[#E5E7EB] bg-[#F3F4F6] p-0.5">
-                {(
-                  [
-                    ['cost', 'Cost'],
-                    ['sell', 'Sell'],
-                    ['all', 'Everything'],
-                  ] as const
-                ).map(([mode, label]) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    className={valueModeClass(priceMode === mode)}
-                    onClick={() => setPriceMode(mode)}
-                  >
-                    {label}
+          {view === 'summary' ? (
+            <div className="flex flex-wrap items-center gap-3.5 rounded-[11px] border border-[#E5E7EB] bg-white px-2.5 py-1.5">
+              <div className="flex items-center gap-2.5">
+                <span className="text-[11.5px] font-semibold text-[#A1A1A1]">View</span>
+                <div className="flex gap-[3px] rounded-[9px] bg-[#F3F4F6] p-[3px]">
+                  <button type="button" className={segClass(summaryMode === 'service')} onClick={() => setSummaryMode('service')}>
+                    By service type
                   </button>
-                ))}
+                  <button type="button" className={segClass(summaryMode === 'day')} onClick={() => setSummaryMode('day')}>
+                    Day by day
+                  </button>
+                </div>
+              </div>
+              <span className="h-[22px] w-px shrink-0 bg-[#E5E7EB]" />
+              <div className="flex items-center gap-2.5">
+                <span className="text-[11.5px] font-semibold text-[#A1A1A1]">Values shown</span>
+                <div className="flex gap-[3px] rounded-[9px] bg-[#F3F4F6] p-[3px]">
+                  {(
+                    [
+                      ['cost', 'Cost'],
+                      ['sell', 'Sell'],
+                      ['all', 'Everything'],
+                    ] as const
+                  ).map(([mode, label]) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      className={segClass(priceMode === mode)}
+                      onClick={() => setPriceMode(mode)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           ) : null}
         </div>
 
         <div className="flex items-start gap-4">
-          <main className="min-w-0 flex-1 space-y-4">
+          <main className="flex min-w-0 flex-1 flex-col gap-4">
             {view === 'activity' ? (
               activityLog.length === 0 ? (
                 <div className="rounded-[14px] border border-[#E5E7EB] bg-white p-8 text-center text-sm text-muted-foreground">
@@ -447,10 +548,11 @@ export function SummaryPage() {
               ) : (
                 <section className="rounded-[14px] border border-[#E5E7EB] bg-white px-5 py-4">
                   <h2 className="mb-3 text-[15px] font-bold text-[#171717]">Lifecycle activity</h2>
-                  <ul className="flex flex-col">
+                  <div className="flex flex-col">
                     {activityLog.map((entry) => {
                       const fromMeta = statusMeta(entry.from)
                       const toMeta = statusMeta(entry.to)
+                      const isVoucher = entry.category && entry.category !== 'status'
                       const when = new Date(entry.at)
                       const whenLabel = Number.isNaN(when.getTime())
                         ? entry.at
@@ -459,26 +561,32 @@ export function SummaryPage() {
                             timeStyle: 'short',
                           })
                       return (
-                        <li
-                          key={entry.id}
-                          className="border-b border-[#F3F4F6] py-3.5 last:border-0"
-                        >
+                        <div key={entry.id} className="border-b border-[#F3F4F6] py-3.5">
                           <div className="flex flex-wrap items-baseline justify-between gap-2">
-                            <div className="text-[13.5px] font-semibold text-[#171717]">
+                            <span className="text-[13.5px] font-semibold text-[#171717]">
                               {entry.label || `Move to ${toMeta.label}`}
-                            </div>
-                            <div className="text-[11.5px] text-[#A1A1A1]">{whenLabel}</div>
+                            </span>
+                            <span className="text-[11.5px] text-[#A1A1A1]">{whenLabel}</span>
                           </div>
+                          {isVoucher ? (
+                            <div className="mt-1.5 text-[12.5px] text-[#525252]">
+                              <span className="mr-2 inline-flex rounded-full bg-[#EFF6FF] px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide text-[#1D4ED8]">
+                                {entry.category}
+                              </span>
+                              {entry.detail}
+                              {entry.actor ? ` · ${entry.actor}` : ''}
+                            </div>
+                          ) : (
                           <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[12.5px] text-[#525252]">
                             <span
-                              className="rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                              className="rounded-full px-[9px] py-0.5 text-[11px] font-semibold"
                               style={{ background: fromMeta.bg, color: fromMeta.fg }}
                             >
                               {fromMeta.label}
                             </span>
                             <span className="text-[#A1A1A1]">→</span>
                             <span
-                              className="rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                              className="rounded-full px-[9px] py-0.5 text-[11px] font-semibold"
                               style={{ background: toMeta.bg, color: toMeta.fg }}
                             >
                               {toMeta.label}
@@ -486,33 +594,34 @@ export function SummaryPage() {
                             <span className="text-[#A1A1A1]">·</span>
                             <span>{entry.actor}</span>
                           </div>
+                          )}
                           {entry.reason ? (
                             <p className="mt-2 text-[12.5px] leading-snug text-[#737373]">
                               Reason: {entry.reason}
                             </p>
                           ) : null}
-                        </li>
+                        </div>
                       )
                     })}
-                  </ul>
+                  </div>
                 </section>
               )
-            ) : lines.length === 0 ? (
-              <div className="rounded-[14px] border border-[#E5E7EB] bg-white p-8 text-center text-sm text-muted-foreground">
-                No services added yet.
-              </div>
             ) : view === 'vouchers' ? (
               <VouchersView
                 vouchers={vouchers}
                 mode={voucherMode}
                 setMode={setVoucherMode}
-                depositTotal={deposits.depositTotal}
                 valueModeClass={valueModeClass}
-                onIssue={issueVoucher}
-                onConfirm={onConfirmVoucher}
-                onReject={onRejectVoucher}
-                canConfirm={roleAllowsVoucherAction(demoRole, 'confirm')}
-                canReject={roleAllowsVoucherAction(demoRole, 'reject')}
+                itineraryId={id}
+                bookingRef={itinerary.reference || itinerary.id}
+                onOpenGuests={() => setGuestSheetOpen(true)}
+                canIssue={roleAllowsVoucherAction(demoRole, 'issue')}
+                canRecordOnBehalf={roleAllowsVoucherAction(demoRole, 'recordOnBehalf')}
+                issueVoucher={(entityId, opts) => issueSupplierVoucher(id, entityId, opts)}
+                resendVoucher={(entityId) => resendSupplierVoucher(id, entityId)}
+                submitVoucherAnswers={(entityId, input) => submitVoucherAnswers(id, entityId, input)}
+                clearVoucherReply={(entityId) => clearVoucherReply(id, entityId)}
+                followUps={itinerary.mandatoryFollowUps}
                 raised={
                   itinerary.status === 'VOUCHERED' ||
                   itinerary.status === 'CONFIRMED' ||
@@ -520,25 +629,46 @@ export function SummaryPage() {
                   itinerary.status === 'COMPLETED'
                 }
               />
-            ) : view === 'summary' ? (
-              cards.map((c) => <ServiceCard key={c.type} card={c} priceMode={priceMode} />)
+            ) : lines.length === 0 ? (
+              <div className="rounded-[14px] border border-[#E5E7EB] bg-white p-8 text-center text-sm text-muted-foreground">
+                No services added yet.
+              </div>
+            ) : summaryMode === 'service' ? (
+              cards.map((c) => <ServiceCard key={c.type} card={c} />)
             ) : (
-              <section className="rounded-[14px] border border-[#E5E7EB] bg-white px-5 pb-5 pt-2">
-                {byDaySections.map((d) => (
+              <section className="flex flex-col rounded-[14px] border border-[#E5E7EB] bg-white px-5 pb-5 pt-2">
+                {dayBlocks.map((d) => (
                   <div
-                    key={d.dayNum + d.dateLabel}
-                    className="grid grid-cols-[132px_minmax(0,1fr)] gap-5 border-b border-[#F3F4F6] py-4 last:border-0"
+                    key={d.key}
+                    className="grid grid-cols-[132px_minmax(0,1fr)] gap-5 border-b border-[#F3F4F6] py-4"
                   >
                     <div className="pt-0.5">
                       <div className="text-[12px] font-bold uppercase tracking-[0.4px] text-[#931115]">
                         {d.dayNum}
                       </div>
-                      <div className="mt-1 text-[15px] font-bold text-[#171717]">{d.dateLabel}</div>
-                      <div className="text-xs font-medium text-[#A1A1A1]">{d.weekday}</div>
+                      <div className="mt-[3px] text-[15px] font-bold text-[#171717]">{d.dateLabel}</div>
+                      <div className="text-[12px] font-medium text-[#A1A1A1]">{d.weekday}</div>
                     </div>
                     <div className="flex min-w-0 flex-col gap-3">
-                      {d.cards.map((card) => (
-                        <ServiceCard key={card.type} card={card} compact priceMode={priceMode} />
+                      {d.groups.map((g) => (
+                        <div
+                          key={g.key}
+                          className="overflow-x-auto overflow-y-hidden rounded-[10px] border border-[#F1F1F3]"
+                        >
+                          <div
+                            className="flex items-center gap-2.5 px-[13px] py-[9px]"
+                            style={{ background: g.tint }}
+                          >
+                            <span
+                              className="flex size-6 shrink-0 items-center justify-center rounded-md text-[11px] font-bold"
+                              style={{ background: g.iconBg, color: g.iconFg }}
+                            >
+                              {g.initial}
+                            </span>
+                            <span className="text-[13px] font-bold text-[#171717]">{g.name}</span>
+                          </div>
+                          <SummaryTableView table={g} />
+                        </div>
                       ))}
                     </div>
                   </div>
@@ -548,121 +678,125 @@ export function SummaryPage() {
           </main>
 
           {showSidePanel ? (
-          <aside className="sticky top-4 w-[330px] shrink-0">
-            <section className="rounded-[14px] border border-[#E5E7EB] bg-white px-[22px] py-5">
-              <h2 className="mb-3.5 text-[16px] font-bold text-[#171717]">Pricing</h2>
-              <div className="mb-3 flex items-baseline justify-between border-b border-[#E5E7EB] pb-2 text-[10.5px] font-bold uppercase tracking-[0.4px] text-[#94A3B8]">
-                <span>Service</span>
-                <span>Sell price</span>
-              </div>
-              <div className="mb-4 flex flex-col">
-                {cards.map((card) => {
-                  const open = !!openPriceGroups[card.type]
-                  return (
-                    <div key={card.type} className="border-b border-[#F3F4F6]">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setOpenPriceGroups((current) => ({ ...current, [card.type]: !current[card.type] }))
-                        }
-                        className="flex w-full items-center gap-2 py-2 text-left"
-                      >
-                        <ChevronRight
-                          className={cn('size-3 shrink-0 text-[#A1A1A1] transition-transform', open && 'rotate-90')}
-                        />
-                        <span className="min-w-0 flex-1 text-[12.5px] font-semibold text-[#171717]">{card.name}</span>
-                        <span className="whitespace-nowrap text-[11px] text-[#A1A1A1]">{card.countLabel}</span>
-                        <span className="whitespace-nowrap text-[12.5px] font-bold text-[#171717]">{card.subtotal}</span>
-                      </button>
-                      {open ? (
-                        <div className="flex flex-col gap-1.5 pb-2 pl-5">
-                          {card.blocks.map((block) => (
-                            <div key={block.key} className="flex items-baseline justify-between gap-2 text-[11.5px]">
-                              <span className="min-w-0 truncate text-[#525252]" title={block.name}>
-                                {block.name} <span className="text-[#A1A1A1]">{block.meta}</span>
-                              </span>
-                              <span className="shrink-0 font-medium text-[#525252]">{block.subtotal}</span>
-                            </div>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                  )
-                })}
-              </div>
-            {pricing.hasDiscounts ? (
-              <div className="mb-4 rounded-[10px] border border-[#E5E7EB] px-3.5 py-3">
-                <div className="mb-2 text-[10.5px] font-bold uppercase tracking-[0.4px] text-[#94A3B8]">
-                  Special offers &amp; discounts
+            <aside className="sticky top-4 w-[330px] shrink-0">
+              <section className="rounded-[14px] border border-[#E5E7EB] bg-white px-[22px] py-5">
+                <h2 className="mb-3.5 text-[16px] font-bold text-[#171717]">Pricing</h2>
+                <div className="mb-3 flex items-baseline justify-between gap-2.5 border-b border-[#E5E7EB] pb-[7px] text-[10.5px] font-bold uppercase tracking-[0.4px] text-[#94A3B8]">
+                  <span>Service</span>
+                  <span>Sell price</span>
                 </div>
-                <div className="flex flex-col gap-3">
-                  {pricing.discounts.map((d, i) => (
-                    <div key={d.label} className={cn(i > 0 && 'border-t border-[#F3F4F6] pt-3')}>
-                      <div className="text-[12.5px] font-semibold text-[#171717]">{d.label}</div>
-                      <div className="mt-1 text-[11px] font-semibold text-[#059669]">Applied to cost &amp; sell · {d.pct}</div>
-                      <div className="mt-1.5 flex items-baseline gap-3 text-[11.5px] text-[#A1A1A1]">
-                        <span>Cost <b className="text-[#171717]">{d.costDelta}</b></span>
-                        <span>Sell <b className="text-[#171717]">{d.sellDelta}</b></span>
+                <div className="mb-3.5 flex flex-col">
+                  {priceGroups.map((group) => {
+                    const open = !!openPriceGroups[group.key]
+                    return (
+                      <div key={group.key} className="border-b border-[#F3F4F6]">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setOpenPriceGroups((current) => ({ ...current, [group.key]: !current[group.key] }))
+                          }
+                          className="flex w-full items-center gap-2 py-2 text-left"
+                        >
+                          <ChevronRight
+                            className={cn('size-3 shrink-0 text-[#A1A1A1] transition-transform', open && 'rotate-90')}
+                          />
+                          <span className="min-w-0 flex-1 text-[12.5px] font-semibold text-[#171717]">{group.name}</span>
+                          <span className="whitespace-nowrap text-[11px] text-[#A1A1A1]">{group.countLabel}</span>
+                          <span className="whitespace-nowrap text-[12.5px] font-bold text-[#171717]">{group.subtotal}</span>
+                        </button>
+                        {open ? (
+                          <div className="flex flex-col gap-1.5 pb-2 pl-[19px]">
+                            {group.items.map((item) => (
+                              <div key={item.key} className="flex items-baseline justify-between gap-2 text-[11.5px]">
+                                <span className="min-w-0 truncate text-[#525252]" title={`${item.supplier} ${item.desc}`}>
+                                  {item.supplier} <span className="text-[#A1A1A1]">{item.desc}</span>
+                                </span>
+                                <span className="shrink-0 font-medium text-[#525252]">{item.value}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
-              </div>
-            ) : null}
-              <div className="flex flex-col gap-3">
-                {pricing.pricing.map((p) => (
-                  <div key={p.label} className="flex items-baseline justify-between gap-3">
-                    <span className="whitespace-nowrap text-[13.5px] text-[#737373]">{p.label}</span>
-                    <span className="whitespace-nowrap text-[13.5px] font-semibold tabular-nums" style={{ color: p.color }}>
-                      {p.value}
-                    </span>
+                {pricing.hasDiscounts ? (
+                  <div className="mb-4 flex flex-col gap-3 rounded-[10px] border border-[#E5E7EB] px-3.5 py-3">
+                    <div className="text-[10.5px] font-bold uppercase tracking-[0.4px] text-[#94A3B8]">
+                      Special offers &amp; discounts
+                    </div>
+                    {pricing.discounts.map((d) => (
+                      <div key={d.label} className="border-t border-[#F3F4F6] pt-0.5">
+                        <div className="text-[12.5px] font-semibold text-[#171717]">{d.label}</div>
+                        <div className="mt-0.5 text-[11px] font-semibold" style={{ color: d.noteColor }}>
+                          {d.note}
+                        </div>
+                        <div className="mt-1.5 flex items-baseline gap-3.5 text-[11.5px] text-[#A1A1A1]">
+                          <span className="whitespace-nowrap">
+                            Cost <b className="font-semibold text-[#171717]">{d.costDelta}</b>
+                          </span>
+                          <span className="whitespace-nowrap">
+                            Sell <b className="font-semibold text-[#171717]">{d.sellDelta}</b>
+                          </span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-              <div className="my-4 h-px bg-[#E5E7EB]" />
-              <div className="flex items-baseline justify-between gap-3">
-                <span className="text-[14.5px] font-bold text-[#171717]">Sell total</span>
-                <span className="text-[15px] font-bold tabular-nums text-[#171717]">{pricing.sellTotal}</span>
-              </div>
-              {pricing.perPerson ? (
-                <div className="mt-1 text-right text-[11.5px] text-[#A1A1A1]">{pricing.perPerson}</div>
-              ) : null}
-              <div className="my-4 h-px bg-[#E5E7EB]" />
-              <button
-                type="button"
-                onClick={() => setDepositsOpen((open) => !open)}
-                className="flex w-full items-center gap-2 text-left"
-              >
-                <ChevronRight
-                  className={cn('size-3 shrink-0 text-[#A1A1A1] transition-transform', depositsOpen && 'rotate-90')}
-                />
-                <span className="min-w-0 flex-1 text-[14px] font-bold text-[#171717]">Total deposit</span>
-                <span className="text-[15px] font-bold text-[#931115]">{deposits.depositTotal}</span>
-              </button>
-              <div className="mt-1 flex justify-between pl-5 text-[11.5px] text-[#A1A1A1]">
-                <span>
-                  {deposits.depositPctLabel} · {deposits.depositCountLabel}
-                </span>
-                <span>Balance {deposits.depositBalance}</span>
-              </div>
-              {depositsOpen ? (
-                <div className="mt-2 flex flex-col border-t border-[#F3F4F6] pl-5 pt-2">
-                  {deposits.depositRows.map((row) => (
-                    <div
-                      key={row.supplier}
-                      title={row.rule}
-                      className="flex items-baseline justify-between gap-2 border-t border-[#F3F4F6] py-1.5 first:border-t-0"
-                    >
-                      <span className="min-w-0 text-[11.5px] text-[#525252]">
-                        {row.supplier} <span className="text-[#A1A1A1]">{row.terms}</span>
+                ) : null}
+                <div className="flex flex-col gap-3">
+                  {pricing.pricing.map((p) => (
+                    <div key={p.label} className="flex items-baseline justify-between gap-3">
+                      <span className="whitespace-nowrap text-[13.5px] text-[#737373]">{p.label}</span>
+                      <span className="whitespace-nowrap text-[13.5px] font-semibold tabular-nums" style={{ color: p.color }}>
+                        {p.value}
                       </span>
-                      <span className="shrink-0 text-[11.5px] font-semibold text-[#171717]">{row.amount}</span>
                     </div>
                   ))}
                 </div>
-              ) : null}
-            </section>
-          </aside>
+                <div className="my-4 h-px bg-[#E5E7EB]" />
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="whitespace-nowrap text-[14.5px] font-bold text-[#171717]">Sell total</span>
+                  <span className="text-[15px] font-bold tabular-nums text-[#171717]">{pricing.sellTotal}</span>
+                </div>
+                {pricing.perPerson ? (
+                  <div className="mt-1 text-right text-[11.5px] text-[#A1A1A1]">{pricing.perPerson}</div>
+                ) : null}
+                <div className="my-4 h-px bg-[#E5E7EB]" />
+                <button
+                  type="button"
+                  onClick={() => setDepositsOpen((open) => !open)}
+                  className="flex w-full items-center gap-2 text-left"
+                >
+                  <ChevronRight
+                    className={cn('size-3 shrink-0 text-[#A1A1A1] transition-transform', depositsOpen && 'rotate-90')}
+                  />
+                  <span className="min-w-0 flex-1 text-[14px] font-bold text-[#171717]">Total deposit</span>
+                  <span className="text-[15px] font-bold text-[#931115]">{deposits.depositTotal}</span>
+                </button>
+                <div className="mt-1 flex items-baseline justify-between gap-3 pl-[19px] text-[11.5px] text-[#A1A1A1]">
+                  <span className="whitespace-nowrap">
+                    {deposits.depositPctLabel} · {deposits.depositCountLabel}
+                  </span>
+                  <span className="whitespace-nowrap">Balance {deposits.depositBalance}</span>
+                </div>
+                {depositsOpen ? (
+                  <div className="mt-2 flex flex-col pl-[19px]">
+                    {deposits.depositRows.map((row) => (
+                      <div
+                        key={row.supplier}
+                        title={row.rule}
+                        className="flex items-baseline justify-between gap-2 border-t border-[#F3F4F6] py-[5px]"
+                      >
+                        <span className="min-w-0 text-[11.5px] text-[#525252]">
+                          {row.supplier} <span className="text-[#A1A1A1]">{row.terms}</span>
+                        </span>
+                        <span className="shrink-0 text-[11.5px] font-semibold text-[#171717]">{row.amount}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </section>
+            </aside>
           ) : null}
         </div>
 
@@ -673,7 +807,7 @@ export function SummaryPage() {
                 <h2 className="text-[16px] font-bold text-[#171717]">Payment history</h2>
                 <span className="text-[11.5px] text-[#A1A1A1]">{payments.arrivalNote}</span>
               </div>
-              <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="mb-4 grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3">
                 <div className="rounded-[10px] border border-[#E5E7EB] px-3.5 py-2.5">
                   <div className="text-[10.5px] font-bold uppercase tracking-[0.4px] text-[#94A3B8]">
                     Sell total
@@ -714,38 +848,34 @@ export function SummaryPage() {
               </div>
               <div className="overflow-x-auto">
                 <div className="min-w-[640px]">
-                  <div className="grid grid-cols-[96px_minmax(0,1fr)_176px_108px_110px] gap-2.5 border-b border-[#E5E7EB] pb-1.5">
-                    <span className="text-[10.5px] font-bold uppercase tracking-[0.4px] text-[#94A3B8]">
-                      Date
-                    </span>
-                    <span className="text-[10.5px] font-bold uppercase tracking-[0.4px] text-[#94A3B8]">
-                      Instalment
-                    </span>
-                    <span className="text-[10.5px] font-bold uppercase tracking-[0.4px] text-[#94A3B8]">
-                      Method / ref
-                    </span>
-                    <span className="text-[10.5px] font-bold uppercase tracking-[0.4px] text-[#94A3B8]">
-                      Status
-                    </span>
-                    <span className="text-right text-[10.5px] font-bold uppercase tracking-[0.4px] text-[#94A3B8]">
-                      Amount
-                    </span>
+                  <div className="grid grid-cols-[96px_minmax(0,1fr)_176px_108px_110px] gap-2.5 border-b border-[#E5E7EB] pb-[7px]">
+                    {['Date', 'Instalment', 'Method / ref', 'Status', 'Amount'].map((label) => (
+                      <span
+                        key={label}
+                        className={cn(
+                          'text-[10.5px] font-bold uppercase tracking-[0.4px] text-[#94A3B8]',
+                          label === 'Amount' && 'text-right',
+                        )}
+                      >
+                        {label}
+                      </span>
+                    ))}
                   </div>
                   {payments.rows.map((pm) => (
                     <div
                       key={pm.label}
-                      className="grid grid-cols-[96px_minmax(0,1fr)_176px_108px_110px] items-center gap-2.5 border-b border-[#F3F4F6] py-2.5 last:border-0"
+                      className="grid grid-cols-[96px_minmax(0,1fr)_176px_108px_110px] items-center gap-2.5 border-b border-[#F3F4F6] py-[9px]"
                     >
                       <span className="whitespace-nowrap text-[12.5px] text-[#525252]">{pm.date}</span>
                       <span className="min-w-0 text-[12.5px] font-semibold text-[#171717]">{pm.label}</span>
                       <span className="min-w-0 truncate text-[11.5px] text-[#A1A1A1]">{pm.method}</span>
                       <span
-                        className="inline-flex h-[22px] w-fit items-center justify-center whitespace-nowrap rounded-md px-2.5 text-[11px] font-bold"
+                        className="inline-flex h-[22px] w-fit items-center justify-center justify-self-start whitespace-nowrap rounded-md px-[9px] text-[11px] font-bold"
                         style={{ background: pm.statusBg, color: pm.statusFg }}
                       >
                         {pm.status}
                       </span>
-                      <span className="whitespace-nowrap text-right text-[13px] font-bold text-[#171717]">
+                      <span className="whitespace-nowrap text-right text-[13px] font-bold tabular-nums text-[#171717]">
                         {pm.amount}
                       </span>
                     </div>
@@ -757,7 +887,7 @@ export function SummaryPage() {
         ) : null}
       </div>
 
-      <div className="flex shrink-0 items-center justify-between gap-4 border-t border-[#E7E7EA] bg-white px-6 py-3">
+      <div className="flex shrink-0 items-center justify-between gap-4 border-t border-[#E5E7EB] bg-white px-6 py-3">
         <div className="flex min-w-0 items-center gap-3 text-[13px] text-[#525252]">
           <Button variant="outline" onClick={() => navigate(`/build/${id}`)}>
             <ChevronLeft />
@@ -810,8 +940,8 @@ export function SummaryPage() {
       </div>
 
       {flash ? (
-        <div className="fixed bottom-6 right-6 z-[95] flex items-center gap-2.5 rounded-lg bg-[#171717] px-[18px] py-3 text-[13.5px] font-semibold text-white shadow-2xl">
-          <span className="text-[#00D492]">✓</span>
+        <div className="fixed bottom-7 left-1/2 z-[95] flex -translate-x-1/2 items-center gap-2.5 rounded-[10px] bg-[#171717] px-[18px] py-[11px] text-[13px] font-semibold text-white shadow-2xl">
+          <span className="text-[#4ADE80]">✓</span>
           {flash}
         </div>
       ) : null}
@@ -823,364 +953,6 @@ export function SummaryPage() {
           itinerary={itinerary}
         />
       ) : null}
-    </div>
-  )
-}
-
-function VouchersView({
-  vouchers,
-  mode,
-  setMode,
-  depositTotal,
-  valueModeClass,
-  onIssue,
-  onConfirm,
-  onReject,
-  canConfirm,
-  canReject,
-  raised,
-}: {
-  vouchers: VoucherCard[]
-  mode: VoucherValueMode
-  setMode: (mode: VoucherValueMode) => void
-  depositTotal: string
-  valueModeClass: (active: boolean) => string
-  onIssue: (card: VoucherCard) => void
-  onConfirm: (card: VoucherCard) => void
-  onReject: (card: VoucherCard) => void
-  canConfirm: boolean
-  canReject: boolean
-  raised: boolean
-}) {
-  const totalLabel = mode === 'sell' ? 'Total sell value' : 'Total payable to suppliers'
-  const totalValue =
-    mode === 'none'
-      ? '—'
-      : `$${Math.round(vouchers.reduce((a, v) => a + v.totalNum, 0)).toLocaleString('en-US')}`
-  const gridCols = mode === 'none'
-    ? '92px 132px minmax(220px,2.2fr) minmax(170px,1.6fr) 92px'
-    : '92px 132px minmax(220px,2.2fr) minmax(170px,1.6fr) 92px 128px'
-  const headers = [
-    { label: 'Date', align: 'l' as const },
-    { label: 'Type', align: 'l' as const },
-    { label: 'Service', align: 'l' as const },
-    { label: 'Detail', align: 'l' as const },
-    { label: 'Pax', align: 'c' as const },
-    ...(mode === 'none' ? [] : [{ label: mode === 'cost' ? 'Cost' : 'Sell', align: 'r' as const }]),
-  ]
-
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-5 rounded-[14px] border border-[#E5E7EB] bg-white px-5 py-3.5">
-        <div className="flex flex-wrap items-center gap-5">
-          <div>
-            <div className="text-[11px] font-bold uppercase tracking-[0.3px] text-[#A1A1A1]">
-              Invoiceable suppliers
-            </div>
-            <div className="mt-0.5 text-[15px] font-bold text-[#171717]">
-              {vouchers.length} supplier{vouchers.length === 1 ? '' : 's'}
-            </div>
-          </div>
-          <div>
-            <div className="text-[11px] font-bold uppercase tracking-[0.3px] text-[#A1A1A1]">{totalLabel}</div>
-            <div className="mt-0.5 text-[15px] font-bold text-[#171717]">{totalValue}</div>
-          </div>
-          <div>
-            <div className="text-[11px] font-bold uppercase tracking-[0.3px] text-[#A1A1A1]">
-              Deposit payable now
-            </div>
-            <div className="mt-0.5 text-[15px] font-bold text-[#931115]">{depositTotal}</div>
-          </div>
-        </div>
-        <div className="flex items-center gap-2.5">
-          <span className="text-[11.5px] font-semibold text-[#A1A1A1]">Values shown</span>
-          <div className="flex gap-0.5 rounded-[9px] bg-[#F3F4F6] p-0.5">
-            <button type="button" className={valueModeClass(mode === 'cost')} onClick={() => setMode('cost')}>
-              Cost
-            </button>
-            <button type="button" className={valueModeClass(mode === 'sell')} onClick={() => setMode('sell')}>
-              Sell
-            </button>
-            <button type="button" className={valueModeClass(mode === 'none')} onClick={() => setMode('none')}>
-              Hidden
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {vouchers.map((v) => (
-        <section key={v.supplier} className="overflow-hidden rounded-[14px] border border-[#E5E7EB] bg-white">
-          <div className="flex items-start justify-between gap-4 border-b border-[#EDEFF2] px-5 py-[15px]">
-            <div className="flex min-w-0 items-center gap-3">
-              <span className="flex size-[34px] shrink-0 items-center justify-center rounded-[10px] bg-[#F1F5F9] text-[13px] font-bold text-[#475569]">
-                {v.initials}
-              </span>
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[15px] font-bold text-[#171717]">{v.supplier}</span>
-                  <span
-                    className="inline-flex h-[21px] items-center rounded-full px-2.5 text-[11px] font-bold"
-                    style={{ background: v.holdBg, color: v.holdFg }}
-                  >
-                    {v.holdLabel}
-                  </span>
-                </div>
-                <div className="mt-0.5 text-[12px] font-medium text-[#A1A1A1]">
-                  {v.ref} · {v.dateRange} · {v.countLabel}
-                </div>
-              </div>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              {v.showValue ? (
-                <div className="mr-1.5 text-right">
-                  <div className="text-[10.5px] font-bold uppercase tracking-[0.3px] text-[#A1A1A1]">
-                    {v.totalLabel}
-                  </div>
-                  <div className="text-[16px] font-bold text-[#171717]">{v.total}</div>
-                </div>
-              ) : null}
-              {raised ? (
-                <>
-                  <button
-                    type="button"
-                    disabled={!canConfirm || v.voucherStatus === 'Confirmed'}
-                    onClick={() => onConfirm(v)}
-                    className="h-[34px] rounded-lg border border-[#15803D] bg-[#DCFCE7] px-3 text-[12.5px] font-semibold text-[#15803D] disabled:opacity-40"
-                  >
-                    Confirm
-                  </button>
-                  <button
-                    type="button"
-                    disabled={!canReject || v.voucherStatus === 'Rejected'}
-                    onClick={() => onReject(v)}
-                    className="h-[34px] rounded-lg border border-[#B91C1C] bg-[#FEE2E2] px-3 text-[12.5px] font-semibold text-[#B91C1C] disabled:opacity-40"
-                  >
-                    Reject
-                  </button>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => onIssue(v)}
-                  className={cn(
-                    'h-[34px] rounded-lg px-3.5 text-[13px] font-semibold',
-                    v.issued
-                      ? 'border border-[#E5E7EB] bg-white text-[#737373]'
-                      : 'border border-[#931115] bg-[#931115] text-white',
-                  )}
-                >
-                  {v.issued ? 'Re-issue voucher' : 'Issue voucher'}
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div className="overflow-x-auto">
-            <div style={{ minWidth: mode === 'none' ? 720 : 860 }}>
-              <div
-                className="grid border-b border-[#EDEFF2] bg-[#FBFBFC]"
-                style={{ gridTemplateColumns: gridCols }}
-              >
-                {headers.map((h) => (
-                  <div
-                    key={h.label}
-                    className={cn(
-                      'flex items-center px-3.5 py-2 text-[10.5px] font-bold uppercase tracking-[0.4px] text-[#94A3B8]',
-                      h.align === 'c' && 'justify-center',
-                      h.align === 'r' && 'justify-end',
-                    )}
-                  >
-                    {h.label}
-                  </div>
-                ))}
-              </div>
-              {v.rows.map((row, index) => (
-                <div
-                  key={`${row.date}-${row.service}-${index}`}
-                  className="grid"
-                  style={{
-                    gridTemplateColumns: gridCols,
-                    background: row.isExtra ? '#FCFCFD' : '#FFFFFF',
-                  }}
-                >
-                  <div className="flex items-center whitespace-nowrap border-b border-[#F3F4F6] px-3.5 py-[11px] text-[13px] text-[#737373]">
-                    {row.date}
-                  </div>
-                  <div
-                    className={cn(
-                      'flex items-center border-b border-[#F3F4F6] px-3.5 py-[11px] text-[11px] font-bold uppercase tracking-[0.3px]',
-                      row.isExtra ? 'text-[#0369A1]' : 'text-[#94A3B8]',
-                    )}
-                  >
-                    {row.typeLabel}
-                  </div>
-                  <div
-                    className={cn(
-                      'flex min-w-0 items-center truncate border-b border-[#F3F4F6] py-[11px] pr-3.5 text-[13px] font-semibold text-[#171717]',
-                      row.isExtra ? 'border-l border-[#CBD5E1] pl-[30px]' : 'pl-3.5',
-                    )}
-                  >
-                    {row.service}
-                  </div>
-                  <div className="flex min-w-0 items-center truncate border-b border-[#F3F4F6] px-3.5 py-[11px] text-[13px] text-[#737373]">
-                    {row.detail}
-                  </div>
-                  <div className="flex items-center justify-center border-b border-[#F3F4F6] px-3.5 py-[11px] text-[13px] text-[#171717]">
-                    {row.pax}
-                  </div>
-                  {mode !== 'none' ? (
-                    <div className="flex items-center justify-end whitespace-nowrap border-b border-[#F3F4F6] px-3.5 py-[11px] text-[13px] text-[#171717]">
-                      {row.value}
-                    </div>
-                  ) : null}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-4 bg-[#FAFAFB] px-5 py-3.5">
-            <div className="min-w-0">
-              <div className="text-[11px] font-bold uppercase tracking-[0.3px] text-[#A1A1A1]">Payment terms</div>
-              <div className="mt-0.5 text-[12.5px] font-medium text-[#525252]">{v.depositRule}</div>
-            </div>
-            <div className="flex shrink-0 items-baseline gap-[18px]">
-              <span className="text-[12px] text-[#A1A1A1]">
-                Deposit <span className="text-[13.5px] font-bold text-[#931115]">{v.deposit}</span>
-              </span>
-              <span className="text-[12px] text-[#A1A1A1]">{v.depositDue}</span>
-            </div>
-          </div>
-        </section>
-      ))}
-    </div>
-  )
-}
-
-function ServiceCard({
-  card: c,
-  compact = false,
-  priceMode = 'all',
-}: {
-  card: SummaryCard
-  compact?: boolean
-  priceMode?: PriceDisplayMode
-}) {
-  const tint = {
-    accommodation: '#F6FEFB',
-    flight: '#F7FAFF',
-    transportation: '#FFFCF3',
-    activity: '#FCF8FF',
-    other: '#FAFBFC',
-    extra: '#F5FBFF',
-  }[c.type]
-  const gridCols = gridForMode(c.type, priceMode)
-  return (
-    <section className={cn('overflow-hidden border border-[#E5E7EB] bg-white', compact ? 'rounded-[10px]' : 'rounded-lg')}>
-      <div
-        className={cn('flex items-center gap-2.5 border-b border-[#F1F1F3]', compact ? 'px-3.5 py-2' : 'px-3.5 py-2.5')}
-        style={{ background: tint }}
-      >
-        <span
-          className={cn(
-            'flex shrink-0 items-center justify-center font-bold',
-            compact ? 'size-5 rounded-md text-[10px]' : 'size-6 rounded-md text-[11px]',
-          )}
-          style={{ background: c.iconBg, color: c.iconFg }}
-        >
-          {c.initial}
-        </span>
-        <span className={cn('font-bold text-[#171717]', compact ? 'text-[12.5px]' : 'text-[13.5px]')}>{c.name}</span>
-        <span className="text-[11.5px] font-medium text-[#A1A1A1]">{c.countLabel}</span>
-      </div>
-      <div className="overflow-x-auto overscroll-x-contain">
-        <div style={{ minWidth: c.type === 'transportation' ? 1380 : c.type === 'flight' ? 1280 : 1240 }}>
-          <div className="grid" style={{ gridTemplateColumns: gridCols }}>
-            {c.headers.map((h) => (
-              <div key={h.label} className={headerClass(h.align, compact)}>
-                {h.label}
-              </div>
-            ))}
-          </div>
-          {c.blocks.map((b) => (
-            <ServiceBlock key={b.key} block={b} gridCols={gridCols} headers={c.headers} dense={compact} />
-          ))}
-        </div>
-      </div>
-    </section>
-  )
-}
-
-function ServiceBlock({
-  block: b,
-  gridCols,
-  headers,
-  dense,
-}: {
-  block: SummaryBlock
-  gridCols: string
-  headers: SummaryCell[]
-  dense: boolean
-}) {
-  return (
-    <div>
-      {b.rows.map((r, ri) =>
-        r.isChild ? (
-          <div
-            key={ri}
-            className="grid border-b border-[#F3F4F6] bg-[#FCFCFD]"
-            style={{ gridTemplateColumns: gridCols }}
-          >
-            <span style={{ gridColumn: '1 / 3' }} />
-            <div
-              className={cn(
-                'flex min-w-0 items-center gap-2 px-3.5',
-                dense ? 'py-1.5' : 'py-2',
-                r.kind === 'supplier' && 'border-l border-[#CBD5E1]',
-              )}
-              style={{ gridColumn: '3 / -2' }}
-            >
-              <span className="text-[11px] text-[#C4C4C8]">↳</span>
-              <span
-                className={cn(
-                  'flex-none rounded-[5px] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide',
-                  r.kind === 'supplier'
-                    ? 'bg-[#E0F2FE] text-[#0369A1]'
-                    : 'bg-[#F1F5F9] text-[#475569]',
-                )}
-              >
-                {r.kind === 'supplier' ? 'Supplier extra' : 'Service extra'}
-              </span>
-              <span className="min-w-0 truncate text-[12px] font-semibold text-[#3F3F46]">{r.cells[0]}</span>
-              <span className="flex-none whitespace-nowrap text-[10.5px] font-medium text-[#B4B4BA]">{r.meta}</span>
-            </div>
-            <div
-              className="flex items-center justify-end whitespace-nowrap px-3.5 pr-5 text-[11.5px] font-medium tabular-nums text-[#737373]"
-              style={{ gridColumn: '-2 / -1' }}
-            >
-              {r.cells[1]}
-            </div>
-          </div>
-        ) : (
-          <div key={ri} className="grid" style={{ gridTemplateColumns: gridCols }}>
-            {r.cells.map((cell, ci) => {
-              const header = headers[ci] ?? { label: '', align: 'l' as const, kind: 'label' as const }
-              const align = header.align
-              const cls = cellClass(align, dense, header)
-              const isPrice = header.kind !== 'label'
-              if (header.kind === 'hold') return (
-                <div key={ci} className={cls} style={{ color: holdTone(cell) }}>
-                  {cell}
-                </div>
-              )
-              return (
-                <div key={ci} className={cn(cls, !isPrice && 'truncate')} title={isPrice ? undefined : cell}>
-                  {cell}
-                </div>
-              )
-            })}
-          </div>
-        ),
-      )}
     </div>
   )
 }

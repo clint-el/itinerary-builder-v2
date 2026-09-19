@@ -1221,16 +1221,23 @@ export function buildSeedServices(it: Itinerary): AddedService[] {
   const guestIds = Array.from({ length: (it.adults || 0) + (it.children || 0) }, (_, i) => i + 1)
   const mid = midDate(it.travelDateFrom, it.travelDateTo)
 
+  // Demo anchor for the voucher deposit guard (BR-43): once an itinerary is voucher-eligible,
+  // treat its accommodation deposit as already paid so the guard has something real to show.
+  const stayDepositPaid = (['VOUCHERED', 'CONFIRMED', 'TRAVEL_IN_PROGRESS', 'COMPLETED'] as ItineraryStatus[]).includes(
+    it.status,
+  )
+
   const services: AddedService[] = [
-    serviceCard(
-      it,
-      'accommodation',
-      1,
-      lodge.name,
-      `2 room(s) · Full Board`,
-      `${nights} night(s)`,
-      stayPrice,
-      [
+    {
+      ...serviceCard(
+        it,
+        'accommodation',
+        1,
+        lodge.name,
+        `2 room(s) · Full Board`,
+        `${nights} night(s)`,
+        stayPrice,
+        [
         { label: 'Location', value: lodge.loc },
         { label: 'Rooms', value: '2' },
         { label: 'Basis', value: 'Full Board' },
@@ -1281,8 +1288,10 @@ export function buildSeedServices(it: Itinerary): AddedService[] {
           },
         ],
         notes: 'Seeded demo stay',
-      },
-    ),
+        },
+      ),
+      depositPaid: stayDepositPaid,
+    },
     serviceCard(
       it,
       'transportation',

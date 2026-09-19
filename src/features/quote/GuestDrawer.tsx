@@ -1,8 +1,14 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useStore } from '@/app/store'
 import { guestRoleLabel } from '@/shared/lib/helpers'
-import type { GuestDetail, GuestResidency, Itinerary } from '@/shared/lib/types'
+import type { DietaryStatus, GuestDetail, GuestResidency, Itinerary } from '@/shared/lib/types'
 import { cn } from '@/shared/lib/utils'
+
+/** Back-compat read for guests saved before the tri-state field existed (BR-21). */
+function dietaryStatusOf(g: GuestDetail): DietaryStatus {
+  if (g.dietaryStatus) return g.dietaryStatus
+  return g.dietary ? 'recorded' : 'not_captured'
+}
 import { DatePickerGridInput } from '@/shared/ui/date-picker'
 import {
   Select,
@@ -698,12 +704,42 @@ export function GuestDrawer({ open, onClose, itinerary }: GuestDrawerProps) {
                               />
                             </Field>
                             <Field label="Dietary Requirements">
-                              <textarea
-                                value={g.dietary || ''}
-                                placeholder="Type here"
-                                onChange={(e) => patchGuest(i, { dietary: e.target.value })}
-                                className={textareaClass}
-                              />
+                              <div className="flex flex-col gap-1.5">
+                                <label className="flex w-fit items-center gap-1.5 text-[12.5px] font-medium text-[#525252]">
+                                  <input
+                                    type="checkbox"
+                                    checked={dietaryStatusOf(g) === 'none'}
+                                    onChange={(e) =>
+                                      patchGuest(i, {
+                                        dietaryStatus: e.target.checked ? 'none' : 'not_captured',
+                                        dietary: '',
+                                      })
+                                    }
+                                  />
+                                  No requirements
+                                </label>
+                                <textarea
+                                  value={g.dietary || ''}
+                                  placeholder={
+                                    dietaryStatusOf(g) === 'none' ? 'None — untick above to record a requirement' : 'Type here'
+                                  }
+                                  disabled={dietaryStatusOf(g) === 'none'}
+                                  onChange={(e) =>
+                                    patchGuest(i, {
+                                      dietary: e.target.value,
+                                      dietaryStatus: e.target.value ? 'recorded' : 'not_captured',
+                                    })
+                                  }
+                                  className={cn(textareaClass, dietaryStatusOf(g) === 'none' && 'opacity-50')}
+                                />
+                                <span className="text-[11px] text-[#A1A1A1]">
+                                  {dietaryStatusOf(g) === 'recorded'
+                                    ? 'Prints on the voucher as written.'
+                                    : dietaryStatusOf(g) === 'none'
+                                      ? 'Prints "No special requirements".'
+                                      : 'Not yet captured — prints "Not yet advised — to follow" so the camp doesn’t read it as an oversight.'}
+                                </span>
+                              </div>
                             </Field>
                             <Field label="Preferences">
                               <textarea
