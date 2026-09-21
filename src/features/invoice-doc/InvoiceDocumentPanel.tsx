@@ -38,13 +38,14 @@ export function InvoiceDocumentPanel({
       <section className="rounded-xl border border-[#E5E7EB] bg-white p-5">
         <h2 className="text-[15px] font-bold text-[#171717]">Invoice document</h2>
         <p className="mt-2 text-[13px] text-[#737373]">
-          No invoice generated yet. Open the invoice PDF and use Generate invoice when the itinerary is Approved.
+          No invoice generated yet.{' '}
+          {canGenerate
+            ? 'Preview the draft invoice, then use Generate invoice on that page.'
+            : 'You can preview the draft layout below. Generate invoice becomes available once the itinerary is Approved.'}
         </p>
-        {canGenerate ? (
-          <Button asChild variant="outline" className="mt-4 h-9">
-            <Link to={`/invoice-doc/${itineraryId}`}>Preview draft invoice</Link>
-          </Button>
-        ) : null}
+        <Button asChild variant="outline" className="mt-4 h-9">
+          <Link to={`/invoice-doc/${itineraryId}`}>Preview draft invoice</Link>
+        </Button>
       </section>
     )
   }

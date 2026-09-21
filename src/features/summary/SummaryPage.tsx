@@ -8,6 +8,7 @@ import {
   History,
   List,
   Lock,
+  Receipt,
   Ticket,
 } from 'lucide-react'
 import { useStore } from '@/app/store'
@@ -182,7 +183,7 @@ export function SummaryPage() {
   const quoteGroups = getQuoteGroups(id)
   const quotes = getQuotes(id)
   const invoice = getInvoice(id)
-  const [view, setView] = useState<'summary' | 'vouchers' | 'activity'>('summary')
+  const [view, setView] = useState<'summary' | 'vouchers' | 'quotes' | 'invoices' | 'activity'>('summary')
   const [summaryMode, setSummaryMode] = useState<'service' | 'day'>('service')
   const [priceMode, setPriceMode] = useState<PriceDisplayMode>('all')
   const [openPriceGroups, setOpenPriceGroups] = useState<Record<string, boolean>>({})
@@ -503,6 +504,14 @@ export function SummaryPage() {
               <Ticket className="size-3.5" />
               Vouchers
             </button>
+            <button type="button" className={tabClass(view === 'quotes')} onClick={() => setView('quotes')}>
+              <FileText className="size-3.5" />
+              Quotes
+            </button>
+            <button type="button" className={tabClass(view === 'invoices')} onClick={() => setView('invoices')}>
+              <Receipt className="size-3.5" />
+              Invoices
+            </button>
             <button type="button" className={tabClass(view === 'activity')} onClick={() => setView('activity')}>
               <History className="size-3.5" />
               Activities
@@ -615,6 +624,19 @@ export function SummaryPage() {
                   </div>
                 </section>
               )
+            ) : view === 'quotes' ? (
+              <QuoteDocumentsPanel
+                itineraryId={id}
+                quotes={quotes}
+                currentFingerprint={itineraryCommercialFp(services)}
+              />
+            ) : view === 'invoices' ? (
+              <InvoiceDocumentPanel
+                itineraryId={id}
+                invoice={invoice}
+                currentFingerprint={itineraryCommercialFp(services)}
+                canGenerate={['APPROVED', 'INVOICED', 'VOUCHERED', 'CONFIRMED'].includes(itinerary.status)}
+              />
             ) : view === 'vouchers' ? (
               <VouchersView
                 vouchers={vouchers}
@@ -808,24 +830,6 @@ export function SummaryPage() {
             </aside>
           ) : null}
         </div>
-
-        {showSidePanel ? (
-          <aside className="w-full">
-            <QuoteDocumentsPanel
-              itineraryId={id}
-              quotes={quotes}
-              currentFingerprint={itineraryCommercialFp(services)}
-            />
-            <div className="mt-4">
-              <InvoiceDocumentPanel
-                itineraryId={id}
-                invoice={invoice}
-                currentFingerprint={itineraryCommercialFp(services)}
-                canGenerate={['APPROVED', 'INVOICED', 'VOUCHERED', 'CONFIRMED'].includes(itinerary.status)}
-              />
-            </div>
-          </aside>
-        ) : null}
 
         {showSidePanel && lines.length > 0 ? (
           <aside className="w-full">
