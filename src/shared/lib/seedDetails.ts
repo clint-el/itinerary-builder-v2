@@ -1,10 +1,14 @@
+import { buildInvoiceSnapshot } from '@/features/invoice-doc/invoiceSnapshotModel'
+import { buildQuoteSnapshot } from '@/features/quote-doc/quoteSnapshotModel'
 import { CATALOG, SEED_ITINERARIES, SEED_QUOTE_GROUPS, TAB_META } from './catalogs'
 import { nightsBetween, quoteGroupsTotal } from './helpers'
 import type {
   AddedService,
   GuestDetail,
+  InvoiceDocument,
   Itinerary,
   ItineraryStatus,
+  QuoteDocument,
   QuoteExtra,
   QuoteGroup,
   QuoteService,
@@ -1467,6 +1471,91 @@ export function withSeedTotalsFromQuotes(itineraries: Itinerary[], quotes: Recor
       ...it,
       totalUsd: total,
       balanceUsd: Math.round((total - paid) * 100) / 100,
+    }
+  })
+}
+
+/** Seed one pre-generated Q1 on CPS5680 so the documents list is demonstrable on first load. */
+export function buildSeedQuoteDocumentsMap(): Record<string, QuoteDocument[]> {
+  const map: Record<string, QuoteDocument[]> = {}
+  const it = SEED_ITINERARIES_FULL.find((row) => row.id === 'CPS5680')
+  if (!it) return map
+
+  const services = buildSeedServices(it)
+  const quoteGroups = buildSeedQuoteGroups(it)
+  const guestDetails = buildSeedGuests(it)
+  const q1 = buildQuoteSnapshot({
+    itinerary: it,
+    services,
+    quoteGroups,
+    guestDetails,
+    seq: 1,
+    generatedBy: it.safariPlanner || 'Safari planner',
+    presentation: 'B2B_ITEMISED',
+  })
+  q1.generatedAt = '2026-07-06T10:00:00Z'
+
+  const q2 = buildQuoteSnapshot({
+    itinerary: it,
+    services,
+    quoteGroups,
+    guestDetails,
+    seq: 2,
+    generatedBy: it.safariPlanner || 'Safari planner',
+    presentation: 'B2B_PACKAGED',
+  })
+  q2.generatedAt = '2026-07-06T11:00:00Z'
+
+  map[it.id] = [q1, q2]
+  return map
+}
+
+export function withSeedQuoteFingerprints(
+  itineraries: Itinerary[],
+  quoteDocuments: Record<string, QuoteDocument[]>,
+): Itinerary[] {
+  return itineraries.map((it) => {
+    const docs = quoteDocuments[it.id]
+    if (!docs?.length) return it
+    const latest = docs.reduce((a, b) => (a.seq >= b.seq ? a : b))
+    return { ...it, quoteFingerprint: latest.fingerprint }
+  })
+}
+
+/** Seed a deposit invoice on CPS5681 (APPROVED) for the documents panel demo. */
+export function buildSeedInvoiceDocumentsMap(): Record<string, InvoiceDocument> {
+  const map: Record<string, InvoiceDocument> = {}
+  const it = SEED_ITINERARIES_FULL.find((row) => row.id === 'CPS5681')
+  if (!it) return map
+
+  const services = buildSeedServices(it)
+  const quoteGroups = buildSeedQuoteGroups(it)
+  const guestDetails = buildSeedGuests(it)
+  const doc = buildInvoiceSnapshot({
+    itinerary: it,
+    services,
+    quoteGroups,
+    guestDetails,
+    stage: 'deposit',
+    generatedBy: it.safariPlanner || 'Safari planner',
+  })
+  doc.generatedAt = '2026-07-05T09:00:00Z'
+  doc.invoiceDate = '2026-07-05'
+  map[it.id] = doc
+  return map
+}
+
+export function withSeedInvoiceFingerprints(
+  itineraries: Itinerary[],
+  invoiceDocuments: Record<string, InvoiceDocument>,
+): Itinerary[] {
+  return itineraries.map((it) => {
+    const doc = invoiceDocuments[it.id]
+    if (!doc) return it
+    return {
+      ...it,
+      invoiceFingerprint: doc.fingerprint,
+      firstInvoiceDate: doc.invoiceDate,
     }
   })
 }

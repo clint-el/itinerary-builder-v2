@@ -2,9 +2,12 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import {
   ensureSeeded,
   getGuestDetails,
+  getInvoice,
+  getItinerary,
   getQuoteGroups,
   getServices,
   listItineraries,
+  listQuotes,
   nextInquiryId,
   setQuoteGroups,
   setServices,
@@ -23,6 +26,23 @@ describe('storage', () => {
     expect(list.length).toBeGreaterThanOrEqual(18)
     expect(list.some((it) => it.reference === 'CPS5678-1-1')).toBe(true)
     expect(list.find((it) => it.id === 'CPS5679')?.leadFirst).toBeTruthy()
+  })
+
+  it('seeds deposit invoice on CPS5681', () => {
+    const invoice = getInvoice('CPS5681')
+    expect(invoice).toBeDefined()
+    expect(invoice?.invoiceNumber).toBe('CPS5681-INV')
+    expect(getItinerary('CPS5681')?.invoiceFingerprint).toBe(invoice?.fingerprint)
+    expect(getItinerary('CPS5681')?.firstInvoiceDate).toBeTruthy()
+  })
+
+  it('seeds itemised Q1 and packaged Q2 on CPS5680', () => {
+    const quotes = listQuotes('CPS5680')
+    expect(quotes).toHaveLength(2)
+    expect(quotes[0].docNumber).toBe('Q1')
+    expect(quotes[0].presentation).toBe('B2B_ITEMISED')
+    expect(quotes[1].docNumber).toBe('Q2')
+    expect(quotes[1].presentation).toBe('B2B_PACKAGED')
   })
 
   it('seeds full guest, quote, and service details for every seed itinerary', () => {

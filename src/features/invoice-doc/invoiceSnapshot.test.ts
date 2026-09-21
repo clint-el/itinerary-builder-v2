@@ -1,0 +1,161 @@
+import { beforeEach, describe, expect, it } from 'vitest'
+import {
+  buildInvoiceSnapshot,
+  buildPaymentPosition,
+  invoiceNumberFor,
+  isInvoiceStale,
+} from '@/features/invoice-doc/invoiceSnapshotModel'
+import { itineraryCommercialFp } from '@/shared/lib/lifecycleRules'
+import { buildDepositSummary, buildSummaryPricing, linesFromServices } from '@/features/summary/summaryModel'
+import {
+  ensureSeeded,
+  getInvoice,
+  getItinerary,
+  saveInvoice,
+} from '@/shared/lib/storage'
+import type { AddedService, Itinerary } from '@/shared/lib/types'
+
+function baseItinerary(overrides: Partial<Itinerary> = {}): Itinerary {
+  return {
+    id: 'TEST-INV',
+    reference: 'CPS7777',
+    itineraryRef: 'ITN-7777',
+    title: 'Invoice Safari',
+    agency: 'Black Tomato',
+    agent: 'Agent',
+    safariPlanner: 'Planner',
+    destination: 'Kenya',
+    travelDateFrom: '2026-11-01',
+    travelDateTo: '2026-11-08',
+    createdAt: '2026-01-01',
+    status: 'APPROVED',
+    paymentStatus: 'PARTIALLY_PAID',
+    totalUsd: 10000,
+    balanceUsd: 5000,
+    updatedAt: '2026-01-01',
+    adults: 2,
+    children: 0,
+    infants: 0,
+    ...overrides,
+  }
+}
+
+function service(id: string, rack: number, net: number): AddedService {
+  return {
+    id,
+    tab: 'accommodation',
+    title: 'Lodge',
+    subtitle: 'Suite',
+    meta: '1 Nov 2026',
+    details: [],
+    price: rack,
+    priceLabel: `$${rack}`,
+    net,
+    rack,
+    netLabel: `$${net}`,
+    rackLabel: `$${rack}`,
+    margin: rack - net,
+    marginPct: 20,
+    marginColor: '#0B7A48',
+    fg: '#059669',
+    bg: '#D1FAE5',
+    initial: 'A',
+    expanded: true,
+    draft: {},
+  }
+}
+
+describe('invoiceSnapshotModel', () => {
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
+  it('builds deposit invoice with full total and payment position', () => {
+    const itinerary = baseItinerary()
+    const services = [service('s1', 10000, 7700)]
+    const snap = buildInvoiceSnapshot({
+      itinerary,
+      services,
+      quoteGroups: [],
+      guestDetails: [],
+      stage: 'deposit',
+      generatedBy: 'Planner',
+    })
+    expect(snap.invoiceNumber).toBe('CPS7777-INV')
+    expect(snap.sellTotal).toBe(7700)
+    expect(snap.lifecycleStage).toBe('deposit')
+    expect(snap.paymentPosition.total).toBe(7700)
+    expect(snap.paymentPosition.paid).toBe(5000)
+    expect(snap.paymentPosition.balance).toBe(5000)
+  })
+
+  it('updates in place with same invoice number and revision log', () => {
+    const itinerary = baseItinerary()
+    const services = [service('s1', 10000, 7700)]
+    const first = buildInvoiceSnapshot({
+      itinerary,
+      services,
+      quoteGroups: [],
+      guestDetails: [],
+      stage: 'deposit',
+      generatedBy: 'Planner',
+    })
+    saveInvoice(first)
+
+    const changed = [service('s1', 12000, 9240)]
+    const second = buildInvoiceSnapshot({
+      itinerary,
+      services: changed,
+      quoteGroups: [],
+      guestDetails: [],
+      stage: 'deposit',
+      generatedBy: 'Planner',
+      existing: first,
+    })
+    saveInvoice(second)
+
+    expect(second.invoiceNumber).toBe(first.invoiceNumber)
+    expect(second.id).toBe(first.id)
+    expect(second.sellTotal).toBe(9240)
+    expect(second.revisions).toHaveLength(1)
+    expect(second.revisions[0].summary).toContain('9,240')
+  })
+
+  it('marks invoice stale when fingerprint changes', () => {
+    const itinerary = baseItinerary()
+    const services = [service('s1', 10000, 7700)]
+    const snap = buildInvoiceSnapshot({
+      itinerary,
+      services,
+      quoteGroups: [],
+      guestDetails: [],
+      stage: 'full',
+      generatedBy: 'Planner',
+    })
+    expect(isInvoiceStale(snap, snap.fingerprint)).toBe(false)
+    expect(isInvoiceStale(snap, itineraryCommercialFp([service('s1', 11000, 8470)]))).toBe(true)
+  })
+
+  it('seeds CPS5681 with an invoice on first load', () => {
+    ensureSeeded()
+    const invoice = getInvoice('CPS5681')
+    expect(invoice).toBeDefined()
+    expect(invoice?.invoiceNumber).toBe('CPS5681-INV')
+    expect(getItinerary('CPS5681')?.invoiceFingerprint).toBe(invoice?.fingerprint)
+    expect(getItinerary('CPS5681')?.firstInvoiceDate).toBe('2026-07-05')
+  })
+
+  it('full stage sets amount due immediately to balance', () => {
+    const itinerary = baseItinerary({ balanceUsd: 3000 })
+    const services = [service('s1', 10000, 7700)]
+    const lines = linesFromServices(services, [])
+    const pricing = buildSummaryPricing(lines, 2)
+    const deposits = buildDepositSummary(lines, pricing.sellNumber)
+    const pos = buildPaymentPosition(itinerary, pricing.sellNumber, deposits, 'full')
+    expect(pos.amountDueImmediately).toBe(3000)
+  })
+
+  it('invoiceNumberFor uses reference suffix', () => {
+    expect(invoiceNumberFor(baseItinerary())).toBe('CPS7777-INV')
+  })
+})

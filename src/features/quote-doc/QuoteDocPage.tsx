@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { itineraryCommercialFp } from '@/shared/lib/lifecycleRules'
 import {
   ChevronLeft,
   Download,
@@ -15,27 +16,32 @@ import { Button } from '@/components/ui/button'
 import {
   balanceDueDate,
   buildLedgerCancellationRows,
-  buildLedgerOptionRows,
   buildLedgerPaymentTerms,
-  buildLedgerScheduleGroups,
-  categoryGridFromGroups,
   fmtLedgerAmount,
   fmtLedgerDateLong,
   fmtLedgerUsd,
   GENERAL_LEDGER_EXCLUSIONS,
   GENERAL_LEDGER_INCLUSIONS,
   guestRosterRows,
-  itineraryTitle,
   paxComposition,
   quoteValidUntil,
 } from '@/features/quote-doc/quoteLedgerModel'
 import {
   buildDepositSummary,
-  buildPriceGroups,
   buildSummaryPricing,
   linesFromQuoteGroups,
   linesFromServices,
 } from '@/features/summary/summaryModel'
+import { presentationLabel } from '@/features/quote-doc/quotePackagedModel'
+import { rateBasisLabel, rateBasisTag } from '@/features/quote-doc/quoteRateBasisModel'
+import { QuotePackagedContent } from '@/features/quote-doc/QuotePackagedContent'
+import {
+  isQuoteStale,
+  renderModelFromLive,
+  renderModelFromSnapshot,
+  summaryLinesFromQuote,
+} from '@/features/quote-doc/quoteSnapshotModel'
+import type { QuotePresentation, QuoteRateBasis, QuoteRateBasisSelection } from '@/shared/lib/types'
 import { nightsBetween, partyGuests } from '@/shared/lib/helpers'
 import type { AddedService, Hold } from '@/shared/lib/types'
 import { cn } from '@/shared/lib/utils'
@@ -48,9 +54,9 @@ const GRID_SCHEDULE = 'grid grid-cols-[52px_148px_minmax(0,1fr)_74px_26px_84px] 
 type PageDef = { key: number; label: string }
 
 export function QuoteDocPage() {
-  const { id = '' } = useParams()
+  const { id = '', quoteSeq: quoteSeqParam } = useParams()
   const navigate = useNavigate()
-  const { itineraries, getServices, getQuoteGroups, getGuestDetails, stampQuoteDoc } = useStore()
+  const { itineraries, getServices, getQuoteGroups, getGuestDetails, getQuotes, generateQuote } = useStore()
   const itinerary = itineraries.find((item) => item.id === id)
   const services = getServices(id)
   const quoteGroups = getQuoteGroups(id)
@@ -66,15 +72,64 @@ export function QuoteDocPage() {
   const [priceMode, setPriceMode] = useState<'total' | 'pp'>('pp')
   const [warningDismissed, setWarningDismissed] = useState(false)
   const [activePage, setActivePage] = useState(1)
-  const [version, setVersion] = useState(1)
   const [flash, setFlash] = useState<string | null>(null)
+  const [presentation, setPresentation] = useState<QuotePresentation>('B2B_ITEMISED')
+  const [rateBasisSelection, setRateBasisSelection] = useState<QuoteRateBasisSelection>('nett')
+  const quotes = getQuotes(id)
+  const draftPreviewBasis: QuoteRateBasis =
+    rateBasisSelection === 'both' ? 'nett' : rateBasisSelection
+  const currentFp = useMemo(() => itineraryCommercialFp(services), [services])
   const viewportRef = useRef<HTMLDivElement>(null)
   const optionsRef = useRef<HTMLDivElement>(null)
   const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  const isDraftMode = quoteSeqParam === 'draft' || (!quoteSeqParam && quotes.length === 0)
+  const activeQuote = useMemo(() => {
+    if (isDraftMode) return undefined
+    if (quoteSeqParam && quoteSeqParam !== 'draft') {
+      const seq = Number.parseInt(quoteSeqParam, 10)
+      if (!Number.isNaN(seq)) return quotes.find((quote) => quote.seq === seq)
+    }
+    if (quotes.length) return quotes.reduce((a, b) => (a.seq >= b.seq ? a : b))
+    return undefined
+  }, [isDraftMode, quoteSeqParam, quotes])
+
+  const renderModel = useMemo(() => {
+    if (activeQuote && itinerary) {
+      return renderModelFromSnapshot(activeQuote, isQuoteStale(activeQuote, currentFp))
+    }
+    if (itinerary) {
+      return renderModelFromLive({
+        itinerary,
+        services,
+        quoteGroups,
+        guestDetails,
+        presentation,
+        rateBasis: draftPreviewBasis,
+      })
+    }
+    return null
+  }, [activeQuote, currentFp, draftPreviewBasis, guestDetails, itinerary, presentation, quoteGroups, services])
+
   useEffect(() => {
-    if (id) stampQuoteDoc(id)
-  }, [id, stampQuoteDoc])
+    if (activeQuote?.presentation) setPresentation(activeQuote.presentation)
+  }, [activeQuote?.presentation])
+
+  useEffect(() => {
+    if (activeQuote?.rateBasis) setRateBasisSelection(activeQuote.rateBasis)
+  }, [activeQuote?.rateBasis])
+
+  useEffect(() => {
+    if (!isDraftMode) return
+    if (itinerary?.lastQuoteRateBasisSelection) {
+      setRateBasisSelection(itinerary.lastQuoteRateBasisSelection)
+      return
+    }
+    if (quotes.length) {
+      const latest = quotes.reduce((a, b) => (a.seq >= b.seq ? a : b))
+      setRateBasisSelection(latest.rateBasis)
+    }
+  }, [isDraftMode, itinerary?.lastQuoteRateBasisSelection, quotes])
 
   useEffect(() => {
     if (!optionsOpen) return
@@ -93,20 +148,17 @@ export function QuoteDocPage() {
   )
 
   const lines = useMemo(() => {
+    if (activeQuote) return summaryLinesFromQuote(activeQuote)
     if (services.length) return linesFromServices(services, guests)
     if (quoteGroups.length) return linesFromQuoteGroups(quoteGroups)
     return []
-  }, [quoteGroups, services, guests])
+  }, [activeQuote, quoteGroups, services, guests])
 
-  const priceGroups = useMemo(() => buildPriceGroups(lines), [lines])
-  const scheduleGroups = useMemo(() => buildLedgerScheduleGroups(lines), [lines])
-  const categoryGrid = useMemo(() => categoryGridFromGroups(priceGroups), [priceGroups])
   const totalGuests =
     guests.length ||
     (itinerary ? (itinerary.adults || 0) + (itinerary.children || 0) + (itinerary.infants || 0) : 0)
   const pricing = useMemo(() => buildSummaryPricing(lines, totalGuests), [lines, totalGuests])
-  const deposits = useMemo(() => buildDepositSummary(lines, pricing.sellNumber), [lines, pricing.sellNumber])
-  const optionRows = useMemo(() => buildLedgerOptionRows(lines, services), [lines, services])
+  const deposits = useMemo(() => buildDepositSummary(lines, renderModel?.sellTotal ?? pricing.sellNumber), [lines, pricing.sellNumber, renderModel?.sellTotal])
   const paymentTerms = useMemo(() => buildLedgerPaymentTerms(lines), [lines])
   const cancellationRows = useMemo(
     () =>
@@ -118,9 +170,25 @@ export function QuoteDocPage() {
     [lines, itinerary?.travelDateFrom, itinerary?.travelDateTo],
   )
 
-  const grossSell = useMemo(() => lines.reduce((sum, l) => sum + (l.rack || 0), 0), [lines])
+  const scheduleGroups = renderModel?.scheduleGroups ?? []
+  const categoryGrid = renderModel?.categoryTotals ?? []
+  const optionRows = renderModel?.optionRows ?? []
+  const grossSell = renderModel?.grossSell ?? 0
+  const sellTotal = renderModel?.sellTotal ?? pricing.sellNumber
+
+  const isPackaged = renderModel?.presentation === 'B2B_PACKAGED'
+  const rateTag = rateBasisTag(renderModel?.rateBasis ?? draftPreviewBasis)
 
   const pageDefs = useMemo<PageDef[]>(() => {
+    if (isPackaged) {
+      const base: PageDef[] = [
+        { key: 1, label: 'Cover' },
+        { key: 2, label: 'Includes' },
+        { key: 3, label: 'Totals' },
+      ]
+      if (showTerms) base.push({ key: 4, label: 'Terms' })
+      return base
+    }
     const base: PageDef[] = [
       { key: 1, label: 'Cover' },
       { key: 2, label: 'Schedule' },
@@ -129,14 +197,18 @@ export function QuoteDocPage() {
     ]
     if (showTerms) base.push({ key: 5, label: 'Terms' })
     return base
-  }, [showTerms])
+  }, [isPackaged, showTerms])
 
-  const pageNumber = (key: number) => pageDefs.findIndex((page) => page.key === key) + 1
   const totalPages = pageDefs.length
-  const versionLabel = `v${version}`
-  const refLabel = `${itinerary?.reference || id} · ${versionLabel}`
+  const versionLabel = renderModel?.versionLabel ?? 'draft'
+  const refLabel = renderModel?.refLabel ?? `${id} · draft`
+  const validUntil = renderModel?.validUntil ?? quoteValidUntil(new Date().toISOString().slice(0, 10))
+  const pricingDiscounts = renderModel?.pricingSummary.discounts ?? pricing.discounts.map((d) => ({
+    label: d.label,
+    amount: Number.parseFloat(d.sellDelta.replace(/[^0-9.-]/g, '')) || 0,
+  }))
 
-  if (!itinerary) {
+  if (!itinerary || !renderModel) {
     return (
       <div className="flex h-screen flex-col items-center justify-center gap-3 bg-[#3F3F46] text-white">
         <p className="text-sm text-white/70">Itinerary not found.</p>
@@ -163,14 +235,22 @@ export function QuoteDocPage() {
     lines.filter((l) => l.type === 'accommodation').reduce((sum, l) => sum + (l.nights || 0), 0)
   const daysCount = nightsCount ? nightsCount + 1 : 1
   const lead =
-    [itinerary.leadFirst, itinerary.leadLast].filter(Boolean).join(' ') ||
-    itinerary.title ||
-    'Guest'
-  const familyLabel = itinerary.title || lead
-  const issuedOn = fmtLedgerDateLong(new Date().toISOString().slice(0, 10))
-  const validUntil = quoteValidUntil(new Date().toISOString().slice(0, 10))
+    [itinerary.leadFirst, itinerary.leadLast].filter(Boolean).join(' ') || 'Guest'
+  const coverTitle = renderModel.coverTitle
+  const issuedOn = fmtLedgerDateLong(
+    (renderModel.generatedAt ?? new Date().toISOString()).slice(0, 10),
+  )
   const balanceDue = balanceDueDate(itinerary.travelDateFrom || '')
-  const perPerson = totalGuests ? pricing.sellNumber / totalGuests : 0
+  const perPerson = totalGuests ? sellTotal / totalGuests : 0
+  const depositTotalLabel = activeQuote
+    ? fmtLedgerAmount(renderModel.depositTotal)
+    : deposits.depositTotal
+  const depositBalanceLabel = activeQuote
+    ? fmtLedgerAmount(renderModel.depositBalance)
+    : deposits.depositBalance
+  const depositPctLabel = activeQuote
+    ? `${renderModel.depositPctOfSell}%`
+    : `${deposits.depositPctOfSell}%`
   const countries =
     itinerary.destinations?.length
       ? itinerary.destinations.join(' · ')
@@ -196,11 +276,27 @@ export function QuoteDocPage() {
     const width = viewportRef.current?.clientWidth || 0
     if (width) setZoom(Math.max(40, Math.min(150, Math.floor(((width - 64) / PAGE_W) * 100))))
   }
-  const regenerate = () => {
-    const next = version + 1
-    setVersion(next)
+  const handleGenerateQuote = () => {
+    const result = generateQuote(id, {
+      generatedBy: itinerary.safariPlanner || 'Safari planner',
+      presentation,
+      rateBasis: rateBasisSelection,
+    })
+    if (!result) return
     setOptionsOpen(false)
-    showFlash(`Quote regenerated as v${next}`)
+    const docs = Array.isArray(result) ? result : [result]
+    const latest = docs[docs.length - 1]
+    navigate(`/quote-doc/${id}/${latest.seq}`)
+    const pres = presentationLabel(latest.presentation).toLowerCase()
+    if (docs.length > 1) {
+      showFlash(
+        `Quotes ${quotes.length ? 'regenerated' : 'generated'} as ${docs.map((d) => d.docNumber).join(' + ')} · ${pres} · rack + nett`,
+      )
+      return
+    }
+    showFlash(
+      `Quote ${quotes.length ? 'regenerated' : 'generated'} as ${latest.docNumber} / ${latest.versionLabel} · ${pres} · ${rateBasisLabel(latest.rateBasis).toLowerCase()}`,
+    )
   }
 
   return (
@@ -250,15 +346,28 @@ export function QuoteDocPage() {
         <span className="h-6 w-px shrink-0 bg-[#E5E7EB]" />
         <div className="flex min-w-0 flex-col">
           <span className="truncate text-[13.5px] font-bold text-[#171717]">
-            Quotation {itinerary.reference} · {versionLabel}
+            Quotation {itinerary.reference}
+            {renderModel.docNumber ? ` · ${renderModel.docNumber}` : ''} · {versionLabel}
           </span>
           <span className="truncate text-[11.5px] text-[#A1A1A1]">
-            Ledger layout · generated {issuedOn} by {itinerary.safariPlanner || 'Safari planner'}
+            {renderModel.mode === 'draft'
+              ? `Draft preview (${presentationLabel(renderModel.presentation).toLowerCase()}) — not sent to agent`
+              : `${isPackaged ? 'Packaged' : 'Ledger'} layout · generated ${issuedOn} by ${renderModel.generatedBy || itinerary.safariPlanner || 'Safari planner'}`}
           </span>
         </div>
-        <span className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full bg-[#FDF2F2] px-2.5 text-[11.5px] font-bold text-[#931115]">
-          <span className="size-1.5 rounded-full bg-[#931115]" /> Quoted
-        </span>
+        {renderModel.mode === 'draft' ? (
+          <span className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full bg-[#EFF6FF] px-2.5 text-[11.5px] font-bold text-[#1D4ED8]">
+            <span className="size-1.5 rounded-full bg-[#1D4ED8]" /> Draft
+          </span>
+        ) : renderModel.stale ? (
+          <span className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full bg-[#FEF3C7] px-2.5 text-[11.5px] font-bold text-[#92400E]">
+            <span className="size-1.5 rounded-full bg-[#92400E]" /> Stale
+          </span>
+        ) : (
+          <span className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full bg-[#FDF2F2] px-2.5 text-[11.5px] font-bold text-[#931115]">
+            <span className="size-1.5 rounded-full bg-[#931115]" /> Frozen
+          </span>
+        )}
         <div className="flex-1" />
         <div className="flex shrink-0 items-center gap-0.5 rounded-lg bg-[#F4F4F5] p-[3px]">
           <ZoomButton title="Zoom out" onClick={() => setZoom((value) => Math.max(40, value - 10))}>
@@ -286,26 +395,19 @@ export function QuoteDocPage() {
           </button>
           {optionsOpen ? (
             <div className="absolute right-0 top-10 z-30 w-[308px] rounded-xl border bg-white p-4 shadow-xl">
-              <p className="mb-2 text-[11.5px] font-bold uppercase tracking-wide text-[#A1A1A1]">Sections</p>
-              <OptionToggle
-                label="Payment terms & cancellation"
-                on={showTerms}
-                onClick={() => setShowTerms((value) => !value)}
-              />
-              <div className="my-3 h-px bg-[#E5E7EB]" />
-              <p className="mb-2 text-[11.5px] font-bold uppercase tracking-wide text-[#A1A1A1]">Price display</p>
-              <div className="flex gap-1.5">
+              <p className="mb-2 text-[11.5px] font-bold uppercase tracking-wide text-[#A1A1A1]">Presentation</p>
+              <div className="flex flex-col gap-1.5">
                 {([
-                  ['total', 'Total only'],
-                  ['pp', 'Per person + total'],
+                  ['B2B_ITEMISED', 'Itemised (Ledger)'],
+                  ['B2B_PACKAGED', 'Packaged (Includes only)'],
                 ] as const).map(([mode, label]) => (
                   <button
                     key={mode}
                     type="button"
-                    onClick={() => setPriceMode(mode)}
+                    onClick={() => setPresentation(mode)}
                     className={cn(
-                      'h-[30px] flex-1 rounded-lg border text-[12px] font-semibold',
-                      priceMode === mode
+                      'h-[32px] rounded-lg border px-3 text-left text-[12px] font-semibold',
+                      presentation === mode
                         ? 'border-[#931115] bg-[#FDF2F2] text-[#931115]'
                         : 'border-[#E5E7EB] text-[#525252]',
                     )}
@@ -314,14 +416,84 @@ export function QuoteDocPage() {
                   </button>
                 ))}
               </div>
+              <div className="my-3 h-px bg-[#E5E7EB]" />
+              <p className="mb-2 text-[11.5px] font-bold uppercase tracking-wide text-[#A1A1A1]">Rate basis</p>
+              <div className="flex flex-col gap-1.5">
+                {([
+                  ['rack', 'Rack — published prices'],
+                  ['nett', 'Nett — agent wholesale'],
+                  ['both', 'Both — Rack + Nett PDFs'],
+                ] as const).map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setRateBasisSelection(mode)}
+                    className={cn(
+                      'h-[32px] rounded-lg border px-3 text-left text-[12px] font-semibold',
+                      rateBasisSelection === mode
+                        ? 'border-[#931115] bg-[#FDF2F2] text-[#931115]'
+                        : 'border-[#E5E7EB] text-[#525252]',
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {rateBasisSelection === 'both' ? (
+                <p className="mt-2 text-[11.5px] leading-relaxed text-[#A1A1A1]">
+                  Draft preview shows Nett. Generate creates two numbered quotes in one action.
+                </p>
+              ) : null}
+              <div className="my-3 h-px bg-[#E5E7EB]" />
+              <p className="mb-2 text-[11.5px] font-bold uppercase tracking-wide text-[#A1A1A1]">Sections</p>
+              <OptionToggle
+                label="Payment terms & cancellation"
+                on={showTerms}
+                onClick={() => setShowTerms((value) => !value)}
+              />
+              {!isPackaged ? (
+                <>
+                  <div className="my-3 h-px bg-[#E5E7EB]" />
+                  <p className="mb-2 text-[11.5px] font-bold uppercase tracking-wide text-[#A1A1A1]">Price display</p>
+                  <div className="flex gap-1.5">
+                    {([
+                      ['total', 'Total only'],
+                      ['pp', 'Per person + total'],
+                    ] as const).map(([mode, label]) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setPriceMode(mode)}
+                        className={cn(
+                          'h-[30px] flex-1 rounded-lg border text-[12px] font-semibold',
+                          priceMode === mode
+                            ? 'border-[#931115] bg-[#FDF2F2] text-[#931115]'
+                            : 'border-[#E5E7EB] text-[#525252]',
+                        )}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              ) : null}
               <p className="mt-3 text-[11.5px] leading-relaxed text-[#A1A1A1]">
                 Cost and margin are never shown on the client document.
               </p>
             </div>
           ) : null}
         </div>
-        <Button variant="outline" className="h-[34px] shrink-0" onClick={regenerate}>
-          <RefreshCw className="size-3.5" /> Regenerate
+        {isDraftMode && quotes.length ? (
+          <Button
+            variant="outline"
+            className="h-[34px] shrink-0"
+            onClick={() => navigate(`/quote-doc/${id}/${quotes.reduce((a, b) => (a.seq >= b.seq ? a : b)).seq}`)}
+          >
+            View latest quote
+          </Button>
+        ) : null}
+        <Button variant="outline" className="h-[34px] shrink-0" onClick={handleGenerateQuote}>
+          <RefreshCw className="size-3.5" /> {quotes.length ? 'Regenerate' : 'Generate quote'}
         </Button>
         <Button className="h-[34px] shrink-0 bg-[#931115] hover:bg-[#7a0e12]" onClick={() => window.print()}>
           <Download className="size-3.5" /> Download PDF
@@ -350,6 +522,49 @@ export function QuoteDocPage() {
 
       <div className="qd-shell flex min-h-0 flex-1">
         <div className="qd-chrome w-[132px] shrink-0 overflow-y-auto border-r border-[#18181B] bg-[#27272A] py-4">
+          {quotes.length ? (
+            <div className="mb-3 border-b border-white/10 px-3 pb-3">
+              <div className="mb-2 text-[9px] font-bold uppercase tracking-[1px] text-[#A1A1AA]">Quotes</div>
+              <div className="flex flex-col gap-1">
+                {[...quotes].reverse().map((quote) => {
+                  const stale = isQuoteStale(quote, currentFp)
+                  const active = activeQuote?.seq === quote.seq && !isDraftMode
+                  return (
+                    <button
+                      key={quote.id}
+                      type="button"
+                      onClick={() => navigate(`/quote-doc/${id}/${quote.seq}`)}
+                      className={cn(
+                        'rounded-md px-2 py-1.5 text-left text-[10.5px]',
+                        active ? 'bg-[#3F3F46] text-white' : 'text-[#D4D4D8] hover:bg-[#3F3F46]/60',
+                      )}
+                    >
+                      <div className="font-semibold">{quote.docNumber} · {quote.versionLabel}</div>
+                      <div className="truncate text-[9.5px] text-[#A1A1AA]">
+                        {presentationLabel(quote.presentation ?? 'B2B_ITEMISED')} · {rateBasisLabel(quote.rateBasis)} · {fmtLedgerUsd(quote.sellTotal)}
+                      </div>
+                      {stale ? (
+                        <span className="mt-0.5 inline-block rounded bg-[#FEF3C7] px-1 py-px text-[8.5px] font-bold text-[#92400E]">
+                          Stale
+                        </span>
+                      ) : null}
+                    </button>
+                  )
+                })}
+                <button
+                  type="button"
+                  onClick={() => navigate(`/quote-doc/${id}/draft`)}
+                  className={cn(
+                    'rounded-md px-2 py-1.5 text-left text-[10.5px]',
+                    isDraftMode ? 'bg-[#3F3F46] text-white' : 'text-[#D4D4D8] hover:bg-[#3F3F46]/60',
+                  )}
+                >
+                  <div className="font-semibold">Draft preview</div>
+                  <div className="text-[9.5px] text-[#A1A1AA]">Live itinerary</div>
+                </button>
+              </div>
+            </div>
+          ) : null}
           {pageDefs.map((page, index) => {
             const active = activePage === page.key
             return (
@@ -386,6 +601,35 @@ export function QuoteDocPage() {
             className="qd-print-area mx-auto flex flex-col items-center gap-7"
             style={{ width: PAGE_W, transform: `scale(${zoom / 100})`, transformOrigin: 'top center' }}
           >
+            {isPackaged ? (
+              <QuotePackagedContent
+                itinerary={itinerary}
+                renderModel={renderModel}
+                refLabel={refLabel}
+                versionLabel={versionLabel}
+                coverTitle={coverTitle}
+                issuedOn={issuedOn}
+                validUntil={validUntil}
+                daysCount={daysCount}
+                nightsCount={nightsCount}
+                totalGuests={totalGuests}
+                adults={adults}
+                children={children}
+                infants={infants}
+                lead={lead}
+                countries={countries}
+                guests={guests}
+                guestDetails={guestDetails}
+                showTerms={showTerms}
+                totalPages={totalPages}
+                paymentTerms={paymentTerms}
+                cancellationRows={cancellationRows}
+                optionRows={optionRows}
+              />
+            ) : null}
+
+            {!isPackaged ? (
+            <>
             {/* COVER */}
             <section
               data-qd-page="1"
@@ -395,7 +639,7 @@ export function QuoteDocPage() {
               <div className="flex h-[296px] shrink-0 flex-col justify-between p-9 px-14" style={{ background: MAROON }}>
                 <div className="flex items-start justify-between gap-6">
                   <img
-                    src="/assets/sol-logo.svg"
+                    src="/assets/CPS.png"
                     alt="Cheli & Peacock Safaris"
                     className="block h-auto w-44 brightness-0 invert"
                   />
@@ -405,10 +649,10 @@ export function QuoteDocPage() {
                   </div>
                 </div>
                 <h1 className="m-0 text-[38px] font-semibold leading-[1.1] tracking-[-0.8px] text-white">
-                  {itineraryTitle(itinerary)}
+                  {coverTitle}
                   <br />
                   <span className="text-xl font-normal tracking-normal text-[#E9CFCF]">
-                    {daysCount} days · {nightsCount} nights · {familyLabel}
+                    {daysCount} days · {nightsCount} nights
                   </span>
                 </h1>
               </div>
@@ -472,11 +716,11 @@ export function QuoteDocPage() {
                   <div>
                     <SectionLabel>Safari total</SectionLabel>
                     <div className="mt-1 text-[11.5px] text-[#555555]">
-                      All prices in USD net · {totalGuests || '—'} guest{totalGuests === 1 ? '' : 's'}
+                      {rateTag} · {totalGuests || '—'} guest{totalGuests === 1 ? '' : 's'}
                     </div>
                   </div>
                   <div className="font-['IBM_Plex_Mono'] text-[32px] font-semibold tracking-[-0.5px]">
-                    {fmtLedgerUsd(pricing.sellNumber)}
+                    {fmtLedgerUsd(sellTotal)}
                   </div>
                 </div>
 
@@ -499,7 +743,7 @@ export function QuoteDocPage() {
                 <div className="flex items-baseline justify-between gap-4">
                   <h2 className="m-0 text-[21px] font-semibold tracking-[-0.3px]">Safari Quotation</h2>
                   <span className="text-[10px] font-semibold uppercase tracking-[1.4px] text-[#931115]">
-                    All prices in USD net
+                    {rateTag}
                   </span>
                 </div>
 
@@ -582,11 +826,11 @@ export function QuoteDocPage() {
 
                 <div className="mt-[22px]">
                   <DottedTotalRow label="Itinerary subtotal" amount={fmtLedgerAmount(grossSell)} />
-                  {pricing.discounts.map((d) => (
+                  {pricingDiscounts.map((d) => (
                     <DottedTotalRow
                       key={d.label}
                       label={d.label}
-                      amount={`−${d.sellDelta.replace(/^−/, '')}`}
+                      amount={`−${fmtLedgerAmount(Math.abs(d.amount))}`}
                       accent="#0369A1"
                     />
                   ))}
@@ -596,12 +840,12 @@ export function QuoteDocPage() {
                   <div>
                     <div className="text-[9.5px] font-semibold uppercase tracking-[1.6px] text-[#B5B5B5]">Safari total</div>
                     <div className="mt-1 text-[11px] text-[#B5B5B5]">
-                      All prices in USD net · {totalGuests} guest{totalGuests === 1 ? '' : 's'}
+                      {rateTag} · {totalGuests} guest{totalGuests === 1 ? '' : 's'}
                       {priceMode === 'pp' && totalGuests ? ` · ${fmtLedgerUsd(perPerson)} per person` : ''}
                     </div>
                   </div>
                   <div className="font-['IBM_Plex_Mono'] text-[34px] font-semibold tracking-[-0.8px]">
-                    {fmtLedgerAmount(pricing.sellNumber)}
+                    {fmtLedgerAmount(sellTotal)}
                   </div>
                 </div>
 
@@ -615,14 +859,14 @@ export function QuoteDocPage() {
                   <div className="grid grid-cols-[minmax(0,1fr)_200px_110px] gap-x-3 border-b border-[#F5F5F5] py-2 text-[11.5px]">
                     <span className="font-semibold">Deposit on acceptance</span>
                     <span className="text-[11px] text-[#6E6E6E]">
-                      Supplier terms · {deposits.depositPctOfSell}% of total
+                      Supplier terms · {depositPctLabel} of total
                     </span>
-                    <span className="text-right font-medium">{deposits.depositTotal}</span>
+                    <span className="text-right font-medium">{depositTotalLabel}</span>
                   </div>
                   <div className="grid grid-cols-[minmax(0,1fr)_200px_110px] gap-x-3 border-b border-[#F5F5F5] py-2 text-[11.5px]">
                     <span className="font-semibold">Balance</span>
                     <span className="text-[11px] text-[#6E6E6E]">60 days before arrival · {balanceDue}</span>
-                    <span className="text-right font-medium">{deposits.depositBalance}</span>
+                    <span className="text-right font-medium">{depositBalanceLabel}</span>
                   </div>
                 </div>
 
@@ -824,6 +1068,8 @@ export function QuoteDocPage() {
                   />
                 </div>
               </section>
+            ) : null}
+            </>
             ) : null}
           </div>
         </div>

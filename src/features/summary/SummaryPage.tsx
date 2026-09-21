@@ -55,6 +55,10 @@ import {
   type SummaryTable,
   type VoucherValueMode,
 } from './summaryModel'
+import { InvoiceDocumentPanel } from '@/features/invoice-doc/InvoiceDocumentPanel'
+import { isInvoiceStale } from '@/features/invoice-doc/invoiceSnapshotModel'
+import { QuoteDocumentsPanel } from '@/features/quote-doc/QuoteDocumentsPanel'
+import { isQuoteStale } from '@/features/quote-doc/quoteSnapshotModel'
 import { VouchersView } from './VouchersView'
 
 function transitionButtonClass(t: LifecycleTransition) {
@@ -165,6 +169,8 @@ export function SummaryPage() {
     getQuoteGroups,
     getGuestDetails,
     applyLifecycleTransition,
+    getQuotes,
+    getInvoice,
     issueSupplierVoucher,
     resendSupplierVoucher,
     submitVoucherAnswers,
@@ -174,6 +180,8 @@ export function SummaryPage() {
   const itinerary = itineraries.find((it) => it.id === id)
   const services = getServices(id)
   const quoteGroups = getQuoteGroups(id)
+  const quotes = getQuotes(id)
+  const invoice = getInvoice(id)
   const [view, setView] = useState<'summary' | 'vouchers' | 'activity'>('summary')
   const [summaryMode, setSummaryMode] = useState<'service' | 'day'>('service')
   const [priceMode, setPriceMode] = useState<PriceDisplayMode>('all')
@@ -223,17 +231,18 @@ export function SummaryPage() {
     if (!itinerary) return null
     const fp = itineraryCommercialFp(services)
     if (itinerary.status === 'PREPARED' || itinerary.status === 'QUOTED') {
-      if (!itinerary.quoteFingerprint) return 'Quote snapshot not generated yet'
-      if (itinerary.quoteFingerprint !== fp) return 'Quote snapshot is out of date'
-      return 'Quote snapshot matches current lines'
+      if (!quotes.length) return 'No quote generated yet'
+      const latest = quotes.reduce((a, b) => (a.seq >= b.seq ? a : b))
+      if (isQuoteStale(latest, fp)) return `${latest.docNumber} is stale — regenerate to send updates`
+      return `${latest.docNumber} matches current lines`
     }
-    if (itinerary.status === 'APPROVED' || itinerary.status === 'INVOICED') {
-      if (!itinerary.invoiceFingerprint) return 'Invoice snapshot not generated yet'
-      if (itinerary.invoiceFingerprint !== fp) return 'Invoice snapshot is out of date'
-      return 'Invoice snapshot matches current lines'
+    if (itinerary.status === 'APPROVED' || itinerary.status === 'INVOICED' || itinerary.status === 'VOUCHERED' || itinerary.status === 'CONFIRMED') {
+      if (!invoice) return 'Invoice not generated yet'
+      if (isInvoiceStale(invoice, fp)) return `${invoice.invoiceNumber} is stale — update before sending`
+      return `${invoice.invoiceNumber} matches current lines`
     }
     return null
-  }, [itinerary, services])
+  }, [itinerary, services, quotes, invoice])
 
   const lines = useMemo(() => {
     if (services.length > 0) return linesFromServices(services, guests)
@@ -800,6 +809,24 @@ export function SummaryPage() {
           ) : null}
         </div>
 
+        {showSidePanel ? (
+          <aside className="w-full">
+            <QuoteDocumentsPanel
+              itineraryId={id}
+              quotes={quotes}
+              currentFingerprint={itineraryCommercialFp(services)}
+            />
+            <div className="mt-4">
+              <InvoiceDocumentPanel
+                itineraryId={id}
+                invoice={invoice}
+                currentFingerprint={itineraryCommercialFp(services)}
+                canGenerate={['APPROVED', 'INVOICED', 'VOUCHERED', 'CONFIRMED'].includes(itinerary.status)}
+              />
+            </div>
+          </aside>
+        ) : null}
+
         {showSidePanel && lines.length > 0 ? (
           <aside className="w-full">
             <section className="rounded-[14px] border border-[#E5E7EB] bg-white px-[22px] py-5">
@@ -899,9 +926,24 @@ export function SummaryPage() {
             onClick={() => setGuestSheetOpen(true)}
           />
           {lines.length > 0 ? (
-            <Button variant="outline" onClick={() => navigate(`/quote-doc/${id}`)}>
+            <Button
+              variant="outline"
+              onClick={() =>
+                navigate(
+                  quotes.length
+                    ? `/quote-doc/${id}/${quotes.reduce((a, b) => (a.seq >= b.seq ? a : b)).seq}`
+                    : `/quote-doc/${id}`,
+                )
+              }
+            >
               <FileText />
               View quote PDF
+            </Button>
+          ) : null}
+          {['APPROVED', 'INVOICED', 'VOUCHERED', 'CONFIRMED'].includes(itinerary.status) ? (
+            <Button variant="outline" onClick={() => navigate(`/invoice-doc/${id}`)}>
+              <FileText />
+              View invoice PDF
             </Button>
           ) : null}
           <StatusChip status={itinerary.status} />

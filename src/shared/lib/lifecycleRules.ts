@@ -272,12 +272,22 @@ export function evaluateTransition(
 
   if (from === 'PREPARED' && to === 'QUOTED') {
     const fp = itineraryCommercialFp(services)
-    if (opts?.generating !== 'quote' && itinerary.quoteFingerprint !== fp) {
+    if (!itinerary.quoteFingerprint) {
       return fail(
         'quote-fingerprint',
-        'Quote document is missing or out of date — open the quote PDF or use Generate & Send Quote',
+        'Generate a quote before marking as Quoted',
       )
     }
+    if (itinerary.quoteFingerprint !== fp) {
+      return fail(
+        'quote-fingerprint',
+        'Quote is out of date — regenerate before marking as Quoted',
+      )
+    }
+  }
+
+  if (opts?.generating === 'invoice' && itinerary.financeLocked) {
+    return fail('finance-locked', 'Invoice generation is blocked while Finance Lock is engaged')
   }
 
   if (from === 'APPROVED' && to === 'INVOICED') {

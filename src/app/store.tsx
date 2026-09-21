@@ -52,12 +52,22 @@ import {
   supplierEmailFor,
   voucherIssueSignature,
 } from '@/features/summary/summaryModel'
+import { fmtLedgerUsd } from '@/features/quote-doc/quoteLedgerModel'
+import { buildInvoiceSnapshot } from '@/features/invoice-doc/invoiceSnapshotModel'
 import {
+  buildQuoteSnapshot,
+  nextQuoteSeq,
+} from '@/features/quote-doc/quoteSnapshotModel'
+import {
+  appendQuote as appendQuoteStorage,
   deleteItinerary as deleteItineraryStorage,
   getGuestDetails as getGuestDetailsStorage,
+  getInvoice as getInvoiceStorage,
   getQuoteGroups as getQuoteGroupsStorage,
   getServices as getServicesStorage,
   listItineraries,
+  listQuotes as listQuotesStorage,
+  saveInvoice as saveInvoiceStorage,
   nextInquiryId,
   replaceItineraries as replaceItinerariesStorage,
   setGuestDetails as setGuestDetailsStorage,
@@ -70,10 +80,16 @@ import type {
   CreateItineraryInput,
   DemoRole,
   GuestDetail,
+  InvoiceDocument,
+  InvoiceLifecycleStage,
   Itinerary,
   ItineraryStatus,
   LifecycleLogEntry,
+  QuoteDocument,
   QuoteGroup,
+  QuotePresentation,
+  QuoteRateBasis,
+  QuoteRateBasisSelection,
   SplitForm,
   VoucherMeta,
   VoucherToken,
@@ -115,8 +131,20 @@ interface StoreContextValue {
     status: ItineraryStatus,
     opts?: { reason?: string; generating?: 'quote' | 'invoice' },
   ) => GateResult
-  stampQuoteDoc: (id: string) => void
-  stampInvoiceDoc: (id: string) => void
+  getQuotes: (itineraryId: string) => QuoteDocument[]
+  generateQuote: (
+    itineraryId: string,
+    opts?: {
+      generatedBy?: string
+      rateBasis?: QuoteRateBasisSelection
+      presentation?: QuotePresentation
+    },
+  ) => QuoteDocument | QuoteDocument[] | null
+  getInvoice: (itineraryId: string) => InvoiceDocument | undefined
+  generateInvoice: (
+    itineraryId: string,
+    opts?: { stage?: InvoiceLifecycleStage; generatedBy?: string },
+  ) => InvoiceDocument | null
   removeItinerary: (id: string) => void
   getServices: (itineraryId: string) => AddedService[]
   saveServices: (itineraryId: string, services: AddedService[]) => void
@@ -327,13 +355,34 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       let services = getServicesStorage(id)
       let working: Itinerary = { ...current }
+
+      if (opts?.generating === 'invoice') {
+        const invoiceGate = evaluateTransition(working, services, status, {
+          generating: 'invoice',
+          role: demoRole,
+        })
+        if (!invoiceGate.ok) return invoiceGate
+        const doc = buildInvoiceSnapshot({
+          itinerary: working,
+          services,
+          quoteGroups: getQuoteGroupsStorage(id),
+          guestDetails: getGuestDetailsStorage(id),
+          stage: 'deposit',
+          generatedBy: demoRole,
+          existing: getInvoiceStorage(id),
+        })
+        saveInvoiceStorage(doc)
+        working = {
+          ...working,
+          invoiceFingerprint: doc.fingerprint,
+          firstInvoiceDate: working.firstInvoiceDate ?? doc.invoiceDate,
+        }
+      }
+
       const fp = itineraryCommercialFp(services)
 
-      if (opts?.generating === 'quote' || status === 'QUOTED') {
+      if (opts?.generating === 'quote') {
         working = { ...working, quoteFingerprint: fp }
-      }
-      if (opts?.generating === 'invoice' || (status === 'INVOICED' && current.status === 'APPROVED')) {
-        working = { ...working, invoiceFingerprint: fp }
       }
 
       const generating =
@@ -390,34 +439,138 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [applyLifecycleTransition],
   )
 
-  const stampQuoteDoc = useCallback(
-    (id: string) => {
-      const current = listItineraries().find((it) => it.id === id)
-      if (!current) return
-      const fp = itineraryCommercialFp(getServicesStorage(id))
-      upsertItineraryStorage({
-        ...current,
-        quoteFingerprint: fp,
-        updatedAt: new Date().toISOString(),
-      })
-      bump()
+  const getQuotes = useCallback(
+    (itineraryId: string) => {
+      void rev
+      return listQuotesStorage(itineraryId)
     },
-    [bump],
+    [rev],
   )
 
-  const stampInvoiceDoc = useCallback(
-    (id: string) => {
-      const current = listItineraries().find((it) => it.id === id)
-      if (!current) return
-      const fp = itineraryCommercialFp(getServicesStorage(id))
+  const generateQuote = useCallback(
+    (
+      itineraryId: string,
+      opts?: {
+        generatedBy?: string
+        rateBasis?: QuoteRateBasisSelection
+        presentation?: QuotePresentation
+      },
+    ) => {
+      const current = listItineraries().find((it) => it.id === itineraryId)
+      if (!current) return null
+
+      const services = getServicesStorage(itineraryId)
+      const quoteGroups = getQuoteGroupsStorage(itineraryId)
+      const guestDetails = getGuestDetailsStorage(itineraryId)
+      const existing = listQuotesStorage(itineraryId)
+      const selection = opts?.rateBasis ?? current.lastQuoteRateBasisSelection ?? 'nett'
+      const generatedBy = opts?.generatedBy ?? demoRole
+      const presentation = opts?.presentation
+
+      const buildAtSeq = (seq: number, rateBasis: QuoteRateBasis) =>
+        buildQuoteSnapshot({
+          itinerary: current,
+          services,
+          quoteGroups,
+          guestDetails,
+          seq,
+          generatedBy,
+          rateBasis,
+          presentation,
+        })
+
+      const docs: QuoteDocument[] =
+        selection === 'both'
+          ? [buildAtSeq(nextQuoteSeq(existing), 'rack'), buildAtSeq(nextQuoteSeq(existing) + 1, 'nett')]
+          : [buildAtSeq(nextQuoteSeq(existing), selection)]
+
+      for (const doc of docs) appendQuoteStorage(doc)
+
+      const latest = docs[docs.length - 1]
+      const presLabel = latest.presentation === 'B2B_PACKAGED' ? 'packaged' : 'itemised'
+      const basisDetail =
+        selection === 'both'
+          ? `rack + nett · ${docs.map((d) => `${d.docNumber} ${fmtLedgerUsd(d.sellTotal)}`).join(' · ')}`
+          : `${selection} · ${fmtLedgerUsd(latest.sellTotal)}`
+
+      const entry: LifecycleLogEntry = {
+        id: `ll-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        at: latest.generatedAt,
+        actor: demoRole,
+        from: current.status,
+        to: current.status,
+        label:
+          selection === 'both'
+            ? `Generated ${docs.map((d) => d.docNumber).join(' + ')} (${docs.map((d) => d.versionLabel).join(' + ')})`
+            : `Generated ${latest.docNumber} (${latest.versionLabel})`,
+        category: 'quote-generate',
+        detail: `${presLabel} · ${basisDetail}`,
+      }
+
       upsertItineraryStorage({
         ...current,
-        invoiceFingerprint: fp,
-        updatedAt: new Date().toISOString(),
+        quoteFingerprint: latest.fingerprint,
+        lastQuoteRateBasisSelection: selection,
+        lifecycleLog: [...(current.lifecycleLog ?? []), entry],
+        updatedAt: latest.generatedAt,
       })
       bump()
+      return docs.length === 1 ? docs[0] : docs
     },
-    [bump],
+    [bump, demoRole],
+  )
+
+  const getInvoice = useCallback(
+    (itineraryId: string) => {
+      void rev
+      return getInvoiceStorage(itineraryId)
+    },
+    [rev],
+  )
+
+  const generateInvoice = useCallback(
+    (itineraryId: string, opts?: { stage?: InvoiceLifecycleStage; generatedBy?: string }) => {
+      const current = listItineraries().find((it) => it.id === itineraryId)
+      if (!current) return null
+      if (current.financeLocked) return null
+
+      const services = getServicesStorage(itineraryId)
+      const existing = getInvoiceStorage(itineraryId)
+      const doc = buildInvoiceSnapshot({
+        itinerary: current,
+        services,
+        quoteGroups: getQuoteGroupsStorage(itineraryId),
+        guestDetails: getGuestDetailsStorage(itineraryId),
+        stage: opts?.stage ?? existing?.lifecycleStage ?? 'deposit',
+        generatedBy: opts?.generatedBy ?? demoRole,
+        existing,
+      })
+
+      saveInvoiceStorage(doc)
+
+      const isUpdate = Boolean(existing)
+      const entry: LifecycleLogEntry = {
+        id: `ll-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        at: doc.generatedAt,
+        actor: demoRole,
+        from: current.status,
+        to: current.status,
+        label: isUpdate ? `Updated ${doc.invoiceNumber}` : `Generated ${doc.invoiceNumber}`,
+        category: isUpdate ? 'invoice-update' : 'invoice-generate',
+        detail: `${doc.lifecycleStage} · ${fmtLedgerUsd(doc.paymentPosition.total)} · due now ${fmtLedgerUsd(doc.paymentPosition.amountDueImmediately)}`,
+      }
+
+      upsertItineraryStorage({
+        ...current,
+        invoiceFingerprint: doc.fingerprint,
+        firstInvoiceDate: current.firstInvoiceDate ?? doc.invoiceDate,
+        lifecycleLog: [...(current.lifecycleLog ?? []), entry],
+        updatedAt: doc.generatedAt,
+      })
+      bump()
+      return doc
+    },
+    [bump, demoRole],
   )
 
   const removeItinerary = useCallback(
@@ -1012,8 +1165,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       acceptOption,
       updateStatus,
       applyLifecycleTransition,
-      stampQuoteDoc,
-      stampInvoiceDoc,
+      getQuotes,
+      generateQuote,
+      getInvoice,
+      generateInvoice,
       removeItinerary,
       getServices,
       saveServices,
@@ -1044,8 +1199,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       acceptOption,
       updateStatus,
       applyLifecycleTransition,
-      stampQuoteDoc,
-      stampInvoiceDoc,
+      getQuotes,
+      generateQuote,
+      getInvoice,
+      generateInvoice,
       removeItinerary,
       getServices,
       saveServices,

@@ -96,11 +96,11 @@ describe('lifecycleRules', () => {
       { role: 'Admin' },
     )
     expect(fresh.ok).toBe(true)
-    const generating = evaluateTransition(itin({ status: 'PREPARED' }), services, 'QUOTED', {
+    const missing = evaluateTransition(itin({ status: 'PREPARED' }), services, 'QUOTED', {
       role: 'Admin',
       generating: 'quote',
     })
-    expect(generating.ok).toBe(true)
+    expect(missing.ok).toBe(false)
   })
 
   it('blocks Vouchered without payment or credit terms', () => {
@@ -225,6 +225,36 @@ describe('lifecycleRules', () => {
     // Held back for the planner — never silently rejected, never removed from the itinerary.
     expect(supplierStatusOf(result.services[0])).toBe('Waiting')
     expect(result.services).toHaveLength(1)
+  })
+
+  it('blocks APPROVED→INVOICED without matching invoice fingerprint', () => {
+    const services = [svc({ id: 's1' })]
+    const gate = evaluateTransition(itin({ status: 'APPROVED' }), services, 'INVOICED', {
+      role: 'Admin',
+    })
+    expect(gate.ok).toBe(false)
+    if (!gate.ok) expect(gate.ruleId).toBe('invoice-fingerprint')
+  })
+
+  it('allows APPROVED→INVOICED when generating invoice', () => {
+    const services = [svc({ id: 's1' })]
+    const gate = evaluateTransition(itin({ status: 'APPROVED' }), services, 'INVOICED', {
+      role: 'Admin',
+      generating: 'invoice',
+    })
+    expect(gate.ok).toBe(true)
+  })
+
+  it('blocks invoice generation when finance locked', () => {
+    const services = [svc({ id: 's1' })]
+    const gate = evaluateTransition(
+      itin({ status: 'APPROVED', financeLocked: true }),
+      services,
+      'INVOICED',
+      { role: 'Admin', generating: 'invoice' },
+    )
+    expect(gate.ok).toBe(false)
+    if (!gate.ok) expect(gate.ruleId).toBe('finance-locked')
   })
 
   it('restricts transitions by demo role', () => {

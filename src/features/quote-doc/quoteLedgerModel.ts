@@ -136,7 +136,7 @@ function ledgerQty(l: SummaryLine): string {
   return '1'
 }
 
-function ledgerService(l: SummaryLine): string {
+export function ledgerService(l: SummaryLine): string {
   switch (l.type) {
     case 'accommodation': {
       const basis = l.basis ? `${l.basis} ` : ''

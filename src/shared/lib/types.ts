@@ -200,8 +200,12 @@ export interface Itinerary {
   financeLocked?: boolean
   /** Commercial fingerprint covered by the latest generated quote PDF. */
   quoteFingerprint?: string
+  /** Last rate basis selection on this itinerary — pre-fills the picker; planner must still confirm. */
+  lastQuoteRateBasisSelection?: QuoteRateBasisSelection
   /** Commercial fingerprint covered by the latest generated invoice. */
   invoiceFingerprint?: string
+  /** Stamped once on first invoice generation (IB 12.1). */
+  firstInvoiceDate?: string
   /** Per payable-entity voucher outcome — keyed by PayableEntity.id (PR-F02). */
   supplierVouchers?: Record<string, SupplierVoucherStatus>
   /** Per-entity issue/token/response tracking — keyed by PayableEntity.id. */
@@ -212,7 +216,139 @@ export interface Itinerary {
   lifecycleLog?: LifecycleLogEntry[]
 }
 
-export type LifecycleLogCategory = 'status' | 'voucher-send' | 'supplier-link' | 'voucher-staff'
+export type LifecycleLogCategory =
+  | 'status'
+  | 'voucher-send'
+  | 'supplier-link'
+  | 'voucher-staff'
+  | 'quote-generate'
+  | 'invoice-generate'
+  | 'invoice-update'
+
+export type InvoiceLifecycleStage = 'deposit' | 'full'
+
+export interface InvoicePaymentPosition {
+  total: number
+  paid: number
+  balance: number
+  amountDueImmediately: number
+  futureAmountDue?: number
+  futureDueDate?: string
+}
+
+export interface InvoiceRevisionEntry {
+  id: string
+  at: string
+  actor: string
+  fingerprint: string
+  summary: string
+}
+
+export interface InvoiceDocument {
+  id: string
+  itineraryId: string
+  invoiceNumber: string
+  lifecycleStage: InvoiceLifecycleStage
+  fingerprint: string
+  generatedAt: string
+  generatedBy: string
+  invoiceDate: string
+  coverTitle: string
+  reference: string
+  sellTotal: number
+  lines: QuoteDocumentLine[]
+  categoryTotals: { name: string; amount: number }[]
+  scheduleGroups: QuoteDocument['scheduleGroups']
+  pricingSummary: QuoteDocument['pricingSummary']
+  optionRows: QuoteOptionRow[]
+  depositTotal: number
+  depositBalance: number
+  depositPctOfSell: number
+  paymentPosition: InvoicePaymentPosition
+  revisions: InvoiceRevisionEntry[]
+}
+
+export type QuoteRateBasis = 'rack' | 'nett'
+
+/** Planner selection at generation — `both` produces Rack + Nett snapshots in one action. */
+export type QuoteRateBasisSelection = QuoteRateBasis | 'both'
+
+export type QuotePresentation = 'B2B_ITEMISED' | 'B2B_PACKAGED'
+
+export interface QuoteIncludesRow {
+  lineId: string
+  date: string
+  supplier: string
+  description: string
+}
+
+export interface QuotePaymentSnapshot {
+  totalTripCost: number
+  amountPaid: number
+  balanceDue: number
+}
+
+export type QuoteServiceType =
+  | 'accommodation'
+  | 'flight'
+  | 'transportation'
+  | 'activity'
+  | 'extra'
+  | 'other'
+
+export interface QuoteDocumentLine {
+  lineId: string
+  type: QuoteServiceType
+  date: string
+  supplier: string
+  service: string
+  pax: string
+  qty: string
+  amount: number
+  category: string
+}
+
+export interface QuoteOptionRow {
+  supplier: string
+  option: string
+  includes: string
+  excludes: string
+}
+
+export interface QuoteDocument {
+  id: string
+  itineraryId: string
+  seq: number
+  versionLabel: string
+  docNumber: string
+  fingerprint: string
+  generatedAt: string
+  generatedBy: string
+  rateBasis: QuoteRateBasis
+  presentation: QuotePresentation
+  validUntil: string
+  sellTotal: number
+  coverTitle: string
+  reference: string
+  lines: QuoteDocumentLine[]
+  categoryTotals: { name: string; amount: number }[]
+  scheduleGroups: {
+    name: string
+    subtotal: number
+    rows: { date: string; supplier: string; service: string; pax: string; qty: string; amount: number }[]
+  }[]
+  pricingSummary: {
+    grossSell: number
+    sellTotal: number
+    discounts: { label: string; amount: number }[]
+  }
+  optionRows: QuoteOptionRow[]
+  depositTotal: number
+  depositBalance: number
+  depositPctOfSell: number
+  includesRows: QuoteIncludesRow[]
+  paymentSnapshot: QuotePaymentSnapshot
+}
 
 export interface LifecycleLogEntry {
   id: string
