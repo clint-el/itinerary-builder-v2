@@ -177,7 +177,7 @@ function baseRenderFields(quote: QuoteDocument, stale: boolean): QuoteRenderMode
 }
 
 function buildIncludesRowsFromDocLines(quote: QuoteDocument) {
-  return quote.lines.map((line, index) => ({
+  return quote.lines.map((line) => ({
     lineId: line.lineId,
     date: line.date,
     supplier: line.supplier,

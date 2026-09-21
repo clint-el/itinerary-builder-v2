@@ -630,12 +630,6 @@ export function VouchersView({
   )
 }
 
-function initials(name: string) {
-  const parts = name.trim().split(/\s+/).filter(Boolean)
-  if (!parts.length) return '—'
-  return (parts[0][0] + (parts[1]?.[0] || '')).toUpperCase()
-}
-
 function Panel({ title, count, children }: { title: string; count?: number; children: ReactNode }) {
   return (
     <div className="rounded-[10px] border border-[#EEF0F3] bg-white px-3.5 py-3">

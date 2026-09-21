@@ -73,7 +73,7 @@ export function VoucherAnswerForm({
           const held = ticks[row.lineId] !== false
           const guarded = !held && row.depositPaid
           const parentHeld = !row.parentLineId || ticks[row.parentLineId] !== false
-          const extraBlocked = row.isExtra && row.parentLineId && !parentHeld
+          const extraBlocked = Boolean(row.isExtra && row.parentLineId && !parentHeld)
           const reasonValue = reasons[row.lineId] || ''
           return (
             <div

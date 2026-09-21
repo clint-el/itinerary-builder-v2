@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useStore } from '@/app/store'
-import type { GuestDetail, Itinerary } from '@/shared/lib/types'
+import type { DietaryStatus, GuestDetail, Itinerary } from '@/shared/lib/types'
 import { cn } from '@/shared/lib/utils'
 import { GuestDetailsPanel } from './GuestDetailsPanel'
 import {
@@ -53,6 +53,12 @@ function normalizeSal(s?: string): string {
 
 function toStorageSal(s: string): string {
   return s.replace(/\.$/, '')
+}
+
+function dietaryStatusFromForm(form: Pick<GuestFormState, 'dietaryNone' | 'dietary'>): DietaryStatus {
+  if (form.dietaryNone) return 'none'
+  if (form.dietary.trim()) return 'recorded'
+  return 'not_captured'
 }
 
 export function GuestDetailsSheet({ open, onClose, itinerary, inline = false }: GuestDetailsSheetProps) {
@@ -198,11 +204,7 @@ export function GuestDetailsSheet({ open, onClose, itinerary, inline = false }: 
               age,
               note: form.note,
               dietary: form.dietaryNone ? '' : form.dietary.trim(),
-              dietaryStatus: form.dietaryNone
-                ? 'none'
-                : form.dietary.trim()
-                  ? 'recorded'
-                  : 'not_captured',
+              dietaryStatus: dietaryStatusFromForm(form),
             },
       )
       persist(next)
@@ -227,7 +229,7 @@ export function GuestDetailsSheet({ open, onClose, itinerary, inline = false }: 
       g.age = age
       g.note = form.note
       g.dietary = form.dietaryNone ? '' : form.dietary.trim()
-      g.dietaryStatus = form.dietaryNone ? 'none' : form.dietary.trim() ? 'recorded' : 'not_captured'
+      g.dietaryStatus = dietaryStatusFromForm(form)
       const next = [...guests, g]
       const nextServices = autoAllocateGuestOnServices(services, next.length)
       persist(next, nextServices)

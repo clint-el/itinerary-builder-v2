@@ -6,11 +6,10 @@ import type {
   SupplierVoucherStatus,
   VoucherAnswerRecord,
   VoucherLineAnswer,
-  VoucherLineInput,
   VoucherMeta,
   VoucherSendRecord,
 } from './types'
-import { payableEntityIdOf } from './lifecycleRules'
+import { payableEntityIdOf, type VoucherLineInput } from './lifecycleRules'
 
 export function appendLifecycleEntry(
   log: LifecycleLogEntry[] | undefined,
@@ -48,7 +47,6 @@ export function revertEntitySupplierStatus(
   entityId: string,
   lineIds: string[],
 ): AddedService[] {
-  const lineIdSet = new Set(lineIds)
   return services.map((svc) => {
     if (payableEntityIdOf(svc) !== entityId) return svc
     const hasLine = lineIds.some((lid) => lid.startsWith(`${svc.id}#`))
