@@ -195,7 +195,7 @@ export function InvoiceDocPage() {
   const totalPages = pageDefs.length
   const refLabel = renderModel?.refLabel ?? itinerary?.reference ?? id
   const invoiceNumber = renderModel?.invoiceNumber ?? `${id}-INV`
-  const coverTitle = renderModel?.coverTitle ?? documentCoverTitle(itinerary)
+  const coverTitle = renderModel?.coverTitle ?? (itinerary ? documentCoverTitle(itinerary) : id)
   const issuedOn = renderModel?.invoiceDate
     ? fmtLedgerDateLong(renderModel.invoiceDate)
     : fmtLedgerDateLong(new Date().toISOString().slice(0, 10))

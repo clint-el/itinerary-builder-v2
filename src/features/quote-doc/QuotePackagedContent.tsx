@@ -22,10 +22,7 @@ import {
   GuestDetailsSection,
   InvoicedToProfile,
 } from '@/features/quote-doc/quoteCoverMeta'
-import {
-  CpsRemittancePages,
-  RemittanceLedgerHeader,
-} from '@/features/invoice-doc/CpsRemittancePages'
+import { CpsRemittancePages } from '@/features/invoice-doc/CpsRemittancePages'
 import { remittanceStartPage } from '@/features/invoice-doc/cpsRemittanceModel'
 import type { QuoteRenderModel } from '@/features/quote-doc/quoteSnapshotModel'
 import type { Guest, GuestDetail, Itinerary } from '@/shared/lib/types'
