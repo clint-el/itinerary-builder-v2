@@ -97,6 +97,15 @@ export function InvoiceDocumentPanel({
         >
           {stale ? 'Stale — update required' : 'Active'}
         </Badge>
+        {invoice.lastSentAt ? (
+          <Badge variant="outline" className="rounded-md px-2 py-0 text-[11px] font-semibold">
+            Sent {fmtGeneratedAt(invoice.lastSentAt)}
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="rounded-md px-2 py-0 text-[11px] font-semibold text-[#737373]">
+            Not sent
+          </Badge>
+        )}
         {invoice.revisions.length ? (
           <span className="text-[12px] text-[#737373]">
             {invoice.revisions.length} revision{invoice.revisions.length === 1 ? '' : 's'} in audit log

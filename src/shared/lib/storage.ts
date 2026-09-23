@@ -209,6 +209,14 @@ export function appendQuote(doc: QuoteDocument) {
   writeJson(QUOTES_KEY, map)
 }
 
+export function updateQuote(doc: QuoteDocument) {
+  ensureSeeded()
+  const map = readJson<QuoteDocumentsMap>(QUOTES_KEY, {})
+  const existing = map[doc.itineraryId] ?? []
+  map[doc.itineraryId] = existing.map((q) => (q.id === doc.id ? doc : q))
+  writeJson(QUOTES_KEY, map)
+}
+
 export function getServices(itineraryId: string): AddedService[] {
   ensureSeeded()
   return readJson<ServicesMap>(SERVICES_KEY, {})[itineraryId] ?? []

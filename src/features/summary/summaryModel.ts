@@ -592,11 +592,14 @@ export function linesFromQuoteGroups(groups: QuoteGroup[]): SummaryLine[] {
     for (const sv of g.services) {
       const amount = parseMoney(sv.subtotal)
       const net = Math.round((amount / 1.3) * 100) / 100
+      const entity = payableEntityFromSupplierName(g.name)
       lines.push({
         type,
         serviceId: g.id,
         date: String(sv.dates || '').split(/[–-]/)[0]?.trim() || '',
         supplier: g.name,
+        payableEntityId: entity.id,
+        payableEntityName: entity.legalName,
         roomType: type === 'accommodation' ? sv.title : undefined,
         basis: type === 'accommodation' ? (sv.sub || 'BB').replace(/^[·\s]+/, '') : undefined,
         rooms: type === 'accommodation' ? Number(sv.qty) || 1 : undefined,
@@ -1662,6 +1665,13 @@ export type VoucherCard = {
   discountNote: string
   emailLine: string
   sendHistory: { recipient: string; sentAt: string; deliveryStatus: string; via: string }[]
+  answerHistory: {
+    at: string
+    actorType: string
+    actorEmail?: string
+    heldCount: number
+    totalLines: number
+  }[]
   pendingRequestLatest: boolean
   responsePill: { label: string; bg: string; fg: string }
   responseHint: string
@@ -2046,6 +2056,13 @@ export function buildVouchers(
       deliveryStatus: s.deliveryStatus,
       via: s.via,
     }))
+    const answerHistory = (meta?.answerHistory || []).map((a) => ({
+      at: a.at,
+      actorType: a.actorType,
+      actorEmail: a.actorEmail,
+      heldCount: a.lineDecisions.filter((d) => d.outcome === 'held').length,
+      totalLines: a.lineDecisions.length,
+    }))
 
     return {
       entityId,
@@ -2124,6 +2141,7 @@ export function buildVouchers(
           '  ·  confirmation link included'
         : '',
       sendHistory,
+      answerHistory,
       pendingRequestLatest,
       responsePill,
       responseHint:

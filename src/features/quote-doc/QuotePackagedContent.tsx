@@ -2,8 +2,6 @@ import {
   buildLedgerPaymentTerms,
   fmtLedgerDateLong,
   fmtLedgerUsd,
-  GENERAL_LEDGER_EXCLUSIONS,
-  GENERAL_LEDGER_INCLUSIONS,
   guestRosterRows,
   paxComposition,
   type LedgerCancellationRow,
@@ -41,6 +39,7 @@ export type QuotePackagedContentProps = {
   paymentTerms: ReturnType<typeof buildLedgerPaymentTerms>
   cancellationRows: LedgerCancellationRow[]
   optionRows: LedgerOptionRow[]
+  totalsFooterLeft?: string
 }
 
 export function QuotePackagedContent({
@@ -66,7 +65,10 @@ export function QuotePackagedContent({
   paymentTerms,
   cancellationRows,
   optionRows,
+  totalsFooterLeft,
 }: QuotePackagedContentProps) {
+  const inclusions = renderModel.quoteText.generalInclusions
+  const exclusions = renderModel.quoteText.generalExclusions
   const roster = guestRosterRows(guests, guestDetails)
   const { includesRows, paymentSnapshot, rateBasis } = renderModel
   const rateTag = rateBasisTag(rateBasis)
@@ -233,7 +235,11 @@ export function QuotePackagedContent({
           </p>
 
           <div className="flex-1" />
-          <PageFooter left={`Quote valid until ${validUntil}`} right={`3 / ${totalPages}`} bordered />
+          <PageFooter
+            left={totalsFooterLeft ?? `Quote valid until ${validUntil}`}
+            right={`3 / ${totalPages}`}
+            bordered
+          />
         </div>
       </section>
 
@@ -254,7 +260,7 @@ export function QuotePackagedContent({
                   General inclusions
                 </div>
                 <div className="mt-3 flex flex-col gap-1">
-                  {GENERAL_LEDGER_INCLUSIONS.map((item) => (
+                  {inclusions.map((item) => (
                     <span key={item} className="text-[11.5px] leading-snug">
                       {item}
                     </span>
@@ -266,7 +272,7 @@ export function QuotePackagedContent({
                   General exclusions
                 </div>
                 <div className="mt-3 flex flex-col gap-1">
-                  {GENERAL_LEDGER_EXCLUSIONS.map((item) => (
+                  {exclusions.map((item) => (
                     <span key={item} className="text-[11.5px] leading-snug">
                       {item}
                     </span>

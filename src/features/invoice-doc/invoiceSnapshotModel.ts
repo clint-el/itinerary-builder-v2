@@ -5,6 +5,8 @@ import {
   fmtLedgerUsd,
   itineraryTitle,
 } from '@/features/quote-doc/quoteLedgerModel'
+import { buildIncludesRows, buildPaymentSnapshot } from '@/features/quote-doc/quotePackagedModel'
+import { resolveQuoteText } from '@/features/quote-doc/quoteTextModel'
 import { linesForRateBasis } from '@/features/quote-doc/quoteRateBasisModel'
 import {
   buildDepositSummary,
@@ -26,7 +28,10 @@ import type {
   InvoiceRevisionEntry,
   Itinerary,
   QuoteGroup,
+  QuotePresentation,
+  QuoteTextContent,
 } from '@/shared/lib/types'
+import type { QuoteRenderModel } from '@/features/quote-doc/quoteSnapshotModel'
 
 export function invoiceNumberFor(itinerary: Itinerary): string {
   return `${itinerary.reference}-INV`
@@ -112,8 +117,14 @@ export function buildInvoiceSnapshot(input: {
   stage: InvoiceLifecycleStage
   generatedBy: string
   existing?: InvoiceDocument
+  presentation?: QuotePresentation
+  quoteText?: QuoteTextContent
+  showTerms?: boolean
 }): InvoiceDocument {
   const { itinerary, services, quoteGroups, guestDetails, stage, generatedBy, existing } = input
+  const presentation = input.presentation ?? existing?.presentation ?? 'B2B_ITEMISED'
+  const quoteText = resolveQuoteText(itinerary.quoteTextDraft, input.quoteText ?? existing?.quoteText)
+  const showTerms = input.showTerms ?? existing?.showTerms ?? true
   const guests = partyGuests(itinerary, guestDetails)
   const rawLines =
     services.length > 0 ? linesFromServices(services, guests) : linesFromQuoteGroups(quoteGroups)
@@ -128,7 +139,9 @@ export function buildInvoiceSnapshot(input: {
     lines.map((l) => l.date).filter(Boolean).sort()[0] || itinerary.travelDateFrom || ''
   const paymentPosition = buildPaymentPosition(itinerary, pricing.sellNumber, deposits, stage, arrivalIso)
   const generatedAt = new Date().toISOString()
-  const invoiceDate = generatedAt.slice(0, 10)
+  const invoiceDate = existing?.invoiceDate ?? generatedAt.slice(0, 10)
+  const includesRows = buildIncludesRows(lines)
+  const paymentSnapshot = buildPaymentSnapshot(itinerary, pricing.sellNumber)
   const coverTitle = itinerary.title?.trim() || itineraryTitle(itinerary)
   const fingerprint = itineraryCommercialFp(services)
 
@@ -151,6 +164,7 @@ export function buildInvoiceSnapshot(input: {
     itineraryId: itinerary.id,
     invoiceNumber: existing?.invoiceNumber ?? invoiceNumberFor(itinerary),
     lifecycleStage: stage,
+    presentation,
     fingerprint,
     generatedAt,
     generatedBy,
@@ -173,7 +187,13 @@ export function buildInvoiceSnapshot(input: {
     depositTotal: deposits.depositTotalNum,
     depositBalance: deposits.depositBalanceNum,
     depositPctOfSell: deposits.depositPctOfSell,
+    includesRows,
+    paymentSnapshot,
+    quoteText,
+    showTerms,
     paymentPosition,
+    sendHistory: existing?.sendHistory,
+    lastSentAt: existing?.lastSentAt,
   }
 
   return {
@@ -206,6 +226,11 @@ export type InvoiceRenderModel = {
   generatedAt?: string
   generatedBy?: string
   revisions: InvoiceRevisionEntry[]
+  presentation: QuotePresentation
+  includesRows: InvoiceDocument['includesRows']
+  paymentSnapshot: NonNullable<InvoiceDocument['paymentSnapshot']>
+  quoteText: QuoteTextContent
+  showTerms: boolean
 }
 
 export function renderModelFromSnapshot(invoice: InvoiceDocument, stale: boolean): InvoiceRenderModel {
@@ -231,6 +256,16 @@ export function renderModelFromSnapshot(invoice: InvoiceDocument, stale: boolean
     generatedAt: invoice.generatedAt,
     generatedBy: invoice.generatedBy,
     revisions: invoice.revisions,
+    presentation: invoice.presentation ?? 'B2B_ITEMISED',
+    includesRows: invoice.includesRows ?? [],
+    paymentSnapshot:
+      invoice.paymentSnapshot ?? {
+        totalTripCost: invoice.sellTotal,
+        amountPaid: invoice.paymentPosition.paid,
+        balanceDue: invoice.paymentPosition.balance,
+      },
+    quoteText: resolveQuoteText(undefined, invoice.quoteText),
+    showTerms: invoice.showTerms ?? true,
   }
 }
 
@@ -240,11 +275,17 @@ export function renderModelFromLive(input: {
   quoteGroups: QuoteGroup[]
   guestDetails: GuestDetail[]
   stage?: InvoiceLifecycleStage
+  presentation?: QuotePresentation
+  quoteText?: QuoteTextContent
+  showTerms?: boolean
 }): InvoiceRenderModel {
   const snap = buildInvoiceSnapshot({
     ...input,
     stage: input.stage ?? 'deposit',
     generatedBy: 'preview',
+    presentation: input.presentation,
+    quoteText: input.quoteText,
+    showTerms: input.showTerms,
   })
   return {
     mode: 'draft',
@@ -266,9 +307,44 @@ export function renderModelFromLive(input: {
     depositPctOfSell: snap.depositPctOfSell,
     paymentPosition: snap.paymentPosition,
     revisions: [],
+    presentation: snap.presentation ?? 'B2B_ITEMISED',
+    includesRows: snap.includesRows ?? [],
+    paymentSnapshot: snap.paymentSnapshot!,
+    quoteText: snap.quoteText!,
+    showTerms: snap.showTerms ?? true,
   }
 }
 
 export function lifecycleStageLabel(stage: InvoiceLifecycleStage): string {
   return stage === 'full' ? 'Full' : 'Deposit'
+}
+
+export function invoiceAsQuoteRenderModel(model: InvoiceRenderModel): QuoteRenderModel {
+  return {
+    mode: model.mode,
+    stale: model.stale,
+    presentation: model.presentation === 'B2B_PACKAGED' ? 'B2B_PACKAGED' : 'B2B_ITEMISED',
+    versionLabel: model.invoiceNumber,
+    refLabel: model.refLabel,
+    coverTitle: model.coverTitle,
+    reference: model.reference,
+    validUntil: model.invoiceDate,
+    sellTotal: model.sellTotal,
+    grossSell: model.grossSell,
+    scheduleGroups: model.scheduleGroups,
+    categoryTotals: model.categoryTotals,
+    pricingSummary: model.pricingSummary,
+    optionRows: model.optionRows,
+    depositTotal: model.depositTotal,
+    depositBalance: model.depositBalance,
+    depositPctOfSell: model.depositPctOfSell,
+    rateBasis: 'nett',
+    includesRows: model.includesRows ?? [],
+    paymentSnapshot: model.paymentSnapshot,
+    quoteText: model.quoteText,
+    showTerms: model.showTerms,
+    priceMode: 'total',
+    generatedAt: model.generatedAt,
+    generatedBy: model.generatedBy,
+  }
 }

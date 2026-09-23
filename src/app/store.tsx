@@ -60,6 +60,7 @@ import {
 } from '@/features/quote-doc/quoteSnapshotModel'
 import {
   appendQuote as appendQuoteStorage,
+  updateQuote as updateQuoteStorage,
   deleteItinerary as deleteItineraryStorage,
   getGuestDetails as getGuestDetailsStorage,
   getInvoice as getInvoiceStorage,
@@ -90,7 +91,9 @@ import type {
   QuotePresentation,
   QuoteRateBasis,
   QuoteRateBasisSelection,
+  QuoteTextContent,
   SplitForm,
+  DocumentSendRecord,
   VoucherMeta,
   VoucherToken,
 } from '@/shared/lib/types'
@@ -138,13 +141,25 @@ interface StoreContextValue {
       generatedBy?: string
       rateBasis?: QuoteRateBasisSelection
       presentation?: QuotePresentation
+      quoteText?: QuoteTextContent
+      showTerms?: boolean
+      priceMode?: 'total' | 'pp'
     },
   ) => QuoteDocument | QuoteDocument[] | null
+  sendQuote: (itineraryId: string, seq: number, recipient: string) => GateResult
   getInvoice: (itineraryId: string) => InvoiceDocument | undefined
   generateInvoice: (
     itineraryId: string,
-    opts?: { stage?: InvoiceLifecycleStage; generatedBy?: string },
+    opts?: {
+      stage?: InvoiceLifecycleStage
+      generatedBy?: string
+      presentation?: QuotePresentation
+      quoteText?: QuoteTextContent
+      showTerms?: boolean
+      transitionToInvoiced?: boolean
+    },
   ) => InvoiceDocument | null
+  sendInvoice: (itineraryId: string, recipient: string) => GateResult
   removeItinerary: (id: string) => void
   getServices: (itineraryId: string) => AddedService[]
   saveServices: (itineraryId: string, services: AddedService[]) => void
@@ -210,6 +225,16 @@ function voucherTokenExpiry(issuedAtIso: string, tripStartIso?: string): string 
 function resolveEntityId(key: string): string {
   if (key.startsWith('pe-')) return key
   return payableEntityFromSupplierName(key).id
+}
+
+function demoSendRecord(recipient: string, sentBy: string): DocumentSendRecord {
+  return {
+    recipient,
+    sentAt: new Date().toISOString(),
+    sentBy,
+    deliveryStatus: 'sent',
+    channel: 'email',
+  }
 }
 
 function migratedList(): Itinerary[] {
@@ -357,19 +382,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       let working: Itinerary = { ...current }
 
       if (opts?.generating === 'invoice') {
-        const invoiceGate = evaluateTransition(working, services, status, {
-          generating: 'invoice',
-          role: demoRole,
-        })
-        if (!invoiceGate.ok) return invoiceGate
+        const existingInvoice = getInvoiceStorage(id)
         const doc = buildInvoiceSnapshot({
           itinerary: working,
           services,
           quoteGroups: getQuoteGroupsStorage(id),
           guestDetails: getGuestDetailsStorage(id),
-          stage: 'deposit',
+          stage: existingInvoice?.lifecycleStage ?? 'deposit',
           generatedBy: demoRole,
-          existing: getInvoiceStorage(id),
+          existing: existingInvoice,
+          presentation: existingInvoice?.presentation,
+          quoteText: existingInvoice?.quoteText,
+          showTerms: existingInvoice?.showTerms,
         })
         saveInvoiceStorage(doc)
         working = {
@@ -377,6 +401,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           invoiceFingerprint: doc.fingerprint,
           firstInvoiceDate: working.firstInvoiceDate ?? doc.invoiceDate,
         }
+        const invoiceGate = evaluateTransition(working, services, status, {
+          generating: 'invoice',
+          role: demoRole,
+        })
+        if (!invoiceGate.ok) return invoiceGate
       }
 
       const fp = itineraryCommercialFp(services)
@@ -454,6 +483,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         generatedBy?: string
         rateBasis?: QuoteRateBasisSelection
         presentation?: QuotePresentation
+        quoteText?: QuoteTextContent
+        showTerms?: boolean
+        priceMode?: 'total' | 'pp'
       },
     ) => {
       const current = listItineraries().find((it) => it.id === itineraryId)
@@ -466,6 +498,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const selection = opts?.rateBasis ?? current.lastQuoteRateBasisSelection ?? 'nett'
       const generatedBy = opts?.generatedBy ?? demoRole
       const presentation = opts?.presentation
+      const quoteText = opts?.quoteText ?? current.quoteTextDraft
+      const showTerms = opts?.showTerms
+      const priceMode = opts?.priceMode
 
       const buildAtSeq = (seq: number, rateBasis: QuoteRateBasis) =>
         buildQuoteSnapshot({
@@ -477,6 +512,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           generatedBy,
           rateBasis,
           presentation,
+          quoteText,
+          showTerms,
+          priceMode,
         })
 
       const docs: QuoteDocument[] =
@@ -520,6 +558,43 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [bump, demoRole],
   )
 
+  const sendQuote = useCallback(
+    (itineraryId: string, seq: number, recipient: string): GateResult => {
+      const trimmed = recipient.trim()
+      if (!trimmed) return { ok: false, ruleId: 'missing-recipient', reason: 'Recipient email is required' }
+      const current = listItineraries().find((it) => it.id === itineraryId)
+      if (!current) return { ok: false, ruleId: 'missing', reason: 'Itinerary not found' }
+      const quotes = listQuotesStorage(itineraryId)
+      const quote = quotes.find((q) => q.seq === seq)
+      if (!quote) return { ok: false, ruleId: 'missing-quote', reason: 'Quote not found' }
+      const record = demoSendRecord(trimmed, demoRole)
+      const updated: QuoteDocument = {
+        ...quote,
+        sendHistory: [...(quote.sendHistory || []), record],
+        lastSentAt: record.sentAt,
+      }
+      updateQuoteStorage(updated)
+      const entry: LifecycleLogEntry = {
+        id: `ll-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        at: record.sentAt,
+        actor: demoRole,
+        from: current.status,
+        to: current.status,
+        label: `Sent ${quote.docNumber} to agent`,
+        category: 'quote-send',
+        detail: `${trimmed} · ${quote.presentation ?? 'B2B_ITEMISED'} · ${fmtLedgerUsd(quote.sellTotal)}`,
+      }
+      upsertItineraryStorage({
+        ...current,
+        lifecycleLog: [...(current.lifecycleLog ?? []), entry],
+        updatedAt: record.sentAt,
+      })
+      bump()
+      return { ok: true }
+    },
+    [bump, demoRole],
+  )
+
   const getInvoice = useCallback(
     (itineraryId: string) => {
       void rev
@@ -529,7 +604,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   )
 
   const generateInvoice = useCallback(
-    (itineraryId: string, opts?: { stage?: InvoiceLifecycleStage; generatedBy?: string }) => {
+    (
+      itineraryId: string,
+      opts?: {
+        stage?: InvoiceLifecycleStage
+        generatedBy?: string
+        presentation?: QuotePresentation
+        quoteText?: QuoteTextContent
+        showTerms?: boolean
+        transitionToInvoiced?: boolean
+      },
+    ) => {
       const current = listItineraries().find((it) => it.id === itineraryId)
       if (!current) return null
       if (current.financeLocked) return null
@@ -544,31 +629,93 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         stage: opts?.stage ?? existing?.lifecycleStage ?? 'deposit',
         generatedBy: opts?.generatedBy ?? demoRole,
         existing,
+        presentation: opts?.presentation ?? existing?.presentation,
+        quoteText: opts?.quoteText ?? existing?.quoteText ?? current.quoteTextDraft,
+        showTerms: opts?.showTerms ?? existing?.showTerms,
       })
 
       saveInvoiceStorage(doc)
 
       const isUpdate = Boolean(existing)
+      let nextStatus = current.status
+      if (opts?.transitionToInvoiced && current.status === 'APPROVED') {
+        const gate = evaluateTransition(
+          { ...current, invoiceFingerprint: doc.fingerprint },
+          services,
+          'INVOICED',
+          { role: demoRole },
+        )
+        if (gate.ok) nextStatus = 'INVOICED'
+      }
+
       const entry: LifecycleLogEntry = {
         id: `ll-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         at: doc.generatedAt,
         actor: demoRole,
         from: current.status,
-        to: current.status,
+        to: nextStatus,
         label: isUpdate ? `Updated ${doc.invoiceNumber}` : `Generated ${doc.invoiceNumber}`,
         category: isUpdate ? 'invoice-update' : 'invoice-generate',
-        detail: `${doc.lifecycleStage} · ${fmtLedgerUsd(doc.paymentPosition.total)} · due now ${fmtLedgerUsd(doc.paymentPosition.amountDueImmediately)}`,
+        detail: `${doc.lifecycleStage} · ${doc.presentation ?? 'B2B_ITEMISED'} · ${fmtLedgerUsd(doc.paymentPosition.total)} · due now ${fmtLedgerUsd(doc.paymentPosition.amountDueImmediately)}`,
+      }
+      const lifecycleLog = [...(current.lifecycleLog ?? []), entry]
+      if (nextStatus !== current.status) {
+        lifecycleLog.push({
+          id: `ll-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+          at: doc.generatedAt,
+          actor: demoRole,
+          from: current.status,
+          to: nextStatus,
+          label: 'Move to Invoiced',
+          category: 'status',
+        })
       }
 
       upsertItineraryStorage({
         ...current,
+        status: nextStatus,
         invoiceFingerprint: doc.fingerprint,
         firstInvoiceDate: current.firstInvoiceDate ?? doc.invoiceDate,
-        lifecycleLog: [...(current.lifecycleLog ?? []), entry],
+        lifecycleLog,
         updatedAt: doc.generatedAt,
       })
       bump()
       return doc
+    },
+    [bump, demoRole],
+  )
+
+  const sendInvoice = useCallback(
+    (itineraryId: string, recipient: string): GateResult => {
+      const trimmed = recipient.trim()
+      if (!trimmed) return { ok: false, ruleId: 'missing-recipient', reason: 'Recipient email is required' }
+      const current = listItineraries().find((it) => it.id === itineraryId)
+      if (!current) return { ok: false, ruleId: 'missing', reason: 'Itinerary not found' }
+      const invoice = getInvoiceStorage(itineraryId)
+      if (!invoice) return { ok: false, ruleId: 'missing-invoice', reason: 'Generate the invoice first' }
+      const record = demoSendRecord(trimmed, demoRole)
+      saveInvoiceStorage({
+        ...invoice,
+        sendHistory: [...(invoice.sendHistory || []), record],
+        lastSentAt: record.sentAt,
+      })
+      const entry: LifecycleLogEntry = {
+        id: `ll-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        at: record.sentAt,
+        actor: demoRole,
+        from: current.status,
+        to: current.status,
+        label: `Sent ${invoice.invoiceNumber} to agent`,
+        category: 'invoice-send',
+        detail: `${trimmed} · ${invoice.presentation ?? 'B2B_ITEMISED'} · due now ${fmtLedgerUsd(invoice.paymentPosition.amountDueImmediately)}`,
+      }
+      upsertItineraryStorage({
+        ...current,
+        lifecycleLog: [...(current.lifecycleLog ?? []), entry],
+        updatedAt: record.sentAt,
+      })
+      bump()
+      return { ok: true }
     },
     [bump, demoRole],
   )
@@ -1028,6 +1175,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const entityId = resolveEntityId(entityKey)
       const meta = current.voucherMeta?.[entityId]
       if (!meta?.submittedAt) return { ok: false, ruleId: 'not-submitted', reason: 'No recorded reply to clear' }
+      const services = getServicesStorage(itineraryId)
+      const lineIds = Object.keys(current.voucherLineAnswers || {}).filter((lid) => {
+        const svcId = lid.split('#')[0]
+        const svc = services.find((s) => s.id === svcId)
+        return svc && payableEntityIdOf(svc) === entityId
+      })
+      const nextAnswers = stripEntityLineAnswers(current.voucherLineAnswers || {}, lineIds)
+      const nextServices = revertEntitySupplierStatus(services, entityId, lineIds)
+      setServicesStorage(itineraryId, nextServices)
       const nextMeta: VoucherMeta = {
         ...meta,
         submittedAt: undefined,
@@ -1042,9 +1198,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         category: 'voucher-staff',
         entityId,
         label: 'Recorded supplier reply cleared',
+        detail: `${lineIds.length} line answer${lineIds.length === 1 ? '' : 's'} reverted`,
       })
       upsertItineraryStorage({
         ...current,
+        supplierVouchers: resetSupplierVoucherRollup(current.supplierVouchers || {}, entityId),
+        voucherLineAnswers: nextAnswers,
         voucherMeta: { ...(current.voucherMeta || {}), [entityId]: nextMeta },
         lifecycleLog,
         updatedAt: new Date().toISOString(),
@@ -1167,8 +1326,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       applyLifecycleTransition,
       getQuotes,
       generateQuote,
+      sendQuote,
       getInvoice,
       generateInvoice,
+      sendInvoice,
       removeItinerary,
       getServices,
       saveServices,
@@ -1201,8 +1362,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       applyLifecycleTransition,
       getQuotes,
       generateQuote,
+      sendQuote,
       getInvoice,
       generateInvoice,
+      sendInvoice,
       removeItinerary,
       getServices,
       saveServices,

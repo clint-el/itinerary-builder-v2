@@ -308,12 +308,13 @@ export function VouchersView({
               {raised && canIssue ? (
                 <button
                   type="button"
-                  onClick={() =>
-                    flashResult(resendVoucher(v.entityId), () => `Resent to ${v.issuedTo[0] || v.supplierEmail}`)
-                  }
+                  onClick={() => {
+                    setIssueCard(v)
+                    setIssueStep('review')
+                  }}
                   className="h-7 rounded-[7px] border border-[#B45309] bg-white px-[11px] text-[11.5px] font-bold text-[#B45309]"
                 >
-                  Re-send updated voucher
+                  Re-issue updated voucher
                 </button>
               ) : null}
             </div>
@@ -517,6 +518,27 @@ export function VouchersView({
                   <div className="mb-2.5 mt-2 text-[11.5px] text-[#A1A1A1]">
                     Hold status only — the itinerary&apos;s own status is unchanged by a supplier response.
                   </div>
+                  {v.answerHistory.length ? (
+                    <div className="mt-3 border-t border-[#E5E7EB] pt-3">
+                      <div className={SECTION_LABEL}>Answer history</div>
+                      <div className="mt-2 flex flex-col gap-2">
+                        {v.answerHistory.map((entry, i) => (
+                          <div
+                            key={`${entry.at}-${i}`}
+                            className="rounded-lg border border-[#E5E7EB] bg-white px-2.5 py-2 text-[11.5px]"
+                          >
+                            <div className="font-semibold text-[#171717]">
+                              {entry.heldCount} of {entry.totalLines} lines held
+                            </div>
+                            <div className="mt-0.5 text-[#737373]">
+                              {entry.actorType === 'staff' ? 'Recorded by planner' : 'Supplier link'} ·{' '}
+                              {entry.actorEmail || '—'} · {new Date(entry.at).toLocaleString('en-GB')}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                   {canRecordOnBehalf ? (
                     <GhostButton
                       onClick={() => flashResult(clearVoucherReply(v.entityId), () => 'Recorded reply cleared')}

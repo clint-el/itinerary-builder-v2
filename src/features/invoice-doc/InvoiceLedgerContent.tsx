@@ -3,8 +3,6 @@ import {
   fmtLedgerAmount,
   fmtLedgerDateLong,
   fmtLedgerUsd,
-  GENERAL_LEDGER_EXCLUSIONS,
-  GENERAL_LEDGER_INCLUSIONS,
   guestRosterRows,
   type LedgerCancellationRow,
   type LedgerOptionRow,
@@ -69,7 +67,7 @@ export function InvoiceLedgerContent({
   sellTotal,
 }: InvoiceLedgerContentProps) {
   const roster = guestRosterRows(guests, guestDetails)
-  const { scheduleGroups, categoryTotals, paymentPosition, lifecycleStage } = renderModel
+  const { scheduleGroups, categoryTotals, paymentPosition, lifecycleStage, quoteText } = renderModel
   const pos = paymentPosition
 
   return (
@@ -328,7 +326,7 @@ export function InvoiceLedgerContent({
             <div>
               <SectionLabel>General inclusions</SectionLabel>
               <ul className="mt-3 list-none space-y-1.5 p-0 text-[11.5px] leading-relaxed text-[#3D3D3D]">
-                {GENERAL_LEDGER_INCLUSIONS.map((item) => (
+                {quoteText.generalInclusions.map((item) => (
                   <li key={item} className="flex gap-2">
                     <span className="text-[#931115]">·</span>
                     {item}
@@ -339,7 +337,7 @@ export function InvoiceLedgerContent({
             <div>
               <SectionLabel>General exclusions</SectionLabel>
               <ul className="mt-3 list-none space-y-1.5 p-0 text-[11.5px] leading-relaxed text-[#3D3D3D]">
-                {GENERAL_LEDGER_EXCLUSIONS.map((item) => (
+                {quoteText.generalExclusions.map((item) => (
                   <li key={item} className="flex gap-2">
                     <span className="text-[#931115]">·</span>
                     {item}

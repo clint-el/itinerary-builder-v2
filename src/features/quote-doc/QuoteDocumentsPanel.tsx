@@ -90,6 +90,9 @@ export function QuoteDocumentsPanel({
               <span className="min-w-0 truncate text-[#525252]">
                 {fmtGeneratedAt(quote.generatedAt)}
                 <span className="text-[#A1A1A1]"> · {quote.generatedBy}</span>
+                <span className="block text-[11px] text-[#737373]">
+                  {quote.lastSentAt ? `Sent ${fmtGeneratedAt(quote.lastSentAt)}` : 'Not sent yet'}
+                </span>
               </span>
               <span className="text-right font-['IBM_Plex_Mono'] font-medium">
                 {fmtLedgerUsd(quote.sellTotal)}

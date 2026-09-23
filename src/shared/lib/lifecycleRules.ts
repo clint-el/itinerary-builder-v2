@@ -358,8 +358,9 @@ export function normalizeServiceLifecycle(
 
   if (lateStatuses.includes(itinerary.status) && next.lineStatus === 'Confirmed') {
     const vouchers = itinerary.supplierVouchers || {}
+    const entityId = payableEntityIdOf(next)
     const supplier = supplierNameOf(next)
-    const voucher = vouchers[supplier]
+    const voucher = vouchers[entityId] ?? vouchers[supplier]
     if (voucher === 'Confirmed' || itinerary.status === 'CONFIRMED' || itinerary.status === 'TRAVEL_IN_PROGRESS' || itinerary.status === 'COMPLETED') {
       next = { ...next, supplierStatus: 'Booked' }
     } else if (voucher === 'Rejected') {

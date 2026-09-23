@@ -20,8 +20,6 @@ import {
   fmtLedgerAmount,
   fmtLedgerDateLong,
   fmtLedgerUsd,
-  GENERAL_LEDGER_EXCLUSIONS,
-  GENERAL_LEDGER_INCLUSIONS,
   guestRosterRows,
   paxComposition,
   quoteValidUntil,
@@ -34,14 +32,22 @@ import {
 } from '@/features/summary/summaryModel'
 import { presentationLabel } from '@/features/quote-doc/quotePackagedModel'
 import { rateBasisLabel, rateBasisTag } from '@/features/quote-doc/quoteRateBasisModel'
+import { DocumentSendDialog } from '@/features/quote-doc/DocumentSendDialog'
 import { QuotePackagedContent } from '@/features/quote-doc/QuotePackagedContent'
+import { QuoteTextEditor } from '@/features/quote-doc/QuoteTextEditor'
+import { resolveQuoteText } from '@/features/quote-doc/quoteTextModel'
 import {
   isQuoteStale,
   renderModelFromLive,
   renderModelFromSnapshot,
   summaryLinesFromQuote,
 } from '@/features/quote-doc/quoteSnapshotModel'
-import type { QuotePresentation, QuoteRateBasis, QuoteRateBasisSelection } from '@/shared/lib/types'
+import type {
+  QuotePresentation,
+  QuoteRateBasis,
+  QuoteRateBasisSelection,
+  QuoteTextContent,
+} from '@/shared/lib/types'
 import { nightsBetween, partyGuests } from '@/shared/lib/helpers'
 import type { AddedService, Hold } from '@/shared/lib/types'
 import { cn } from '@/shared/lib/utils'
@@ -56,7 +62,16 @@ type PageDef = { key: number; label: string }
 export function QuoteDocPage() {
   const { id = '', quoteSeq: quoteSeqParam } = useParams()
   const navigate = useNavigate()
-  const { itineraries, getServices, getQuoteGroups, getGuestDetails, getQuotes, generateQuote } = useStore()
+  const {
+    itineraries,
+    getServices,
+    getQuoteGroups,
+    getGuestDetails,
+    getQuotes,
+    generateQuote,
+    sendQuote,
+    upsertItinerary,
+  } = useStore()
   const itinerary = itineraries.find((item) => item.id === id)
   const services = getServices(id)
   const quoteGroups = getQuoteGroups(id)
@@ -75,6 +90,8 @@ export function QuoteDocPage() {
   const [flash, setFlash] = useState<string | null>(null)
   const [presentation, setPresentation] = useState<QuotePresentation>('B2B_ITEMISED')
   const [rateBasisSelection, setRateBasisSelection] = useState<QuoteRateBasisSelection>('nett')
+  const [quoteText, setQuoteText] = useState<QuoteTextContent>(() => resolveQuoteText(itinerary?.quoteTextDraft))
+  const [sendOpen, setSendOpen] = useState(false)
   const quotes = getQuotes(id)
   const draftPreviewBasis: QuoteRateBasis =
     rateBasisSelection === 'both' ? 'nett' : rateBasisSelection
@@ -106,10 +123,22 @@ export function QuoteDocPage() {
         guestDetails,
         presentation,
         rateBasis: draftPreviewBasis,
+        quoteText,
+        showTerms,
+        priceMode,
       })
     }
     return null
-  }, [activeQuote, currentFp, draftPreviewBasis, guestDetails, itinerary, presentation, quoteGroups, services])
+  }, [activeQuote, currentFp, draftPreviewBasis, guestDetails, itinerary, presentation, priceMode, quoteGroups, quoteText, services, showTerms])
+
+  useEffect(() => {
+    if (itinerary) setQuoteText(resolveQuoteText(itinerary.quoteTextDraft))
+  }, [itinerary?.id, itinerary?.quoteTextDraft])
+
+  useEffect(() => {
+    if (activeQuote?.showTerms !== undefined) setShowTerms(activeQuote.showTerms)
+    if (activeQuote?.priceMode) setPriceMode(activeQuote.priceMode)
+  }, [activeQuote?.showTerms, activeQuote?.priceMode, activeQuote?.id])
 
   useEffect(() => {
     if (activeQuote?.presentation) setPresentation(activeQuote.presentation)
@@ -178,6 +207,13 @@ export function QuoteDocPage() {
 
   const isPackaged = renderModel?.presentation === 'B2B_PACKAGED'
   const rateTag = rateBasisTag(renderModel?.rateBasis ?? draftPreviewBasis)
+  const termsOn = activeQuote ? (renderModel?.showTerms ?? true) : showTerms
+  const docQuoteText = renderModel?.quoteText ?? quoteText
+
+  function persistQuoteText(next: QuoteTextContent) {
+    if (!itinerary) return
+    upsertItinerary({ ...itinerary, quoteTextDraft: next })
+  }
 
   const pageDefs = useMemo<PageDef[]>(() => {
     if (isPackaged) {
@@ -186,7 +222,7 @@ export function QuoteDocPage() {
         { key: 2, label: 'Includes' },
         { key: 3, label: 'Totals' },
       ]
-      if (showTerms) base.push({ key: 4, label: 'Terms' })
+      if (termsOn) base.push({ key: 4, label: 'Terms' })
       return base
     }
     const base: PageDef[] = [
@@ -195,9 +231,9 @@ export function QuoteDocPage() {
       { key: 3, label: 'Totals' },
       { key: 4, label: 'Inclusions' },
     ]
-    if (showTerms) base.push({ key: 5, label: 'Terms' })
+    if (termsOn) base.push({ key: 5, label: 'Terms' })
     return base
-  }, [isPackaged, showTerms])
+  }, [isPackaged, termsOn])
 
   const totalPages = pageDefs.length
   const versionLabel = renderModel?.versionLabel ?? 'draft'
@@ -281,6 +317,9 @@ export function QuoteDocPage() {
       generatedBy: itinerary.safariPlanner || 'Safari planner',
       presentation,
       rateBasis: rateBasisSelection,
+      quoteText,
+      showTerms,
+      priceMode,
     })
     if (!result) return
     setOptionsOpen(false)
@@ -495,6 +534,11 @@ export function QuoteDocPage() {
         <Button variant="outline" className="h-[34px] shrink-0" onClick={handleGenerateQuote}>
           <RefreshCw className="size-3.5" /> {quotes.length ? 'Regenerate' : 'Generate quote'}
         </Button>
+        {activeQuote ? (
+          <Button variant="outline" className="h-[34px] shrink-0" onClick={() => setSendOpen(true)}>
+            Send to agent
+          </Button>
+        ) : null}
         <Button className="h-[34px] shrink-0 bg-[#931115] hover:bg-[#7a0e12]" onClick={() => window.print()}>
           <Download className="size-3.5" /> Download PDF
         </Button>
@@ -596,6 +640,13 @@ export function QuoteDocPage() {
           })}
         </div>
 
+        {isDraftMode ? (
+          <div className="qd-chrome w-[300px] shrink-0 overflow-y-auto border-r border-[#18181B] bg-[#FAFAFA] p-3">
+            <div className="mb-2 text-[10px] font-bold uppercase tracking-wide text-[#737373]">Quote text</div>
+            <QuoteTextEditor value={quoteText} onChange={setQuoteText} onPersist={persistQuoteText} />
+          </div>
+        ) : null}
+
         <div ref={viewportRef} className="qd-scroll min-w-0 flex-1 overflow-auto py-7">
           <div
             className="qd-print-area mx-auto flex flex-col items-center gap-7"
@@ -620,7 +671,7 @@ export function QuoteDocPage() {
                 countries={countries}
                 guests={guests}
                 guestDetails={guestDetails}
-                showTerms={showTerms}
+                showTerms={termsOn}
                 totalPages={totalPages}
                 paymentTerms={paymentTerms}
                 cancellationRows={cancellationRows}
@@ -897,11 +948,8 @@ export function QuoteDocPage() {
                     <div className="text-[9px] font-semibold uppercase tracking-[1.2px] text-[#931115]">
                       General inclusions
                     </div>
-                    <div className="mt-1 text-[11px] leading-relaxed text-[#6E6E6E]">
-                      {GENERAL_LEDGER_INCLUSIONS[0]}
-                    </div>
                     <div className="mt-3 flex flex-col gap-1">
-                      {GENERAL_LEDGER_INCLUSIONS.slice(1).map((item) => (
+                      {docQuoteText.generalInclusions.map((item) => (
                         <span key={item} className="text-[11.5px] leading-snug">
                           {item}
                         </span>
@@ -912,11 +960,8 @@ export function QuoteDocPage() {
                     <div className="text-[9px] font-semibold uppercase tracking-[1.2px] text-[#931115]">
                       General exclusions
                     </div>
-                    <div className="mt-1 text-[11px] leading-relaxed text-[#6E6E6E]">
-                      Unless otherwise specified in the schedule.
-                    </div>
                     <div className="mt-3 flex flex-col gap-1">
-                      {GENERAL_LEDGER_EXCLUSIONS.map((item) => (
+                      {docQuoteText.generalExclusions.map((item) => (
                         <span key={item} className="text-[11.5px] leading-snug">
                           {item}
                         </span>
@@ -924,6 +969,13 @@ export function QuoteDocPage() {
                     </div>
                   </div>
                 </div>
+
+                {docQuoteText.notes ? (
+                  <div className="mt-4 rounded-lg border border-[#E5E7EB] px-4 py-3">
+                    <div className="text-[9px] font-semibold uppercase tracking-[1.2px] text-[#931115]">Notes</div>
+                    <p className="mt-2 whitespace-pre-wrap text-[11.5px] leading-relaxed">{docQuoteText.notes}</p>
+                  </div>
+                ) : null}
 
                 <p className="mt-3.5 text-[11px] leading-relaxed text-[#8A8A8A]">
                   These items are not included in bed and breakfast, half board or day room bookings. Inclusions and
@@ -963,7 +1015,7 @@ export function QuoteDocPage() {
             </section>
 
             {/* TERMS */}
-            {showTerms ? (
+            {termsOn ? (
               <section
                 data-qd-page="5"
                 className="qd-page flex shrink-0 flex-col overflow-hidden bg-white shadow-[0_12px_32px_rgba(0,0,0,0.35)]"
@@ -1081,6 +1133,19 @@ export function QuoteDocPage() {
           {flash}
         </div>
       ) : null}
+
+      <DocumentSendDialog
+        open={sendOpen}
+        onOpenChange={setSendOpen}
+        title={`Send ${activeQuote?.docNumber ?? 'quote'} to agent`}
+        description="Delivery is recorded on the quote and in the itinerary activity log."
+        defaultRecipient={itinerary?.agent || ''}
+        onSend={(recipient) => {
+          if (!activeQuote) return
+          const result = sendQuote(id, activeQuote.seq, recipient)
+          showFlash(result.ok ? `Sent ${activeQuote.docNumber} to ${recipient}` : result.reason || 'Send failed')
+        }}
+      />
     </div>
   )
 }

@@ -202,6 +202,8 @@ export interface Itinerary {
   quoteFingerprint?: string
   /** Last rate basis selection on this itinerary — pre-fills the picker; planner must still confirm. */
   lastQuoteRateBasisSelection?: QuoteRateBasisSelection
+  /** Planner-editable quote copy before generation (BR-Q15). */
+  quoteTextDraft?: QuoteTextContent
   /** Commercial fingerprint covered by the latest generated invoice. */
   invoiceFingerprint?: string
   /** Stamped once on first invoice generation (IB 12.1). */
@@ -222,8 +224,25 @@ export type LifecycleLogCategory =
   | 'supplier-link'
   | 'voucher-staff'
   | 'quote-generate'
+  | 'quote-send'
   | 'invoice-generate'
   | 'invoice-update'
+  | 'invoice-send'
+
+export interface QuoteTextContent {
+  generalInclusions: string[]
+  generalExclusions: string[]
+  notes: string
+  standingCommercial?: string
+}
+
+export interface DocumentSendRecord {
+  recipient: string
+  sentAt: string
+  sentBy: string
+  deliveryStatus: 'sent' | 'delivered'
+  channel: 'email'
+}
 
 export type InvoiceLifecycleStage = 'deposit' | 'full'
 
@@ -249,6 +268,7 @@ export interface InvoiceDocument {
   itineraryId: string
   invoiceNumber: string
   lifecycleStage: InvoiceLifecycleStage
+  presentation?: QuotePresentation
   fingerprint: string
   generatedAt: string
   generatedBy: string
@@ -264,8 +284,14 @@ export interface InvoiceDocument {
   depositTotal: number
   depositBalance: number
   depositPctOfSell: number
+  includesRows?: QuoteIncludesRow[]
+  paymentSnapshot?: QuotePaymentSnapshot
+  quoteText?: QuoteTextContent
+  showTerms?: boolean
   paymentPosition: InvoicePaymentPosition
   revisions: InvoiceRevisionEntry[]
+  sendHistory?: DocumentSendRecord[]
+  lastSentAt?: string
 }
 
 export type QuoteRateBasis = 'rack' | 'nett'
@@ -348,6 +374,11 @@ export interface QuoteDocument {
   depositPctOfSell: number
   includesRows: QuoteIncludesRow[]
   paymentSnapshot: QuotePaymentSnapshot
+  quoteText?: QuoteTextContent
+  showTerms?: boolean
+  priceMode?: 'total' | 'pp'
+  sendHistory?: DocumentSendRecord[]
+  lastSentAt?: string
 }
 
 export interface LifecycleLogEntry {

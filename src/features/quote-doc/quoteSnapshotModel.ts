@@ -5,6 +5,7 @@ import {
   itineraryTitle,
   quoteValidUntil,
 } from '@/features/quote-doc/quoteLedgerModel'
+import { resolveQuoteText } from '@/features/quote-doc/quoteTextModel'
 import { buildIncludesRows, buildPaymentSnapshot } from '@/features/quote-doc/quotePackagedModel'
 import { linesForRateBasis } from '@/features/quote-doc/quoteRateBasisModel'
 import {
@@ -25,6 +26,7 @@ import type {
   QuoteGroup,
   QuotePresentation,
   QuoteRateBasis,
+  QuoteTextContent,
 } from '@/shared/lib/types'
 
 export function nextQuoteSeq(existing: QuoteDocument[]): number {
@@ -44,10 +46,16 @@ export function buildQuoteSnapshot(input: {
   generatedBy: string
   rateBasis?: QuoteRateBasis
   presentation?: QuotePresentation
+  quoteText?: QuoteTextContent
+  showTerms?: boolean
+  priceMode?: 'total' | 'pp'
 }): QuoteDocument {
   const { itinerary, services, quoteGroups, guestDetails, seq, generatedBy } = input
   const rateBasis = input.rateBasis ?? 'nett'
   const presentation = input.presentation ?? 'B2B_ITEMISED'
+  const quoteText = resolveQuoteText(itinerary.quoteTextDraft, input.quoteText)
+  const showTerms = input.showTerms ?? true
+  const priceMode = input.priceMode ?? 'pp'
   const guests = partyGuests(itinerary, guestDetails)
   const rawLines =
     services.length > 0 ? linesFromServices(services, guests) : linesFromQuoteGroups(quoteGroups)
@@ -114,6 +122,9 @@ export function buildQuoteSnapshot(input: {
     depositPctOfSell: deposits.depositPctOfSell,
     includesRows,
     paymentSnapshot,
+    quoteText,
+    showTerms,
+    priceMode,
   }
 }
 
@@ -141,6 +152,9 @@ export type QuoteRenderModel = {
   paymentSnapshot: QuoteDocument['paymentSnapshot']
   generatedAt?: string
   generatedBy?: string
+  quoteText: QuoteTextContent
+  showTerms: boolean
+  priceMode: 'total' | 'pp'
 }
 
 function baseRenderFields(quote: QuoteDocument, stale: boolean): QuoteRenderModel {
@@ -173,6 +187,9 @@ function baseRenderFields(quote: QuoteDocument, stale: boolean): QuoteRenderMode
       },
     generatedAt: quote.generatedAt,
     generatedBy: quote.generatedBy,
+    quoteText: resolveQuoteText(undefined, quote.quoteText),
+    showTerms: quote.showTerms ?? true,
+    priceMode: quote.priceMode ?? 'pp',
   }
 }
 
@@ -210,6 +227,9 @@ export function renderModelFromLive(input: {
   guestDetails: GuestDetail[]
   presentation?: QuotePresentation
   rateBasis?: QuoteRateBasis
+  quoteText?: QuoteTextContent
+  showTerms?: boolean
+  priceMode?: 'total' | 'pp'
 }): QuoteRenderModel {
   const snap = buildQuoteSnapshot({
     ...input,
@@ -217,6 +237,9 @@ export function renderModelFromLive(input: {
     generatedBy: 'preview',
     presentation: input.presentation ?? 'B2B_ITEMISED',
     rateBasis: input.rateBasis ?? 'nett',
+    quoteText: input.quoteText,
+    showTerms: input.showTerms,
+    priceMode: input.priceMode,
   })
   return {
     mode: 'draft',
@@ -239,5 +262,8 @@ export function renderModelFromLive(input: {
     rateBasis: snap.rateBasis,
     includesRows: snap.includesRows,
     paymentSnapshot: snap.paymentSnapshot,
+    quoteText: snap.quoteText!,
+    showTerms: snap.showTerms ?? true,
+    priceMode: snap.priceMode ?? 'pp',
   }
 }
