@@ -83,6 +83,7 @@ import type {
   GuestDetail,
   InvoiceDocument,
   InvoiceLifecycleStage,
+  InvoiceRenderingDepth,
   Itinerary,
   ItineraryStatus,
   LifecycleLogEntry,
@@ -154,6 +155,8 @@ interface StoreContextValue {
       stage?: InvoiceLifecycleStage
       generatedBy?: string
       presentation?: QuotePresentation
+      renderingDepth?: InvoiceRenderingDepth
+      travelCounsellors?: boolean
       quoteText?: QuoteTextContent
       showTerms?: boolean
       transitionToInvoiced?: boolean
@@ -610,6 +613,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         stage?: InvoiceLifecycleStage
         generatedBy?: string
         presentation?: QuotePresentation
+        renderingDepth?: InvoiceRenderingDepth
+        travelCounsellors?: boolean
         quoteText?: QuoteTextContent
         showTerms?: boolean
         transitionToInvoiced?: boolean
@@ -626,12 +631,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         services,
         quoteGroups: getQuoteGroupsStorage(itineraryId),
         guestDetails: getGuestDetailsStorage(itineraryId),
-        stage: opts?.stage ?? existing?.lifecycleStage ?? 'deposit',
+        stage: opts?.stage ?? existing?.lifecycleStage,
         generatedBy: opts?.generatedBy ?? demoRole,
         existing,
         presentation: opts?.presentation ?? existing?.presentation,
+        renderingDepth: opts?.renderingDepth ?? existing?.renderingDepth,
+        travelCounsellors: opts?.travelCounsellors ?? existing?.travelCounsellors,
         quoteText: opts?.quoteText ?? existing?.quoteText ?? current.quoteTextDraft,
-        showTerms: opts?.showTerms ?? existing?.showTerms,
+        showTerms: opts?.showTerms ?? existing?.showTerms ?? true,
       })
 
       saveInvoiceStorage(doc)

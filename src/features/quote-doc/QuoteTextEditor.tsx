@@ -1,8 +1,5 @@
-import {
-  defaultQuoteText,
-  parseQuoteTextLines,
-  quoteTextLinesToText,
-} from '@/features/quote-doc/quoteTextModel'
+import { RichTextEditor } from '@/features/quote-doc/RichTextEditor'
+import { defaultQuoteText } from '@/features/quote-doc/quoteTextModel'
 import type { QuoteTextContent } from '@/shared/lib/types'
 
 export function QuoteTextEditor({
@@ -26,41 +23,42 @@ export function QuoteTextEditor({
     <div className="flex flex-col gap-3 rounded-xl border border-[#E5E7EB] bg-white p-4">
       <div>
         <div className="text-[11px] font-bold uppercase tracking-wide text-[#A1A1A1]">General inclusions</div>
-        <p className="mt-1 text-[11px] text-[#737373]">One item per line — frozen into the generated PDF.</p>
-        <textarea
-          value={quoteTextLinesToText(draft.generalInclusions)}
-          onChange={(e) => update({ generalInclusions: parseQuoteTextLines(e.target.value) })}
-          rows={6}
-          className="mt-2 w-full resize-y rounded-lg border border-[#E5E7EB] px-2.5 py-2 font-mono text-[11.5px] leading-relaxed"
+        <p className="mt-1 text-[11px] text-[#737373]">Rich text — frozen into the generated PDF.</p>
+        <RichTextEditor
+          value={draft.generalInclusionsHtml}
+          onChange={(generalInclusionsHtml) => update({ generalInclusionsHtml })}
+          minHeight={140}
         />
       </div>
       <div>
         <div className="text-[11px] font-bold uppercase tracking-wide text-[#A1A1A1]">General exclusions</div>
-        <textarea
-          value={quoteTextLinesToText(draft.generalExclusions)}
-          onChange={(e) => update({ generalExclusions: parseQuoteTextLines(e.target.value) })}
-          rows={5}
-          className="mt-2 w-full resize-y rounded-lg border border-[#E5E7EB] px-2.5 py-2 font-mono text-[11.5px] leading-relaxed"
+        <RichTextEditor
+          value={draft.generalExclusionsHtml}
+          onChange={(generalExclusionsHtml) => update({ generalExclusionsHtml })}
+          minHeight={120}
         />
       </div>
-      <div>
-        <div className="text-[11px] font-bold uppercase tracking-wide text-[#A1A1A1]">Notes</div>
-        <textarea
-          value={draft.notes}
-          onChange={(e) => update({ notes: e.target.value })}
-          rows={3}
-          placeholder="Planner notes printed on the document…"
-          className="mt-2 w-full resize-y rounded-lg border border-[#E5E7EB] px-2.5 py-2 text-[12px] leading-relaxed"
-        />
-      </div>
-      <div>
-        <div className="text-[11px] font-bold uppercase tracking-wide text-[#A1A1A1]">Standing commercial copy</div>
-        <textarea
-          value={draft.standingCommercial ?? ''}
-          onChange={(e) => update({ standingCommercial: e.target.value })}
-          rows={2}
-          className="mt-2 w-full resize-y rounded-lg border border-[#E5E7EB] px-2.5 py-2 text-[12px] leading-relaxed"
-        />
+      <div className="rounded-lg border border-[#E5E7EB] bg-[#FAFAFA] p-3">
+        <div className="text-[11px] font-bold uppercase tracking-wide text-[#737373]">
+          Notes &amp; standing commercial copy
+        </div>
+        <div className="mt-3">
+          <div className="text-[10px] font-bold uppercase tracking-wide text-[#A1A1A1]">Notes</div>
+          <RichTextEditor
+            value={draft.notesHtml}
+            onChange={(notesHtml) => update({ notesHtml })}
+            placeholder="Planner notes printed on the document…"
+            minHeight={90}
+          />
+        </div>
+        <div className="mt-3">
+          <div className="text-[10px] font-bold uppercase tracking-wide text-[#A1A1A1]">Standing commercial copy</div>
+          <RichTextEditor
+            value={draft.standingCommercialHtml}
+            onChange={(standingCommercialHtml) => update({ standingCommercialHtml })}
+            minHeight={80}
+          />
+        </div>
       </div>
     </div>
   )

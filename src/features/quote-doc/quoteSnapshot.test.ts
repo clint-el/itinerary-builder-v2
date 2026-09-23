@@ -4,6 +4,7 @@ import {
   isQuoteStale,
   nextQuoteSeq,
 } from '@/features/quote-doc/quoteSnapshotModel'
+import { fmtLedgerDateLong, quoteValidUntil } from '@/features/quote-doc/quoteLedgerModel'
 import { itineraryCommercialFp } from '@/shared/lib/lifecycleRules'
 import {
   appendQuote,
@@ -154,5 +155,40 @@ describe('quoteSnapshotModel', () => {
     const after = getItinerary(id)?.quoteFingerprint
     expect(after).toBe(before)
     expect(isQuoteStale(listQuotes(id)[0], itineraryCommercialFp(getServices(id)))).toBe(true)
+  })
+
+  it('quoteValidUntil defaults to 30 calendar days (BR-Q29/OD-24) when no hold data is passed', () => {
+    expect(quoteValidUntil('2026-01-01')).toBe(fmtLedgerDateLong('2026-01-31'))
+  })
+
+  it('buildQuoteSnapshot computes valid until as 30 days from generation by default', () => {
+    const itinerary = baseItinerary()
+    const services = [service('s1', 1200)]
+    const snap = buildQuoteSnapshot({
+      itinerary,
+      services,
+      quoteGroups: [],
+      guestDetails: [],
+      seq: 1,
+      generatedBy: 'Planner',
+    })
+    const generatedDate = snap.generatedAt.slice(0, 10)
+    expect(snap.validUntil).toBe(quoteValidUntil(generatedDate))
+  })
+
+  it('derives Total Adults/Children price split from itinerary pax composition (BR-Q36)', () => {
+    const itinerary = baseItinerary({ adults: 2, children: 1 })
+    const services = [service('s1', 1200)]
+    const snap = buildQuoteSnapshot({
+      itinerary,
+      services,
+      quoteGroups: [],
+      guestDetails: [],
+      seq: 1,
+      generatedBy: 'Planner',
+    })
+    expect(snap.paxPriceSplit.totalAdults).toBe(2)
+    expect(snap.paxPriceSplit.totalChildren).toBe(1)
+    expect(snap.paxPriceSplit.totalAdultPrice + snap.paxPriceSplit.totalChildPrice).toBeCloseTo(snap.sellTotal, 2)
   })
 })

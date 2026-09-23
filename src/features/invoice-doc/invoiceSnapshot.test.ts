@@ -158,4 +158,85 @@ describe('invoiceSnapshotModel', () => {
   it('invoiceNumberFor uses reference suffix', () => {
     expect(invoiceNumberFor(baseItinerary())).toBe('CPS7777-INV')
   })
+
+  it('derives Total Adults/Children price split from itinerary pax composition (BR-I58)', () => {
+    const itinerary = baseItinerary({ adults: 2, children: 1 })
+    const services = [service('s1', 10000, 7700)]
+    const snap = buildInvoiceSnapshot({
+      itinerary,
+      services,
+      quoteGroups: [],
+      guestDetails: [],
+      stage: 'deposit',
+      generatedBy: 'Planner',
+    })
+    expect(snap.paxPriceSplit.totalAdults).toBe(2)
+    expect(snap.paxPriceSplit.totalChildren).toBe(1)
+    expect(snap.paxPriceSplit.totalAdultPrice + snap.paxPriceSplit.totalChildPrice).toBeCloseTo(snap.sellTotal, 2)
+  })
+
+  it('B2C_PACKAGED invoices never carry per-line prices (BR-I07)', () => {
+    const itinerary = baseItinerary()
+    const services = [service('s1', 10000, 7700)]
+    const snap = buildInvoiceSnapshot({
+      itinerary,
+      services,
+      quoteGroups: [],
+      guestDetails: [],
+      stage: 'deposit',
+      generatedBy: 'Planner',
+      presentation: 'B2C_PACKAGED',
+    })
+    expect(snap.presentation).toBe('B2C_PACKAGED')
+    expect(snap.includesRows?.every((row) => !('amount' in row))).toBe(true)
+  })
+
+  it('B2B_ITEMISED defaults to full rendering depth with no rolled-up rows', () => {
+    const itinerary = baseItinerary()
+    const services = [service('s1', 10000, 7700)]
+    const snap = buildInvoiceSnapshot({
+      itinerary,
+      services,
+      quoteGroups: [],
+      guestDetails: [],
+      stage: 'deposit',
+      generatedBy: 'Planner',
+    })
+    expect(snap.renderingDepth).toBe('full')
+    expect(snap.rolledUpRows).toBeUndefined()
+  })
+
+  it('rolled-up rendering depth produces Gross/Commission/Net rows (BR-I57)', () => {
+    const itinerary = baseItinerary()
+    const services = [service('s1', 10000, 7700)]
+    const snap = buildInvoiceSnapshot({
+      itinerary,
+      services,
+      quoteGroups: [],
+      guestDetails: [],
+      stage: 'deposit',
+      generatedBy: 'Planner',
+      renderingDepth: 'rolled_up',
+    })
+    expect(snap.renderingDepth).toBe('rolled_up')
+    expect(snap.rolledUpRows?.length).toBeGreaterThan(0)
+  })
+
+  it('Travel Counsellors invoices force rolled-up rendering regardless of the depth input (BR-I56)', () => {
+    const itinerary = baseItinerary()
+    const services = [service('s1', 10000, 7700)]
+    const snap = buildInvoiceSnapshot({
+      itinerary,
+      services,
+      quoteGroups: [],
+      guestDetails: [],
+      stage: 'deposit',
+      generatedBy: 'Planner',
+      renderingDepth: 'full',
+      travelCounsellors: true,
+    })
+    expect(snap.travelCounsellors).toBe(true)
+    expect(snap.renderingDepth).toBe('rolled_up')
+    expect(snap.rolledUpRows?.length).toBeGreaterThan(0)
+  })
 })

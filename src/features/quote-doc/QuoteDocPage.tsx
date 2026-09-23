@@ -20,21 +20,32 @@ import {
   fmtLedgerAmount,
   fmtLedgerDateLong,
   fmtLedgerUsd,
-  guestRosterRows,
+  guestDetailLines,
   paxComposition,
+  bookedByContact,
+  bookingAgentBlock,
   quoteValidUntil,
 } from '@/features/quote-doc/quoteLedgerModel'
+import { BookedByMetaRow, BookingAgentSection, GuestDetailsSection } from '@/features/quote-doc/quoteCoverMeta'
 import {
   buildDepositSummary,
   buildSummaryPricing,
   linesFromQuoteGroups,
   linesFromServices,
 } from '@/features/summary/summaryModel'
-import { presentationLabel } from '@/features/quote-doc/quotePackagedModel'
+import { DocumentLayoutPicker } from '@/features/quote-doc/DocumentLayoutPicker'
+import {
+  layoutModeFromPresentation,
+  resolveQuoteDocumentOptions,
+  type DocumentLayoutMode,
+} from '@/features/quote-doc/documentOptionsModel'
+import { isPackagedPresentation, presentationLabel } from '@/features/quote-doc/quotePackagedModel'
 import { rateBasisLabel, rateBasisTag } from '@/features/quote-doc/quoteRateBasisModel'
 import { DocumentSendDialog } from '@/features/quote-doc/DocumentSendDialog'
 import { QuotePackagedContent } from '@/features/quote-doc/QuotePackagedContent'
 import { QuoteTextEditor } from '@/features/quote-doc/QuoteTextEditor'
+import { RichTextDocumentContent } from '@/features/quote-doc/RichTextDocumentContent'
+import { QuoteTextSupplement } from '@/features/quote-doc/quoteTextBlocks'
 import { resolveQuoteText } from '@/features/quote-doc/quoteTextModel'
 import {
   isQuoteStale,
@@ -43,7 +54,6 @@ import {
   summaryLinesFromQuote,
 } from '@/features/quote-doc/quoteSnapshotModel'
 import type {
-  QuotePresentation,
   QuoteRateBasis,
   QuoteRateBasisSelection,
   QuoteTextContent,
@@ -55,7 +65,7 @@ import { cn } from '@/shared/lib/utils'
 const PAGE_W = 794
 const PAGE_H = 1123
 const MAROON = '#580B0B'
-const GRID_SCHEDULE = 'grid grid-cols-[52px_148px_minmax(0,1fr)_74px_26px_84px] gap-x-2'
+const GRID_SCHEDULE = 'grid grid-cols-[52px_118px_minmax(0,1fr)_56px_26px_50px_72px_84px] gap-x-2'
 
 type PageDef = { key: number; label: string }
 
@@ -83,12 +93,11 @@ export function QuoteDocPage() {
 
   const [zoom, setZoom] = useState(80)
   const [optionsOpen, setOptionsOpen] = useState(false)
-  const [showTerms, setShowTerms] = useState(true)
   const [priceMode, setPriceMode] = useState<'total' | 'pp'>('pp')
   const [warningDismissed, setWarningDismissed] = useState(false)
   const [activePage, setActivePage] = useState(1)
   const [flash, setFlash] = useState<string | null>(null)
-  const [presentation, setPresentation] = useState<QuotePresentation>('B2B_ITEMISED')
+  const [layoutMode, setLayoutMode] = useState<DocumentLayoutMode>('itemised')
   const [rateBasisSelection, setRateBasisSelection] = useState<QuoteRateBasisSelection>('nett')
   const [quoteText, setQuoteText] = useState<QuoteTextContent>(() => resolveQuoteText(itinerary?.quoteTextDraft))
   const [sendOpen, setSendOpen] = useState(false)
@@ -111,37 +120,59 @@ export function QuoteDocPage() {
     return undefined
   }, [isDraftMode, quoteSeqParam, quotes])
 
+  const docOptions = useMemo(
+    () => (itinerary ? resolveQuoteDocumentOptions(itinerary, { layoutMode }) : null),
+    [itinerary, layoutMode],
+  )
+  const quoteStale = activeQuote ? isQuoteStale(activeQuote, currentFp) : false
+  const snapshotLayoutMode = activeQuote
+    ? layoutModeFromPresentation(activeQuote.presentation ?? 'B2B_ITEMISED')
+    : null
+  const useFrozenSnapshot =
+    Boolean(activeQuote && itinerary && !quoteStale && snapshotLayoutMode === layoutMode)
+
   const renderModel = useMemo(() => {
-    if (activeQuote && itinerary) {
-      return renderModelFromSnapshot(activeQuote, isQuoteStale(activeQuote, currentFp))
+    if (useFrozenSnapshot && activeQuote) {
+      return renderModelFromSnapshot(activeQuote, quoteStale)
     }
-    if (itinerary) {
+    if (itinerary && docOptions) {
       return renderModelFromLive({
         itinerary,
         services,
         quoteGroups,
         guestDetails,
-        presentation,
+        presentation: docOptions.presentation,
         rateBasis: draftPreviewBasis,
         quoteText,
-        showTerms,
+        showTerms: docOptions.showTerms,
         priceMode,
       })
     }
     return null
-  }, [activeQuote, currentFp, draftPreviewBasis, guestDetails, itinerary, presentation, priceMode, quoteGroups, quoteText, services, showTerms])
+  }, [
+    useFrozenSnapshot,
+    activeQuote,
+    quoteStale,
+    draftPreviewBasis,
+    guestDetails,
+    itinerary,
+    docOptions,
+    priceMode,
+    quoteGroups,
+    quoteText,
+    services,
+  ])
 
   useEffect(() => {
     if (itinerary) setQuoteText(resolveQuoteText(itinerary.quoteTextDraft))
   }, [itinerary?.id, itinerary?.quoteTextDraft])
 
   useEffect(() => {
-    if (activeQuote?.showTerms !== undefined) setShowTerms(activeQuote.showTerms)
     if (activeQuote?.priceMode) setPriceMode(activeQuote.priceMode)
-  }, [activeQuote?.showTerms, activeQuote?.priceMode, activeQuote?.id])
+  }, [activeQuote?.priceMode, activeQuote?.id])
 
   useEffect(() => {
-    if (activeQuote?.presentation) setPresentation(activeQuote.presentation)
+    if (activeQuote?.presentation) setLayoutMode(layoutModeFromPresentation(activeQuote.presentation))
   }, [activeQuote?.presentation])
 
   useEffect(() => {
@@ -205,9 +236,9 @@ export function QuoteDocPage() {
   const grossSell = renderModel?.grossSell ?? 0
   const sellTotal = renderModel?.sellTotal ?? pricing.sellNumber
 
-  const isPackaged = renderModel?.presentation === 'B2B_PACKAGED'
+  const isPackaged = isPackagedPresentation(renderModel?.presentation ?? docOptions?.presentation ?? 'B2B_ITEMISED')
   const rateTag = rateBasisTag(renderModel?.rateBasis ?? draftPreviewBasis)
-  const termsOn = activeQuote ? (renderModel?.showTerms ?? true) : showTerms
+  const termsOn = renderModel?.showTerms ?? docOptions?.showTerms ?? true
   const docQuoteText = renderModel?.quoteText ?? quoteText
 
   function persistQuoteText(next: QuoteTextContent) {
@@ -236,8 +267,8 @@ export function QuoteDocPage() {
   }, [isPackaged, termsOn])
 
   const totalPages = pageDefs.length
-  const versionLabel = renderModel?.versionLabel ?? 'draft'
-  const refLabel = renderModel?.refLabel ?? `${id} · draft`
+  const versionLabel = renderModel?.versionLabel ?? ''
+  const refLabel = renderModel?.refLabel ?? itinerary?.reference ?? id
   const validUntil = renderModel?.validUntil ?? quoteValidUntil(new Date().toISOString().slice(0, 10))
   const pricingDiscounts = renderModel?.pricingSummary.discounts ?? pricing.discounts.map((d) => ({
     label: d.label,
@@ -291,7 +322,7 @@ export function QuoteDocPage() {
     itinerary.destinations?.length
       ? itinerary.destinations.join(' · ')
       : itinerary.destination || '—'
-  const roster = guestRosterRows(guests, guestDetails)
+  const guestLines = guestDetailLines(guests, guestDetails)
   const pendingHolds = services.reduce((count: number, service: AddedService) => {
     const holds = (service.draft?.holds as Hold[] | undefined) || []
     return count + holds.filter((hold) => hold.status === 'Requested').length
@@ -313,12 +344,13 @@ export function QuoteDocPage() {
     if (width) setZoom(Math.max(40, Math.min(150, Math.floor(((width - 64) / PAGE_W) * 100))))
   }
   const handleGenerateQuote = () => {
+    if (!docOptions) return
     const result = generateQuote(id, {
       generatedBy: itinerary.safariPlanner || 'Safari planner',
-      presentation,
+      presentation: docOptions.presentation,
       rateBasis: rateBasisSelection,
       quoteText,
-      showTerms,
+      showTerms: docOptions.showTerms,
       priceMode,
     })
     if (!result) return
@@ -386,17 +418,18 @@ export function QuoteDocPage() {
         <div className="flex min-w-0 flex-col">
           <span className="truncate text-[13.5px] font-bold text-[#171717]">
             Quotation {itinerary.reference}
-            {renderModel.docNumber ? ` · ${renderModel.docNumber}` : ''} · {versionLabel}
+            {renderModel.docNumber ? ` · ${renderModel.docNumber}` : ''}
+            {versionLabel ? ` · ${versionLabel}` : ''}
           </span>
           <span className="truncate text-[11.5px] text-[#A1A1A1]">
             {renderModel.mode === 'draft'
-              ? `Draft preview (${presentationLabel(renderModel.presentation).toLowerCase()}) — not sent to agent`
+              ? `Preview (${presentationLabel(renderModel.presentation).toLowerCase()}) — not sent to agent`
               : `${isPackaged ? 'Packaged' : 'Ledger'} layout · generated ${issuedOn} by ${renderModel.generatedBy || itinerary.safariPlanner || 'Safari planner'}`}
           </span>
         </div>
         {renderModel.mode === 'draft' ? (
           <span className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full bg-[#EFF6FF] px-2.5 text-[11.5px] font-bold text-[#1D4ED8]">
-            <span className="size-1.5 rounded-full bg-[#1D4ED8]" /> Draft
+            <span className="size-1.5 rounded-full bg-[#1D4ED8]" /> Preview
           </span>
         ) : renderModel.stale ? (
           <span className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full bg-[#FEF3C7] px-2.5 text-[11.5px] font-bold text-[#92400E]">
@@ -434,28 +467,12 @@ export function QuoteDocPage() {
           </button>
           {optionsOpen ? (
             <div className="absolute right-0 top-10 z-30 w-[308px] rounded-xl border bg-white p-4 shadow-xl">
-              <p className="mb-2 text-[11.5px] font-bold uppercase tracking-wide text-[#A1A1A1]">Presentation</p>
-              <div className="flex flex-col gap-1.5">
-                {([
-                  ['B2B_ITEMISED', 'Itemised (Ledger)'],
-                  ['B2B_PACKAGED', 'Packaged (Includes only)'],
-                ] as const).map(([mode, label]) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    onClick={() => setPresentation(mode)}
-                    className={cn(
-                      'h-[32px] rounded-lg border px-3 text-left text-[12px] font-semibold',
-                      presentation === mode
-                        ? 'border-[#931115] bg-[#FDF2F2] text-[#931115]'
-                        : 'border-[#E5E7EB] text-[#525252]',
-                    )}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <div className="my-3 h-px bg-[#E5E7EB]" />
+              {docOptions ? (
+                <>
+                  <DocumentLayoutPicker value={layoutMode} onChange={setLayoutMode} />
+                  <div className="my-3 h-px bg-[#E5E7EB]" />
+                </>
+              ) : null}
               <p className="mb-2 text-[11.5px] font-bold uppercase tracking-wide text-[#A1A1A1]">Rate basis</p>
               <div className="flex flex-col gap-1.5">
                 {([
@@ -480,16 +497,9 @@ export function QuoteDocPage() {
               </div>
               {rateBasisSelection === 'both' ? (
                 <p className="mt-2 text-[11.5px] leading-relaxed text-[#A1A1A1]">
-                  Draft preview shows Nett. Generate creates two numbered quotes in one action.
+                  Preview shows Nett. Generate creates two numbered quotes in one action.
                 </p>
               ) : null}
-              <div className="my-3 h-px bg-[#E5E7EB]" />
-              <p className="mb-2 text-[11.5px] font-bold uppercase tracking-wide text-[#A1A1A1]">Sections</p>
-              <OptionToggle
-                label="Payment terms & cancellation"
-                on={showTerms}
-                onClick={() => setShowTerms((value) => !value)}
-              />
               {!isPackaged ? (
                 <>
                   <div className="my-3 h-px bg-[#E5E7EB]" />
@@ -516,8 +526,9 @@ export function QuoteDocPage() {
                   </div>
                 </>
               ) : null}
-              <p className="mt-3 text-[11.5px] leading-relaxed text-[#A1A1A1]">
-                Cost and margin are never shown on the client document.
+              <p className="mt-3 text-[11px] leading-relaxed text-[#737373]">
+                Payment terms and cancellation are always included. Cost and margin are never shown on the client
+                document.
               </p>
             </div>
           ) : null}
@@ -603,7 +614,7 @@ export function QuoteDocPage() {
                     isDraftMode ? 'bg-[#3F3F46] text-white' : 'text-[#D4D4D8] hover:bg-[#3F3F46]/60',
                   )}
                 >
-                  <div className="font-semibold">Draft preview</div>
+                  <div className="font-semibold">Preview</div>
                   <div className="text-[9.5px] text-[#A1A1AA]">Live itinerary</div>
                 </button>
               </div>
@@ -616,7 +627,7 @@ export function QuoteDocPage() {
                 key={page.key}
                 type="button"
                 onClick={() => scrollToPage(page.key)}
-                className={cn('flex w-full flex-col items-center gap-1.5 px-3 py-2.5', active && 'bg-[#3F3F46]')}
+                className={cn('flex w-full flex-col items-start gap-1.5 px-3 py-2.5', active && 'bg-[#3F3F46]')}
               >
                 <span
                   className={cn(
@@ -632,7 +643,7 @@ export function QuoteDocPage() {
                   <span className="mx-2.5 mt-1 block h-1 w-4/5 rounded-sm bg-[#EFEFF1]" />
                   <span className="mx-2.5 mt-1 block h-1 w-3/4 rounded-sm bg-[#EFEFF1]" />
                 </span>
-                <span className={cn('text-center text-[10.5px] font-semibold', active ? 'text-white' : 'text-[#A1A1AA]')}>
+                <span className={cn('text-left text-[10.5px] font-semibold', active ? 'text-white' : 'text-[#A1A1AA]')}>
                   {index + 1} · {page.label}
                 </span>
               </button>
@@ -712,7 +723,7 @@ export function QuoteDocPage() {
                 <div className="grid grid-cols-3 border-t border-[#101010]">
                   <MetaColumn title="Document">
                     <MetaRow label="Reference" value={itinerary.reference} mono />
-                    <MetaRow label="Version" value={versionLabel} mono />
+                    <MetaRow label="Version" value={versionLabel || '—'} mono />
                     <MetaRow label="Issued" value={issuedOn} mono />
                     <MetaRow label="Valid until" value={validUntil} mono accent />
                   </MetaColumn>
@@ -734,33 +745,15 @@ export function QuoteDocPage() {
                     <MetaRow label="Guests" value={String(totalGuests || '—')} mono />
                     <MetaRow label="Composition" value={paxComposition(adults, children, infants)} mono />
                     <MetaRow label="Lead guest" value={lead} />
-                    <MetaRow label="Planner" value={itinerary.safariPlanner || '—'} bold />
+                    <BookedByMetaRow contact={bookedByContact(itinerary)} />
                   </MetaColumn>
                 </div>
 
                 <div className="mt-8 grid grid-cols-2 gap-7">
                   <div>
-                    <SectionLabel>Booking agent</SectionLabel>
-                    <div className="mt-2 text-[13px] font-semibold">{itinerary.agency || '—'}</div>
-                    <div className="mt-0.5 text-[11.5px] leading-relaxed text-[#555555]">
-                      {itinerary.agent || 'Contact your travel agent'}
-                    </div>
+                    <BookingAgentSection block={bookingAgentBlock(itinerary)} />
                   </div>
-                  <div>
-                    <SectionLabel>Guest names</SectionLabel>
-                    <div className="mt-2 flex flex-col gap-0.5">
-                      {roster.length ? (
-                        roster.map((row) => (
-                          <div key={row.name} className="flex justify-between text-xs">
-                            <span>{row.name}</span>
-                            <span className="text-[#8A8A8A]">{row.suffix}</span>
-                          </div>
-                        ))
-                      ) : (
-                        <span className="text-xs text-[#8A8A8A]">Guest roster not captured</span>
-                      )}
-                    </div>
-                  </div>
+                  <GuestDetailsSection lines={guestLines} />
                 </div>
 
                 <div className="mt-8 flex items-center justify-between gap-5 border border-[#101010] px-[22px] py-5">
@@ -809,6 +802,8 @@ export function QuoteDocPage() {
                   <span>Service</span>
                   <span className="text-center">Pax</span>
                   <span className="text-center">Qty</span>
+                  <span className="text-center">Duration</span>
+                  <span className="text-right">Unit price</span>
                   <span className="text-right">Amount</span>
                 </div>
 
@@ -833,6 +828,8 @@ export function QuoteDocPage() {
                           <span className="text-[#3D3D3D]">{row.service}</span>
                           <span className="text-center text-[#6E6E6E]">{row.pax}</span>
                           <span className="text-center font-['IBM_Plex_Mono'] text-[#6E6E6E]">{row.qty}</span>
+                          <span className="text-center font-['IBM_Plex_Mono'] text-[#6E6E6E]">{row.duration}</span>
+                          <span className="text-right font-['IBM_Plex_Mono'] text-[#6E6E6E]">{fmtLedgerAmount(row.unitPrice)}</span>
                           <span className="text-right font-medium">{fmtLedgerAmount(row.amount)}</span>
                         </div>
                       ))}
@@ -926,6 +923,16 @@ export function QuoteDocPage() {
                   the per-person figure is an average across the party rather than a rate charged to any one guest.
                 </p>
 
+                <div className="mt-6">
+                  <SectionLabel>Passenger price split</SectionLabel>
+                  <div className="mt-2 grid grid-cols-4 gap-3">
+                    <PaxSplitCell label="Total adults" value={String(renderModel.paxPriceSplit.totalAdults)} />
+                    <PaxSplitCell label="Total children" value={String(renderModel.paxPriceSplit.totalChildren)} />
+                    <PaxSplitCell label="Total adult price" value={fmtLedgerUsd(renderModel.paxPriceSplit.totalAdultPrice)} />
+                    <PaxSplitCell label="Total child price" value={fmtLedgerUsd(renderModel.paxPriceSplit.totalChildPrice)} />
+                  </div>
+                </div>
+
                 <div className="flex-1" />
                 <PageFooter left={`Quote valid until ${validUntil}`} right={`3 / ${totalPages}`} bordered />
               </div>
@@ -948,34 +955,25 @@ export function QuoteDocPage() {
                     <div className="text-[9px] font-semibold uppercase tracking-[1.2px] text-[#931115]">
                       General inclusions
                     </div>
-                    <div className="mt-3 flex flex-col gap-1">
-                      {docQuoteText.generalInclusions.map((item) => (
-                        <span key={item} className="text-[11.5px] leading-snug">
-                          {item}
-                        </span>
-                      ))}
-                    </div>
+                    <RichTextDocumentContent
+                      html={docQuoteText.generalInclusionsHtml}
+                      variant="plain"
+                      className="mt-3 text-[#3D3D3D]"
+                    />
                   </div>
                   <div className="px-5 py-[18px]">
                     <div className="text-[9px] font-semibold uppercase tracking-[1.2px] text-[#931115]">
                       General exclusions
                     </div>
-                    <div className="mt-3 flex flex-col gap-1">
-                      {docQuoteText.generalExclusions.map((item) => (
-                        <span key={item} className="text-[11.5px] leading-snug">
-                          {item}
-                        </span>
-                      ))}
-                    </div>
+                    <RichTextDocumentContent
+                      html={docQuoteText.generalExclusionsHtml}
+                      variant="plain"
+                      className="mt-3 text-[#3D3D3D]"
+                    />
                   </div>
                 </div>
 
-                {docQuoteText.notes ? (
-                  <div className="mt-4 rounded-lg border border-[#E5E7EB] px-4 py-3">
-                    <div className="text-[9px] font-semibold uppercase tracking-[1.2px] text-[#931115]">Notes</div>
-                    <p className="mt-2 whitespace-pre-wrap text-[11.5px] leading-relaxed">{docQuoteText.notes}</p>
-                  </div>
-                ) : null}
+                <QuoteTextSupplement quoteText={docQuoteText} />
 
                 <p className="mt-3.5 text-[11px] leading-relaxed text-[#8A8A8A]">
                   These items are not included in bed and breakfast, half board or day room bookings. Inclusions and
@@ -1081,7 +1079,7 @@ export function QuoteDocPage() {
                           <span>
                             <b>{row.supplier}</b>
                             <br />
-                            <span className="text-[#8A8A8A]">{row.contract}</span>
+                            <span className="text-[#8A8A8A]">{row.description}</span>
                           </span>
                           <span>
                             {row.policy}
@@ -1262,6 +1260,15 @@ function DottedTotalRow({
   )
 }
 
+function PaxSplitCell({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-[#E5E7EB] px-3 py-2.5">
+      <div className="text-[9px] font-semibold uppercase tracking-wide text-[#8A8A8A]">{label}</div>
+      <div className="mt-0.5 font-['IBM_Plex_Mono'] text-[13px] font-semibold">{value}</div>
+    </div>
+  )
+}
+
 function ZoomButton({ title, onClick, children }: { title: string; onClick: () => void; children: React.ReactNode }) {
   return (
     <button type="button" title={title} onClick={onClick} className="flex h-[26px] w-7 items-center justify-center rounded-md text-[#525252] hover:bg-white">
@@ -1270,13 +1277,3 @@ function ZoomButton({ title, onClick, children }: { title: string; onClick: () =
   )
 }
 
-function OptionToggle({ label, on, onClick }: { label: string; on: boolean; onClick: () => void }) {
-  return (
-    <button type="button" onClick={onClick} className="flex w-full items-center gap-2.5 rounded-lg px-1.5 py-1.5 text-left hover:bg-[#F9FAFB]">
-      <span className={cn('flex size-[17px] shrink-0 items-center justify-center rounded-[5px] border', on ? 'border-[#931115] bg-[#931115]' : 'border-[#D4D4D8] bg-white')}>
-        {on ? <span className="text-[10px] font-bold text-white">✓</span> : null}
-      </span>
-      <span className="text-[13px] font-semibold text-[#171717]">{label}</span>
-    </button>
-  )
-}

@@ -20,7 +20,7 @@ const QUOTE_KEY = 'sol-demo-quote-groups'
 const QUOTES_KEY = 'sol-demo-quotes'
 const INVOICES_KEY = 'sol-demo-invoices'
 const GUESTS_KEY = 'sol-demo-guests'
-const CURRENT_VERSION = '22'
+const CURRENT_VERSION = '23'
 
 type ServicesMap = Record<string, AddedService[]>
 type QuoteMap = Record<string, QuoteGroup[]>

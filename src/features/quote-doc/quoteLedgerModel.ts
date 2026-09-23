@@ -11,7 +11,14 @@ import {
   type SummaryPriceGroup,
   SUMMARY_TYPE_META,
 } from '@/features/summary/summaryModel'
-import type { AddedService, Guest, GuestDetail, Itinerary, ServiceTab } from '@/shared/lib/types'
+import type {
+  AddedService,
+  Guest,
+  GuestDetail,
+  Itinerary,
+  PaxPriceSplit,
+  ServiceTab,
+} from '@/shared/lib/types'
 import { guestRoleLabel } from '@/shared/lib/helpers'
 
 export type LedgerScheduleRow = {
@@ -20,7 +27,13 @@ export type LedgerScheduleRow = {
   service: string
   pax: string
   qty: string
+  /** BR-Q12/BR-I06 (OD-27/OD-18): nights/days/units the line spans — distinct from `qty`,
+   *  which is unit count (rooms, vehicles, items). */
+  duration: string
   amount: number
+  /** BR-Q12/BR-I06: rate per unit — `amount` stays the line total so nothing downstream
+   *  that already consumes `amount` (subtotals, category grids) needs to change. */
+  unitPrice: number
 }
 
 export type LedgerScheduleGroup = {
@@ -47,7 +60,8 @@ export type LedgerPaymentTermRow = {
 
 export type LedgerCancellationRow = {
   supplier: string
-  contract: string
+  /** Policy description from the cancellation API (PCP-519 `Policy.description`). */
+  description: string
   policy: string
   refundableLabel: string
   refundableTone: 'blue' | 'red'
@@ -136,6 +150,30 @@ function ledgerQty(l: SummaryLine): string {
   return '1'
 }
 
+/** BR-Q12/BR-I06 (OD-27/OD-18) — the number of nights/days/units a line spans, as its own
+ *  column separate from Qty. Kept intentionally simple: single-instance services (transfers,
+ *  flights, most activities) show '1' rather than inventing a duration concept that doesn't
+ *  exist in the underlying itinerary data. */
+function ledgerDuration(l: SummaryLine): string {
+  if (l.type === 'accommodation') return String(l.nights || 1)
+  if (l.type === 'transportation' && l.kind === 'disposal') return String(l.days || 1)
+  if (l.days) return String(l.days)
+  return '1'
+}
+
+/** BR-Q12/BR-I06 — rate per unit. Qty here is the same unit-count basis as `ledgerQty` for
+ *  transport/other lines, but for accommodation and disposal transport we divide by the
+ *  duration (nights/days) instead, since Qty for those is nights, not a separate unit count. */
+function ledgerUnitPrice(l: SummaryLine, amount: number): number {
+  const divisor =
+    l.type === 'accommodation'
+      ? l.nights || 1
+      : l.type === 'transportation' && l.kind === 'disposal'
+        ? l.days || 1
+        : Number.parseInt(ledgerQty(l), 10) || 1
+  return Math.round((amount / divisor) * 100) / 100
+}
+
 export function ledgerService(l: SummaryLine): string {
   switch (l.type) {
     case 'accommodation': {
@@ -164,14 +202,19 @@ export function buildLedgerScheduleGroups(lines: SummaryLine[]): LedgerScheduleG
     subtotal: group.lines.reduce((sum, l) => sum + sellOf(l), 0),
     rows: [...group.lines]
       .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
-      .map((l) => ({
-        date: fmtLedgerDateShort(l.date),
-        supplier: l.supplier,
-        service: ledgerService(l),
-        pax: ledgerPax(l),
-        qty: ledgerQty(l),
-        amount: sellOf(l),
-      })),
+      .map((l) => {
+        const amount = sellOf(l)
+        return {
+          date: fmtLedgerDateShort(l.date),
+          supplier: l.supplier,
+          service: ledgerService(l),
+          pax: ledgerPax(l),
+          qty: ledgerQty(l),
+          duration: ledgerDuration(l),
+          unitPrice: ledgerUnitPrice(l, amount),
+          amount,
+        }
+      }),
   }))
 }
 
@@ -184,19 +227,38 @@ export function paxComposition(adults: number, children: number, infants: number
   return parts.join(' · ') || '—'
 }
 
-export function guestRosterRows(guests: Guest[], details: GuestDetail[]) {
+export type GuestDetailRow = {
+  key: string
+  name: string
+  ageBand: GuestDetail['ageBand']
+  age?: number
+  lead?: boolean
+}
+
+export function guestDetailLines(guests: Guest[], details: GuestDetail[]): GuestDetailRow[] {
   if (details.length) {
-    return details.map((g) => {
+    return details.map((g, index) => {
       const name = [g.firstName, g.lastName].filter(Boolean).join(' ').trim()
-      const role = guestRoleLabel(g.ageBand)
-      const suffix = g.lead ? `${role} · lead` : g.ageBand === 'child' && g.age ? `${role} · ${g.age}` : role
-      return { name: name || (g.lead ? 'Lead guest' : role), suffix }
+      const displayName = name || (g.lead ? 'Lead guest' : guestRoleLabel(g.ageBand))
+      return {
+        key: g.id || `detail-${index}`,
+        name: displayName,
+        ageBand: g.ageBand,
+        age: g.age,
+        lead: g.lead,
+      }
     })
   }
-  return guests.map((g) => ({
-    name: g.name,
-    suffix: g.lead ? `${guestRoleLabel(g.type === 'youth' ? 'child' : g.type)} · lead` : guestRoleLabel(g.type === 'youth' ? 'child' : g.type),
-  }))
+  return guests.map((g, index) => {
+    const ageBand = g.type === 'youth' ? 'child' : g.type
+    return {
+      key: String(g.id ?? index),
+      name: g.name,
+      ageBand,
+      age: ageBand === 'child' ? g.age : undefined,
+      lead: g.lead,
+    }
+  })
 }
 
 function tabOf(type: SummaryLine['type']): ServiceTab {
@@ -351,7 +413,7 @@ export function buildLedgerCancellationRows(
     if (!policy) continue
     rows.push({
       supplier: line.supplier,
-      contract: policy.description || `${line.supplier} contract`,
+      description: policy.description || `${line.supplier} contract`,
       policy: policyDisplayName(policy),
       refundableLabel: policy.refundable ? 'Refundable' : 'Non-refundable',
       refundableTone: policy.refundable ? 'blue' : 'red',
@@ -364,11 +426,22 @@ export function buildLedgerCancellationRows(
 }
 
 export function itineraryTitle(it: Pick<Itinerary, 'destinations' | 'destination' | 'title'>) {
+  if (it.title?.trim()) return it.title.trim()
   if (it.destinations?.length) return it.destinations.join(' & ')
-  return it.destination || it.title || 'Safari quotation'
+  return it.destination || 'Safari quotation'
 }
 
-export function quoteValidUntil(iso: string, days = 14) {
+/** Cover headline on quote/invoice PDFs — always the planner-set itinerary title when present. */
+export function documentCoverTitle(it: Pick<Itinerary, 'destinations' | 'destination' | 'title'>) {
+  return itineraryTitle(it)
+}
+
+/** BR-Q29/OD-24 (RU-17): 30 calendar days from generation is the settled fallback when no live
+ *  supplier hold exists. Hold-based "earliest live hold release" expiry is not modelled anywhere
+ *  else in this prototype (no hold-tracking store keyed by expiry date), so it is out of scope
+ *  here — this fixes the fallback only, per the brief's guidance not to invent that
+ *  infrastructure. */
+export function quoteValidUntil(iso: string, days = 30) {
   return fmtLedgerDateLong(isoAddDays(iso, days))
 }
 
@@ -382,6 +455,192 @@ export function categoryGridFromGroups(groups: SummaryPriceGroup[]) {
     name: g.name,
     amount: g.lines.reduce((sum, l) => sum + sellOf(l), 0),
   }))
+}
+
+/** BR-Q36/BR-I58 (OD-28/OD-19) — Total Adults/Children/Adult Price/Child Price, derived from the
+ *  existing per-line Adult/Child pax split (`l.ad`/`l.ch`, the same fields the Pax column already
+ *  uses) rather than a new pricing calculation. Lines with no per-line Ad/Ch breakdown (e.g.
+ *  qty-based extras and "other" services) have their amount allocated proportionally to the
+ *  overall adult/child guest mix, since that is the best information available without inventing
+ *  a per-line split that doesn't exist in the data model. */
+export function paxPriceSplit(
+  lines: SummaryLine[],
+  totalAdults: number,
+  totalChildren: number,
+): PaxPriceSplit {
+  let adultSell = 0
+  let childSell = 0
+  let unallocated = 0
+  for (const l of lines) {
+    const sell = sellOf(l)
+    const ad = l.ad ?? 0
+    const ch = l.ch ?? 0
+    const mix = ad + ch
+    if (mix > 0) {
+      adultSell += sell * (ad / mix)
+      childSell += sell * (ch / mix)
+    } else {
+      unallocated += sell
+    }
+  }
+  const totalPax = totalAdults + totalChildren
+  if (totalPax > 0) {
+    adultSell += unallocated * (totalAdults / totalPax)
+    childSell += unallocated * (totalChildren / totalPax)
+  } else {
+    adultSell += unallocated
+  }
+  return {
+    totalAdults,
+    totalChildren,
+    totalAdultPrice: Math.round(adultSell * 100) / 100,
+    totalChildPrice: Math.round(childSell * 100) / 100,
+  }
+}
+
+export type BookedByContact = {
+  name: string
+  email: string
+  phone: string
+}
+
+const PLANNER_CONTACTS: Record<string, { email: string; phone: string }> = {
+  'Mary Gikonyo': { email: 'mary.gikonyo@chelipeacock.com', phone: '00254730746318' },
+  'Amelia Earhart': { email: 'amelia.earhart@chelipeacock.com', phone: '00254730721000' },
+  'Noah Kiptoo': { email: 'noah.kiptoo@chelipeacock.com', phone: '00254730721001' },
+}
+
+export function bookedByContact(
+  itinerary: Pick<Itinerary, 'safariPlanner' | 'safariPlannerEmail' | 'safariPlannerPhone'>,
+): BookedByContact {
+  const name = itinerary.safariPlanner?.trim() || '—'
+  const catalog = name !== '—' ? PLANNER_CONTACTS[name] : undefined
+  const derivedEmail =
+    name !== '—' ? `${name.replace(/\s+/g, '.').toLowerCase()}@chelipeacock.com` : '—'
+  return {
+    name,
+    email: itinerary.safariPlannerEmail || catalog?.email || derivedEmail,
+    phone: itinerary.safariPlannerPhone || catalog?.phone || '—',
+  }
+}
+
+export type BookingAgentBlock = {
+  name: string
+  addressLines: string[]
+}
+
+/** Demo agency office profiles — printed under the booking agent name on quote covers. */
+const AGENCY_PROFILES: Record<string, string[]> = {
+  'Black Tomato': [
+    'International Ventures',
+    '+12037611110',
+    'Suite 2',
+    '65 Old Ridgefield Road',
+    'Wilton CT 06897',
+    'United States of America',
+  ],
+  'Zoo Groups': [
+    'Zoo Groups Ltd',
+    '+254 712 000 000',
+    '14 Wildlife Lane',
+    'Nairobi',
+    'Kenya',
+  ],
+  CPS: [
+    'Cheli & Peacock Safaris',
+    '+254 730 721 000',
+    'Fedha Towers, Muindi Mbingu Street',
+    'Nairobi',
+    'Kenya',
+  ],
+}
+
+function parseAgencyAddress(raw: string): string[] {
+  if (raw.includes('\n')) {
+    return raw
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+  }
+  return raw
+    .split(',')
+    .map((line) => line.trim())
+    .filter(Boolean)
+}
+
+export function bookingAgentBlock(
+  itinerary: Pick<Itinerary, 'agency' | 'agent' | 'agencyAddress'>,
+): BookingAgentBlock {
+  const name = itinerary.agent?.trim() || itinerary.agency?.trim() || '—'
+  const agency = itinerary.agency?.trim() || ''
+  const profile = agency ? AGENCY_PROFILES[agency] : undefined
+  if (profile?.length) {
+    return { name, addressLines: profile }
+  }
+  const raw = itinerary.agencyAddress?.trim()
+  if (raw) {
+    return { name, addressLines: parseAgencyAddress(raw) }
+  }
+  return { name, addressLines: [] }
+}
+
+export type AgentInvoiceProfile = {
+  legalName: string
+  addressLines: string[]
+}
+
+const INTRIQ_JOURNEY_PROFILE: AgentInvoiceProfile = {
+  legalName: 'INTRIQ JOURNEY LIMITED',
+  addressLines: [
+    '8/F., SI TOI COMMERCIAL BUILDING,',
+    '62-63 CONNAUGHT ROAD WEST,',
+    'SHEUNG WAN, H.K',
+  ],
+}
+
+const TRAVEL_COUNSELLORS_INVOICE_PROFILE: AgentInvoiceProfile = {
+  legalName: 'Travel Counsellors Head Office',
+  addressLines: [
+    'Nottingham House',
+    'Riverside Business Park',
+    'Nottingham NG2 1RU',
+    'United Kingdom',
+  ],
+}
+
+/** Demo agent legal-entity profiles — printed in the invoice Invoiced to block. */
+const AGENT_INVOICE_PROFILES: Record<string, AgentInvoiceProfile> = {
+  'Black Tomato': INTRIQ_JOURNEY_PROFILE,
+  'Zoo Groups': {
+    legalName: 'ZOO GROUPS TRAVEL LTD',
+    addressLines: ['14 Wildlife Lane', 'Nairobi', 'Kenya'],
+  },
+  CPS: {
+    legalName: 'CHELI & PEACOCK SAFARIS LTD',
+    addressLines: ['Fedha Towers, Muindi Mbingu Street', 'Nairobi', 'Kenya'],
+  },
+}
+
+export function invoiceRecipientProfile(
+  itinerary: Pick<Itinerary, 'agency' | 'agent' | 'agencyAddress'>,
+  travelCounsellors = false,
+): AgentInvoiceProfile {
+  if (travelCounsellors) return TRAVEL_COUNSELLORS_INVOICE_PROFILE
+
+  const agency = itinerary.agency?.trim() || ''
+  const catalog = agency ? AGENT_INVOICE_PROFILES[agency] : undefined
+  if (catalog) return catalog
+
+  const raw = itinerary.agencyAddress?.trim()
+  if (raw) {
+    const lines = parseAgencyAddress(raw)
+    return {
+      legalName: itinerary.agent?.trim() || agency || '—',
+      addressLines: lines,
+    }
+  }
+
+  return INTRIQ_JOURNEY_PROFILE
 }
 
 export { SUMMARY_TYPE_META, buildPriceGroups }

@@ -167,7 +167,13 @@ export interface Itinerary {
   title: string
   agency: string
   agent: string
+  /** Booking agency's office address — printed on quote documents under the agency name.
+   *  Flat field mirroring `agency`/`agent`; not a full AgencyProfile entity (none exists yet). */
+  agencyAddress?: string
   safariPlanner: string
+  /** Printed on quote cover under Booked by — falls back to demo catalog / name-derived email. */
+  safariPlannerEmail?: string
+  safariPlannerPhone?: string
   destination: string
   destinations?: string[]
   travelDateFrom: string
@@ -229,11 +235,12 @@ export type LifecycleLogCategory =
   | 'invoice-update'
   | 'invoice-send'
 
+/** TipTap HTML frozen into quote/invoice PDFs at generation time. */
 export interface QuoteTextContent {
-  generalInclusions: string[]
-  generalExclusions: string[]
-  notes: string
-  standingCommercial?: string
+  generalInclusionsHtml: string
+  generalExclusionsHtml: string
+  notesHtml: string
+  standingCommercialHtml: string
 }
 
 export interface DocumentSendRecord {
@@ -269,6 +276,11 @@ export interface InvoiceDocument {
   invoiceNumber: string
   lifecycleStage: InvoiceLifecycleStage
   presentation?: QuotePresentation
+  /** BR-I57/OD-17 — column depth for B2B_ITEMISED only; ignored for packaged presentations. */
+  renderingDepth?: InvoiceRenderingDepth
+  /** BR-I56/OD-16 — Travel Counsellors variant: rolled-up B2B_ITEMISED + 6% head-office
+   *  commission on qualifying (priced) lines, addressed to TC Head Office rather than the agent. */
+  travelCounsellors?: boolean
   fingerprint: string
   generatedAt: string
   generatedBy: string
@@ -278,7 +290,10 @@ export interface InvoiceDocument {
   sellTotal: number
   lines: QuoteDocumentLine[]
   categoryTotals: { name: string; amount: number }[]
+  packagedCategoryRows?: QuotePackagedCategoryRow[]
   scheduleGroups: QuoteDocument['scheduleGroups']
+  /** Populated only when presentation is B2B_ITEMISED and renderingDepth is 'rolled_up'. */
+  rolledUpRows?: InvoiceRolledUpRow[]
   pricingSummary: QuoteDocument['pricingSummary']
   optionRows: QuoteOptionRow[]
   depositTotal: number
@@ -286,6 +301,8 @@ export interface InvoiceDocument {
   depositPctOfSell: number
   includesRows?: QuoteIncludesRow[]
   paymentSnapshot?: QuotePaymentSnapshot
+  /** BR-I58 — Total Adults/Children/Adult Price/Child Price alongside the invoice total. */
+  paxPriceSplit: PaxPriceSplit
   quoteText?: QuoteTextContent
   showTerms?: boolean
   paymentPosition: InvoicePaymentPosition
@@ -299,7 +316,28 @@ export type QuoteRateBasis = 'rack' | 'nett'
 /** Planner selection at generation — `both` produces Rack + Nett snapshots in one action. */
 export type QuoteRateBasisSelection = QuoteRateBasis | 'both'
 
-export type QuotePresentation = 'B2B_ITEMISED' | 'B2B_PACKAGED'
+/** BR-Q03/BR-Q24 (quotes), BR-I03 (invoices): B2C is always packaged — there is deliberately no
+ *  `B2C_ITEMISED` value in this union. B2C's stricter-than-B2B disclosure rule (no per-line
+ *  prices, no Gross/Commission/Net, ever — BR-Q28/RU-18, BR-I07) is enforced by the packaged
+ *  content renderer never having a code path for those figures, not by a runtime check here. */
+export type QuotePresentation = 'B2B_ITEMISED' | 'B2B_PACKAGED' | 'B2C_PACKAGED'
+
+/** BR-I57/OD-17: B2B_ITEMISED invoices render at one of two column depths — `full` is the
+ *  Date/Supplier/Service/Pax/Qty/Duration/Per-Person/Unit-Price/Amount ledger; `rolled_up` is the
+ *  description-level Gross/Commission/Net view (the real "B2B Package Invoice ML[/ TC]" pattern).
+ *  Both are the same B2B_ITEMISED format — this flag only changes rendering depth, never the
+ *  top-level QuotePresentation. Quotes have no equivalent: rolled-up rendering is invoice-only. */
+export type InvoiceRenderingDepth = 'full' | 'rolled_up'
+
+/** BR-Q36 (quotes), BR-I58 (invoices): a price split by passenger type, derived from existing
+ *  per-line Adult/Child pax data — never a fresh pricing calculation. Not commission/margin data,
+ *  so unlike Gross/Commission/Net it is legitimate content on every presentation, including B2C. */
+export interface PaxPriceSplit {
+  totalAdults: number
+  totalChildren: number
+  totalAdultPrice: number
+  totalChildPrice: number
+}
 
 export interface QuoteIncludesRow {
   lineId: string
@@ -308,10 +346,27 @@ export interface QuoteIncludesRow {
   description: string
 }
 
+/** BR-I57 rolled-up B2B_ITEMISED row — one per service description, not per date/line.
+ *  `commission` is omitted (not just zero) for zero-priced/complimentary lines, since commission
+ *  does not apply there. See invoiceRolledUpModel.ts for the TC 6% head-office commission mode. */
+export interface InvoiceRolledUpRow {
+  description: string
+  grossPrice: number
+  commission?: number
+  netAmount: number
+}
+
 export interface QuotePaymentSnapshot {
   totalTripCost: number
   amountPaid: number
   balanceDue: number
+}
+
+/** Packaged quote page 3 — category totals with gross and net (BR-Q packaged disclosure). */
+export interface QuotePackagedCategoryRow {
+  description: string
+  grossPrice: number
+  netAmount: number
 }
 
 export type QuoteServiceType =
@@ -330,7 +385,11 @@ export interface QuoteDocumentLine {
   service: string
   pax: string
   qty: string
+  /** BR-Q12/BR-I06 (OD-27/OD-18): nights/days/units the line spans — distinct from `qty`. */
+  duration: string
   amount: number
+  /** BR-Q12/BR-I06: rate per unit — distinct from `amount`, the line total. */
+  unitPrice: number
   category: string
 }
 
@@ -358,10 +417,21 @@ export interface QuoteDocument {
   reference: string
   lines: QuoteDocumentLine[]
   categoryTotals: { name: string; amount: number }[]
+  /** Category breakdown for packaged presentation — frozen at generation. */
+  packagedCategoryRows?: QuotePackagedCategoryRow[]
   scheduleGroups: {
     name: string
     subtotal: number
-    rows: { date: string; supplier: string; service: string; pax: string; qty: string; amount: number }[]
+    rows: {
+      date: string
+      supplier: string
+      service: string
+      pax: string
+      qty: string
+      duration: string
+      unitPrice: number
+      amount: number
+    }[]
   }[]
   pricingSummary: {
     grossSell: number
@@ -374,6 +444,8 @@ export interface QuoteDocument {
   depositPctOfSell: number
   includesRows: QuoteIncludesRow[]
   paymentSnapshot: QuotePaymentSnapshot
+  /** BR-Q36 — Total Adults/Children/Adult Price/Child Price alongside the safari total. */
+  paxPriceSplit: PaxPriceSplit
   quoteText?: QuoteTextContent
   showTerms?: boolean
   priceMode?: 'total' | 'pp'

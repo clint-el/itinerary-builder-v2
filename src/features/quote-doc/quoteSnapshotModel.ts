@@ -2,11 +2,17 @@ import {
   buildLedgerOptionRows,
   buildLedgerScheduleGroups,
   categoryGridFromGroups,
-  itineraryTitle,
+  documentCoverTitle,
+  paxPriceSplit,
   quoteValidUntil,
 } from '@/features/quote-doc/quoteLedgerModel'
 import { resolveQuoteText } from '@/features/quote-doc/quoteTextModel'
-import { buildIncludesRows, buildPaymentSnapshot } from '@/features/quote-doc/quotePackagedModel'
+import {
+  buildIncludesRows,
+  buildPackagedCategoryRows,
+  buildPaymentSnapshot,
+  resolvePackagedCategoryRows,
+} from '@/features/quote-doc/quotePackagedModel'
 import { linesForRateBasis } from '@/features/quote-doc/quoteRateBasisModel'
 import {
   buildDepositSummary,
@@ -22,6 +28,7 @@ import type {
   AddedService,
   GuestDetail,
   Itinerary,
+  PaxPriceSplit,
   QuoteDocument,
   QuoteGroup,
   QuotePresentation,
@@ -71,10 +78,14 @@ export function buildQuoteSnapshot(input: {
   const grossSell = lines.reduce((sum, l) => sum + (l.rack || 0), 0)
   const generatedAt = new Date().toISOString()
   const validUntil = quoteValidUntil(generatedAt.slice(0, 10))
-  const coverTitle = itinerary.title?.trim() || itineraryTitle(itinerary)
+  const coverTitle = documentCoverTitle(itinerary)
   const fingerprint = itineraryCommercialFp(services)
   const includesRows = buildIncludesRows(lines)
+  const packagedCategoryRows = buildPackagedCategoryRows(rawLines)
   const paymentSnapshot = buildPaymentSnapshot(itinerary, pricing.sellNumber)
+  const totalAdults = guests.filter((g) => g.type === 'adult' || g.type === 'youth').length
+  const totalChildren = guests.filter((g) => g.type === 'child' || g.type === 'infant').length
+  const paxSplit: PaxPriceSplit = paxPriceSplit(lines, totalAdults, totalChildren)
 
   const docLines = scheduleGroups.flatMap((group) =>
     group.rows.map((row, i) => ({
@@ -85,6 +96,8 @@ export function buildQuoteSnapshot(input: {
       service: row.service,
       pax: row.pax,
       qty: row.qty,
+      duration: row.duration,
+      unitPrice: row.unitPrice,
       amount: row.amount,
       category: group.name,
     })),
@@ -107,6 +120,7 @@ export function buildQuoteSnapshot(input: {
     reference: itinerary.reference,
     lines: docLines,
     categoryTotals,
+    packagedCategoryRows,
     scheduleGroups,
     pricingSummary: {
       grossSell,
@@ -122,6 +136,7 @@ export function buildQuoteSnapshot(input: {
     depositPctOfSell: deposits.depositPctOfSell,
     includesRows,
     paymentSnapshot,
+    paxPriceSplit: paxSplit,
     quoteText,
     showTerms,
     priceMode,
@@ -142,6 +157,7 @@ export type QuoteRenderModel = {
   grossSell: number
   scheduleGroups: QuoteDocument['scheduleGroups']
   categoryTotals: QuoteDocument['categoryTotals']
+  packagedCategoryRows: NonNullable<QuoteDocument['packagedCategoryRows']>
   pricingSummary: QuoteDocument['pricingSummary']
   optionRows: QuoteDocument['optionRows']
   depositTotal: number
@@ -150,6 +166,7 @@ export type QuoteRenderModel = {
   rateBasis: QuoteRateBasis
   includesRows: QuoteDocument['includesRows']
   paymentSnapshot: QuoteDocument['paymentSnapshot']
+  paxPriceSplit: PaxPriceSplit
   generatedAt?: string
   generatedBy?: string
   quoteText: QuoteTextContent
@@ -172,6 +189,10 @@ function baseRenderFields(quote: QuoteDocument, stale: boolean): QuoteRenderMode
     grossSell: quote.pricingSummary.grossSell,
     scheduleGroups: quote.scheduleGroups,
     categoryTotals: quote.categoryTotals,
+    packagedCategoryRows: resolvePackagedCategoryRows({
+      packagedCategoryRows: quote.packagedCategoryRows,
+      categoryTotals: quote.categoryTotals,
+    }),
     pricingSummary: quote.pricingSummary,
     optionRows: quote.optionRows,
     depositTotal: quote.depositTotal,
@@ -185,6 +206,8 @@ function baseRenderFields(quote: QuoteDocument, stale: boolean): QuoteRenderMode
         amountPaid: 0,
         balanceDue: quote.sellTotal,
       },
+    // Fallback covers quotes generated before BR-Q36 (older localStorage snapshots).
+    paxPriceSplit: quote.paxPriceSplit ?? { totalAdults: 0, totalChildren: 0, totalAdultPrice: 0, totalChildPrice: 0 },
     generatedAt: quote.generatedAt,
     generatedBy: quote.generatedBy,
     quoteText: resolveQuoteText(undefined, quote.quoteText),
@@ -245,8 +268,8 @@ export function renderModelFromLive(input: {
     mode: 'draft',
     stale: false,
     presentation: snap.presentation,
-    versionLabel: 'draft',
-    refLabel: `${input.itinerary.reference} · draft`,
+    versionLabel: '',
+    refLabel: input.itinerary.reference,
     coverTitle: snap.coverTitle,
     reference: snap.reference,
     validUntil: snap.validUntil,
@@ -254,6 +277,10 @@ export function renderModelFromLive(input: {
     grossSell: snap.pricingSummary.grossSell,
     scheduleGroups: snap.scheduleGroups,
     categoryTotals: snap.categoryTotals,
+    packagedCategoryRows: resolvePackagedCategoryRows({
+      packagedCategoryRows: snap.packagedCategoryRows,
+      categoryTotals: snap.categoryTotals,
+    }),
     pricingSummary: snap.pricingSummary,
     optionRows: snap.optionRows,
     depositTotal: snap.depositTotal,
@@ -262,6 +289,7 @@ export function renderModelFromLive(input: {
     rateBasis: snap.rateBasis,
     includesRows: snap.includesRows,
     paymentSnapshot: snap.paymentSnapshot,
+    paxPriceSplit: snap.paxPriceSplit,
     quoteText: snap.quoteText!,
     showTerms: snap.showTerms ?? true,
     priceMode: snap.priceMode ?? 'pp',

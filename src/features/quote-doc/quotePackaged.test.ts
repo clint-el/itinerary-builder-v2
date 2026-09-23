@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
   buildIncludesRows,
+  buildPackagedCategoryRows,
   buildPaymentSnapshot,
+  isB2C,
+  isPackagedPresentation,
   presentationLabel,
 } from '@/features/quote-doc/quotePackagedModel'
 import { buildQuoteSnapshot, renderModelFromSnapshot } from '@/features/quote-doc/quoteSnapshotModel'
@@ -112,6 +115,48 @@ describe('quotePackagedModel', () => {
     expect(doc.includesRows.length).toBeGreaterThan(0)
     expect(doc.paymentSnapshot.totalTripCost).toBe(doc.sellTotal)
     expect(doc.paymentSnapshot.amountPaid).toBe(6000)
+    expect(doc.packagedCategoryRows?.length).toBeGreaterThan(0)
+    expect(doc.packagedCategoryRows?.[0]).toMatchObject({
+      description: expect.any(String),
+      grossPrice: expect.any(Number),
+      netAmount: expect.any(Number),
+    })
+  })
+
+  it('buildPackagedCategoryRows groups gross and net by service category', () => {
+    const rows = buildPackagedCategoryRows([
+      {
+        type: 'accommodation',
+        serviceId: 's1',
+        lineId: 'l1',
+        date: '2026-10-01',
+        supplier: 'Lodge',
+        net: 770,
+        rack: 1000,
+        hold: 'none',
+        chargePer: 'unit',
+      },
+      {
+        type: 'transportation',
+        serviceId: 's2',
+        lineId: 'l2',
+        date: '2026-10-02',
+        supplier: 'Transfer Co',
+        net: 154,
+        rack: 200,
+        hold: 'none',
+        chargePer: 'unit',
+      },
+    ])
+    expect(rows).toHaveLength(2)
+    expect(rows.find((r) => r.description === 'Accommodation')).toMatchObject({
+      grossPrice: 1000,
+      netAmount: 770,
+    })
+    expect(rows.find((r) => r.description === 'Transportation')).toMatchObject({
+      grossPrice: 200,
+      netAmount: 154,
+    })
   })
 
   it('render model for packaged snapshot has includes rows without amounts', () => {
@@ -189,5 +234,33 @@ describe('quotePackagedModel', () => {
   it('presentationLabel maps types', () => {
     expect(presentationLabel('B2B_ITEMISED')).toBe('Itemised')
     expect(presentationLabel('B2B_PACKAGED')).toBe('Packaged')
+    expect(presentationLabel('B2C_PACKAGED')).toBe('Packaged')
+  })
+
+  it('isPackagedPresentation/isB2C classify all three formats (BR-Q24/BR-Q03)', () => {
+    expect(isPackagedPresentation('B2B_ITEMISED')).toBe(false)
+    expect(isPackagedPresentation('B2B_PACKAGED')).toBe(true)
+    expect(isPackagedPresentation('B2C_PACKAGED')).toBe(true)
+    expect(isB2C('B2B_PACKAGED')).toBe(false)
+    expect(isB2C('B2C_PACKAGED')).toBe(true)
+  })
+
+  it('buildQuoteSnapshot with B2C_PACKAGED never carries per-line prices (BR-Q28/RU-18)', () => {
+    const itinerary = baseItinerary()
+    const services = [service('s1', 1200), service('s2', 300)]
+    const doc = buildQuoteSnapshot({
+      itinerary,
+      services,
+      quoteGroups: [],
+      guestDetails: [],
+      seq: 1,
+      generatedBy: 'Planner',
+      presentation: 'B2C_PACKAGED',
+    })
+    expect(doc.presentation).toBe('B2C_PACKAGED')
+    // QuoteIncludesRow has no `amount` field at all — B2C is structurally stricter than B2B
+    // packaged, which is itself already Includes-only; there is no per-line price to suppress.
+    expect(doc.includesRows.every((row) => !('amount' in row))).toBe(true)
+    expect(doc.paymentSnapshot.totalTripCost).toBe(doc.sellTotal)
   })
 })

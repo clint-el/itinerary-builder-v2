@@ -38,7 +38,7 @@ export function QuoteDocumentsPanel({
           No quotes generated yet. Open the quote PDF and use Generate quote to create Q1.
         </p>
         <Button asChild variant="outline" className="mt-4 h-9">
-          <Link to={`/quote-doc/${itineraryId}/draft`}>Preview draft quote</Link>
+          <Link to={`/quote-doc/${itineraryId}/draft`}>Preview quote</Link>
         </Button>
       </section>
     )

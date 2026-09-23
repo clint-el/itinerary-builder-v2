@@ -3,10 +3,20 @@ import {
   fmtLedgerAmount,
   fmtLedgerDateLong,
   fmtLedgerUsd,
-  guestRosterRows,
+  bookedByContact,
+  guestDetailLines,
+  invoiceRecipientProfile,
   type LedgerCancellationRow,
   type LedgerOptionRow,
 } from '@/features/quote-doc/quoteLedgerModel'
+import { BookingConsultantRow, GuestDetailsSection, InvoicedToProfile } from '@/features/quote-doc/quoteCoverMeta'
+import { RichTextDocumentContent } from '@/features/quote-doc/RichTextDocumentContent'
+import { QuoteTextSupplement } from '@/features/quote-doc/quoteTextBlocks'
+import {
+  CpsRemittancePages,
+  RemittanceLedgerHeader,
+} from '@/features/invoice-doc/CpsRemittancePages'
+import { remittanceStartPage } from '@/features/invoice-doc/cpsRemittanceModel'
 import {
   lifecycleStageLabel,
   type InvoiceRenderModel,
@@ -17,7 +27,8 @@ import { cn } from '@/shared/lib/utils'
 const PAGE_W = 794
 const PAGE_H = 1123
 const MAROON = '#580B0B'
-const GRID_SCHEDULE = 'grid grid-cols-[52px_148px_minmax(0,1fr)_74px_26px_84px] gap-x-2'
+const GRID_SCHEDULE = 'grid grid-cols-[52px_118px_minmax(0,1fr)_56px_26px_50px_72px_84px] gap-x-2'
+const GRID_ROLLED_UP = 'grid grid-cols-[minmax(0,1fr)_110px_110px_110px] gap-x-3'
 
 export type InvoiceLedgerContentProps = {
   itinerary: Itinerary
@@ -53,7 +64,6 @@ export function InvoiceLedgerContent({
   daysCount,
   nightsCount,
   totalGuests,
-  lead,
   countries,
   guests,
   guestDetails,
@@ -66,9 +76,19 @@ export function InvoiceLedgerContent({
   grossSell,
   sellTotal,
 }: InvoiceLedgerContentProps) {
-  const roster = guestRosterRows(guests, guestDetails)
-  const { scheduleGroups, categoryTotals, paymentPosition, lifecycleStage, quoteText } = renderModel
+  const guestLines = guestDetailLines(guests, guestDetails)
+  const {
+    scheduleGroups,
+    paymentPosition,
+    lifecycleStage,
+    quoteText,
+    renderingDepth,
+    travelCounsellors,
+    rolledUpRows,
+    paxPriceSplit,
+  } = renderModel
   const pos = paymentPosition
+  const rolledUp = renderingDepth === 'rolled_up'
 
   return (
     <>
@@ -86,7 +106,7 @@ export function InvoiceLedgerContent({
             />
             <div className="text-right">
               <div className="text-[9.5px] font-semibold uppercase tracking-[1.6px] text-[#C79393]">
-                Operator invoice
+                Tour Package Invoice
               </div>
               <div className="mt-0.5 font-['IBM_Plex_Mono'] text-lg font-medium text-white">{refLabel}</div>
             </div>
@@ -123,33 +143,14 @@ export function InvoiceLedgerContent({
               <MetaRow label="Countries" value={countries} />
             </MetaColumn>
             <MetaColumn title="Invoiced to" last>
-              <MetaRow label="Agency" value={itinerary.agency || '—'} bold />
-              <MetaRow label="Agent" value={itinerary.agent || '—'} />
-              <MetaRow label="Guests" value={String(totalGuests || '—')} mono />
-              <MetaRow label="Consultant" value={itinerary.safariPlanner || '—'} />
+              <InvoicedToProfile profile={invoiceRecipientProfile(itinerary, travelCounsellors)} />
             </MetaColumn>
           </div>
 
-          <div className="mt-8 grid grid-cols-2 gap-7">
-            <div>
-              <SectionLabel>Lead guest</SectionLabel>
-              <div className="mt-2 text-[13px] font-semibold">{lead}</div>
-            </div>
-            <div>
-              <SectionLabel>Guest names</SectionLabel>
-              <div className="mt-2 flex flex-col gap-0.5">
-                {roster.length ? (
-                  roster.map((row) => (
-                    <div key={row.name} className="flex justify-between text-xs">
-                      <span>{row.name}</span>
-                      <span className="text-[#8A8A8A]">{row.suffix}</span>
-                    </div>
-                  ))
-                ) : (
-                  <span className="text-xs text-[#8A8A8A]">Guest roster not captured</span>
-                )}
-              </div>
-            </div>
+          <BookingConsultantRow contact={bookedByContact(itinerary)} />
+
+          <div className="mt-8">
+            <GuestDetailsSection lines={guestLines} />
           </div>
 
           <div className="mt-8 flex items-center justify-between gap-5 border border-[#101010] px-[22px] py-5">
@@ -176,60 +177,107 @@ export function InvoiceLedgerContent({
       >
         <LedgerHeader title="Schedule of services" refLabel={refLabel} />
         <div className="flex flex-1 flex-col px-14 pb-8 pt-[30px]">
-          <div className="flex items-baseline justify-between gap-4">
-            <h2 className="m-0 text-[21px] font-semibold tracking-[-0.3px]">Itemised invoice</h2>
+          <div className="flex items-baseline justify-end gap-4">
             <span className="text-[10px] font-semibold uppercase tracking-[1.4px] text-[#931115]">
               All prices in USD net
             </span>
           </div>
 
-          <div
-            className={cn(
-              GRID_SCHEDULE,
-              'mt-4 border-b border-t border-[#101010] py-[7px] text-[8.5px] font-semibold uppercase tracking-[0.9px] text-[#8A8A8A]',
-            )}
-          >
-            <span>Date</span>
-            <span>Supplier</span>
-            <span>Service</span>
-            <span className="text-center">Pax</span>
-            <span className="text-center">Qty</span>
-            <span className="text-right">Amount</span>
-          </div>
-
-          {scheduleGroups.length ? (
-            scheduleGroups.map((group) => (
-              <div key={group.name}>
-                <div className="flex items-baseline justify-between gap-2.5 border-b border-[#EDEDED] py-2 pb-1">
-                  <span className="text-[9.5px] font-semibold uppercase tracking-[1.3px]" style={{ color: MAROON }}>
-                    {group.name}
-                  </span>
-                  <span className="text-[11px] font-semibold" style={{ color: MAROON }}>
-                    {fmtLedgerAmount(group.subtotal)}
-                  </span>
-                </div>
-                {group.rows.map((row, i) => (
-                  <div
-                    key={`${group.name}-${i}`}
-                    className={cn(GRID_SCHEDULE, 'border-b border-[#F5F5F5] py-[5px] text-[10.5px] leading-snug')}
-                  >
-                    <span className="font-['IBM_Plex_Mono'] text-[#6E6E6E]">{row.date}</span>
-                    <span className="font-semibold">{row.supplier}</span>
-                    <span className="text-[#3D3D3D]">{row.service}</span>
-                    <span className="text-center text-[#6E6E6E]">{row.pax}</span>
-                    <span className="text-center font-['IBM_Plex_Mono'] text-[#6E6E6E]">{row.qty}</span>
-                    <span className="text-right font-medium">{fmtLedgerAmount(row.amount)}</span>
-                  </div>
-                ))}
+          {rolledUp ? (
+            <>
+              <div
+                className={cn(
+                  GRID_ROLLED_UP,
+                  'mt-4 border-b border-t border-[#101010] py-[7px] text-[8.5px] font-semibold uppercase tracking-[0.9px] text-[#8A8A8A]',
+                )}
+              >
+                <span>Description</span>
+                <span className="text-right">Gross price</span>
+                <span className="text-right">Commission</span>
+                <span className="text-right">Net amount</span>
               </div>
-            ))
+              {rolledUpRows?.length ? (
+                rolledUpRows.map((row) => (
+                  <div
+                    key={row.description}
+                    className={cn(GRID_ROLLED_UP, 'border-b border-[#F5F5F5] py-[7px] text-[10.5px] leading-snug')}
+                  >
+                    <span className="text-[#3D3D3D]">{row.description}</span>
+                    <span className="text-right font-medium">{fmtLedgerAmount(row.grossPrice)}</span>
+                    <span className="text-right font-['IBM_Plex_Mono'] text-[#6E6E6E]">
+                      {row.commission != null ? fmtLedgerAmount(row.commission) : '—'}
+                    </span>
+                    <span className="text-right font-medium">{fmtLedgerAmount(row.netAmount)}</span>
+                  </div>
+                ))
+              ) : (
+                <p className="py-8 text-[13px] text-[#8A8A8A]">No services have been added to this itinerary yet.</p>
+              )}
+              {travelCounsellors ? (
+                <p className="mt-3 text-[11px] leading-relaxed text-[#8A8A8A]">
+                  Commission reflects the 6% Travel Counsellors head-office rate on qualifying services.
+                </p>
+              ) : null}
+            </>
           ) : (
-            <p className="py-8 text-[13px] text-[#8A8A8A]">No services have been added to this itinerary yet.</p>
+            <>
+              <div
+                className={cn(
+                  GRID_SCHEDULE,
+                  'mt-4 border-b border-t border-[#101010] py-[7px] text-[8.5px] font-semibold uppercase tracking-[0.9px] text-[#8A8A8A]',
+                )}
+              >
+                <span>Date</span>
+                <span>Supplier</span>
+                <span>Service</span>
+                <span className="text-center">Pax</span>
+                <span className="text-center">Qty</span>
+                <span className="text-center">Duration</span>
+                <span className="text-right">Unit price</span>
+                <span className="text-right">Amount</span>
+              </div>
+
+              {scheduleGroups.length ? (
+                scheduleGroups.map((group) => (
+                  <div key={group.name}>
+                    <div className="flex items-baseline justify-between gap-2.5 border-b border-[#EDEDED] py-2 pb-1">
+                      <span className="text-[9.5px] font-semibold uppercase tracking-[1.3px]" style={{ color: MAROON }}>
+                        {group.name}
+                      </span>
+                      <span className="text-[11px] font-semibold" style={{ color: MAROON }}>
+                        {fmtLedgerAmount(group.subtotal)}
+                      </span>
+                    </div>
+                    {group.rows.map((row, i) => (
+                      <div
+                        key={`${group.name}-${i}`}
+                        className={cn(GRID_SCHEDULE, 'border-b border-[#F5F5F5] py-[5px] text-[10.5px] leading-snug')}
+                      >
+                        <span className="font-['IBM_Plex_Mono'] text-[#6E6E6E]">{row.date}</span>
+                        <span className="font-semibold">{row.supplier}</span>
+                        <span className="text-[#3D3D3D]">{row.service}</span>
+                        <span className="text-center text-[#6E6E6E]">{row.pax}</span>
+                        <span className="text-center font-['IBM_Plex_Mono'] text-[#6E6E6E]">{row.qty}</span>
+                        <span className="text-center font-['IBM_Plex_Mono'] text-[#6E6E6E]">{row.duration}</span>
+                        <span className="text-right font-['IBM_Plex_Mono'] text-[#6E6E6E]">{fmtLedgerAmount(row.unitPrice)}</span>
+                        <span className="text-right font-medium">{fmtLedgerAmount(row.amount)}</span>
+                      </div>
+                    ))}
+                  </div>
+                ))
+              ) : (
+                <p className="py-8 text-[13px] text-[#8A8A8A]">No services have been added to this itinerary yet.</p>
+              )}
+            </>
           )}
 
           <div className="flex-1" />
           <PageFooter
-            left="Cost and margin are never shown on the client document."
+            left={
+              rolledUp
+                ? 'Gross/Commission/Net is agent-facing B2B disclosure — CPS internal cost is never shown.'
+                : 'Cost and margin are never shown on the client document.'
+            }
             right={`2 / ${totalPages}`}
             bordered
           />
@@ -243,23 +291,7 @@ export function InvoiceLedgerContent({
       >
         <LedgerHeader title="Totals and payment position" refLabel={refLabel} />
         <div className="flex flex-1 flex-col px-14 pb-8 pt-[34px]">
-          <div className="grid grid-cols-6 border border-[#101010]">
-            {categoryTotals.map((cat, i) => (
-              <div
-                key={cat.name}
-                className={cn(
-                  'col-span-2 px-4 py-3.5',
-                  i % 3 !== 2 && 'border-r border-[#E4E4E4]',
-                  i >= 3 && 'border-t border-[#E4E4E4]',
-                )}
-              >
-                <div className="text-[9px] font-semibold uppercase tracking-[1.2px] text-[#8A8A8A]">{cat.name}</div>
-                <div className="mt-1 font-['IBM_Plex_Mono'] text-[15px] font-medium">{fmtLedgerAmount(cat.amount)}</div>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-[22px]">
+          <div>
             <DottedTotalRow label="Itinerary subtotal" amount={fmtLedgerAmount(grossSell)} />
             {pricingDiscounts.map((d) => (
               <DottedTotalRow
@@ -285,15 +317,16 @@ export function InvoiceLedgerContent({
 
           <div className="mt-7">
             <SectionLabel>Payment position</SectionLabel>
-            <div className="mt-3 grid grid-cols-2 gap-3">
-              <PaymentPosRow label="Total trip cost" value={fmtLedgerUsd(pos.total)} />
-              <PaymentPosRow label="Amount paid" value={fmtLedgerUsd(pos.paid)} />
-              <PaymentPosRow label="Balance due" value={fmtLedgerUsd(pos.balance)} emphasis />
-              <PaymentPosRow label="Due immediately" value={fmtLedgerUsd(pos.amountDueImmediately)} emphasis />
+            <div className="mt-3 flex flex-col gap-2">
+              <PaymentPosRow label="Total trip cost" value={fmtLedgerUsd(pos.total)} tone="neutral" />
+              <PaymentPosRow label="Amount paid" value={fmtLedgerUsd(pos.paid)} tone="paid" />
+              <PaymentPosRow label="Balance due" value={fmtLedgerUsd(pos.balance)} tone="balance" />
+              <PaymentPosRow label="Due immediately" value={fmtLedgerUsd(pos.amountDueImmediately)} tone="urgent" />
               {pos.futureAmountDue != null && pos.futureAmountDue > 0 ? (
                 <PaymentPosRow
                   label={`Future due${pos.futureDueDate ? ` · ${pos.futureDueDate}` : ''}`}
                   value={fmtLedgerUsd(pos.futureAmountDue)}
+                  tone="future"
                 />
               ) : null}
             </div>
@@ -308,6 +341,16 @@ export function InvoiceLedgerContent({
             <p className="mt-1 text-[11px] text-[#8A8A8A]">
               Applied strictest terms: deposit {paymentTerms.appliedDeposit} · balance {paymentTerms.appliedBalance}
             </p>
+          </div>
+
+          <div className="mt-7">
+            <SectionLabel>Passenger price split</SectionLabel>
+            <div className="mt-2 grid grid-cols-4 gap-3">
+              <PaxSplitCell label="Total adults" value={String(paxPriceSplit.totalAdults)} />
+              <PaxSplitCell label="Total children" value={String(paxPriceSplit.totalChildren)} />
+              <PaxSplitCell label="Total adult price" value={fmtLedgerUsd(paxPriceSplit.totalAdultPrice)} />
+              <PaxSplitCell label="Total child price" value={fmtLedgerUsd(paxPriceSplit.totalChildPrice)} />
+            </div>
           </div>
 
           <div className="flex-1" />
@@ -325,32 +368,26 @@ export function InvoiceLedgerContent({
           <div className="mb-[18px] grid grid-cols-2 gap-8">
             <div>
               <SectionLabel>General inclusions</SectionLabel>
-              <ul className="mt-3 list-none space-y-1.5 p-0 text-[11.5px] leading-relaxed text-[#3D3D3D]">
-                {quoteText.generalInclusions.map((item) => (
-                  <li key={item} className="flex gap-2">
-                    <span className="text-[#931115]">·</span>
-                    {item}
-                  </li>
-                ))}
-              </ul>
+              <RichTextDocumentContent html={quoteText.generalInclusionsHtml} variant="bullets" className="mt-3" />
             </div>
             <div>
               <SectionLabel>General exclusions</SectionLabel>
-              <ul className="mt-3 list-none space-y-1.5 p-0 text-[11.5px] leading-relaxed text-[#3D3D3D]">
-                {quoteText.generalExclusions.map((item) => (
-                  <li key={item} className="flex gap-2">
-                    <span className="text-[#931115]">·</span>
-                    {item}
-                  </li>
-                ))}
-              </ul>
+              <RichTextDocumentContent html={quoteText.generalExclusionsHtml} variant="bullets" className="mt-3" />
             </div>
           </div>
+
+          <QuoteTextSupplement quoteText={quoteText} />
 
           {optionRows.length ? (
             <div className="mt-[26px]">
               <SectionLabel>Service options</SectionLabel>
               <div className="mt-2 border border-[#101010]">
+                <div className="grid grid-cols-[120px_100px_1fr_1fr] gap-3 border-b border-[#EFEFEF] px-4 py-[7px] text-[8.5px] font-semibold uppercase tracking-[0.9px] text-[#8A8A8A]">
+                  <span>Supplier</span>
+                  <span>Option</span>
+                  <span>Includes</span>
+                  <span>Excludes</span>
+                </div>
                 {optionRows.map((row, i) => (
                   <div
                     key={`${row.supplier}-${i}`}
@@ -381,6 +418,13 @@ export function InvoiceLedgerContent({
           <div className="flex flex-1 flex-col px-14 pb-8 pt-[34px]">
             <SectionLabel>Per-supplier payment terms</SectionLabel>
             <div className="mt-2 border border-[#101010]">
+              <div className="grid grid-cols-[1fr_120px_80px_100px_80px] gap-2 border-b border-[#EFEFEF] px-4 py-[7px] text-[8.5px] font-semibold uppercase tracking-[0.9px] text-[#8A8A8A]">
+                <span>Supplier</span>
+                <span>Term</span>
+                <span>Deposit</span>
+                <span>Balance due</span>
+                <span>Tax code</span>
+              </div>
               {paymentTerms.rows.map((row) => (
                 <div
                   key={row.supplier}
@@ -412,7 +456,20 @@ export function InvoiceLedgerContent({
                           {row.refundableLabel}
                         </span>
                       </div>
-                      <p className="mt-1 text-[11px] text-[#525252]">{row.policy}</p>
+                      <p className="mt-1 text-[11px] font-medium text-[#3D3D3D]">{row.policy}</p>
+                      {row.description ? (
+                        <p className="mt-1.5 text-[11px] leading-relaxed text-[#525252]">{row.description}</p>
+                      ) : null}
+                      {row.charges.length ? (
+                        <ul className="mt-2 list-none space-y-1 p-0 text-[10.5px] text-[#6E6E6E]">
+                          {row.charges.map((charge) => (
+                            <li key={charge.label} className="flex justify-between gap-3">
+                              <span>{charge.label}</span>
+                              <span className="shrink-0 font-['IBM_Plex_Mono'] font-medium">{charge.amount}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
                     </div>
                   ))
                 ) : (
@@ -423,13 +480,21 @@ export function InvoiceLedgerContent({
 
             <div className="flex-1" />
             <PageFooter
-              left="KRA PIN / statutory identifiers — placeholder for invoicing entity"
+              left="Per-supplier terms and cancellation policies as held at invoice generation"
               right={`5 / ${totalPages}`}
               bordered
             />
           </div>
         </section>
       ) : null}
+
+      <CpsRemittancePages
+        refLabel={refLabel}
+        totalPages={totalPages}
+        startPage={remittanceStartPage(false, showTerms)}
+        pageAttr="data-inv-page"
+        Header={RemittanceLedgerHeader}
+      />
     </>
   )
 }
@@ -476,7 +541,7 @@ function MetaRow({
   bold?: boolean
 }) {
   return (
-    <div className="flex items-baseline justify-between gap-2.5 border-b border-[#EFEFEF] py-[7px]">
+    <div className="flex items-baseline justify-between gap-2.5 border-b border-[#EFEFEF] py-[7px] last:border-b-0">
       <span className={cn('text-[10.5px]', accent ? 'text-[#931115]' : 'text-[#8A8A8A]')}>{label}</span>
       <span
         className={cn(
@@ -534,21 +599,39 @@ function DottedTotalRow({
   )
 }
 
+function PaxSplitCell({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-[#E5E7EB] px-3 py-2.5">
+      <div className="text-[9px] font-semibold uppercase tracking-wide text-[#8A8A8A]">{label}</div>
+      <div className="mt-0.5 font-['IBM_Plex_Mono'] text-[13px] font-semibold">{value}</div>
+    </div>
+  )
+}
+
+type PaymentPosTone = 'neutral' | 'paid' | 'balance' | 'urgent' | 'future'
+
+const PAYMENT_POS_TONES: Record<PaymentPosTone, { row: string; value: string }> = {
+  neutral: { row: 'border-[#E5E7EB] bg-[#FAFAFA]', value: 'text-[#101010]' },
+  paid: { row: 'border-[#BBF7D0] bg-[#F0FDF4]', value: 'text-[#15803D]' },
+  balance: { row: 'border-[#FDE68A] bg-[#FFFBEB]', value: 'text-[#B45309]' },
+  urgent: { row: 'border-[#FECACA] bg-[#FEF2F2]', value: 'text-[#931115]' },
+  future: { row: 'border-[#BFDBFE] bg-[#EFF6FF]', value: 'text-[#1D4ED8]' },
+}
+
 function PaymentPosRow({
   label,
   value,
-  emphasis,
+  tone = 'neutral',
 }: {
   label: string
   value: string
-  emphasis?: boolean
+  tone?: PaymentPosTone
 }) {
+  const styles = PAYMENT_POS_TONES[tone]
   return (
-    <div className={cn('rounded-lg border px-4 py-3', emphasis ? 'border-[#101010] bg-[#FAFAFA]' : 'border-[#E5E7EB]')}>
+    <div className={cn('flex items-center justify-between gap-4 rounded-lg border px-4 py-3', styles.row)}>
       <div className="text-[9px] font-semibold uppercase tracking-[1px] text-[#8A8A8A]">{label}</div>
-      <div className={cn("mt-1 font-['IBM_Plex_Mono'] text-[15px] font-semibold", emphasis && 'text-[#931115]')}>
-        {value}
-      </div>
+      <div className={cn("font-['IBM_Plex_Mono'] text-[15px] font-semibold", styles.value)}>{value}</div>
     </div>
   )
 }

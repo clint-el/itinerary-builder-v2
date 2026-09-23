@@ -3,11 +3,23 @@ import {
   buildLedgerScheduleGroups,
   categoryGridFromGroups,
   fmtLedgerUsd,
-  itineraryTitle,
+  documentCoverTitle,
+  paxPriceSplit,
 } from '@/features/quote-doc/quoteLedgerModel'
-import { buildIncludesRows, buildPaymentSnapshot } from '@/features/quote-doc/quotePackagedModel'
+import {
+  layoutModeFromPresentation,
+  resolveInvoiceDocumentOptions,
+} from '@/features/quote-doc/documentOptionsModel'
+import {
+  buildIncludesRows,
+  buildPackagedCategoryRows,
+  buildPaymentSnapshot,
+  isPackagedPresentation,
+  resolvePackagedCategoryRows,
+} from '@/features/quote-doc/quotePackagedModel'
 import { resolveQuoteText } from '@/features/quote-doc/quoteTextModel'
 import { linesForRateBasis } from '@/features/quote-doc/quoteRateBasisModel'
+import { buildRolledUpRows } from '@/features/invoice-doc/invoiceRolledUpModel'
 import {
   buildDepositSummary,
   buildPaymentHistory,
@@ -25,8 +37,10 @@ import type {
   InvoiceDocument,
   InvoiceLifecycleStage,
   InvoicePaymentPosition,
+  InvoiceRenderingDepth,
   InvoiceRevisionEntry,
   Itinerary,
+  PaxPriceSplit,
   QuoteGroup,
   QuotePresentation,
   QuoteTextContent,
@@ -114,17 +128,30 @@ export function buildInvoiceSnapshot(input: {
   services: AddedService[]
   quoteGroups: QuoteGroup[]
   guestDetails: GuestDetail[]
-  stage: InvoiceLifecycleStage
+  stage?: InvoiceLifecycleStage
   generatedBy: string
   existing?: InvoiceDocument
   presentation?: QuotePresentation
+  /** BR-I57/OD-17 — column depth for B2B_ITEMISED; ignored for packaged presentations. TC
+   *  invoices (BR-I56) always render rolled-up regardless of this input. */
+  renderingDepth?: InvoiceRenderingDepth
+  travelCounsellors?: boolean
   quoteText?: QuoteTextContent
   showTerms?: boolean
 }): InvoiceDocument {
-  const { itinerary, services, quoteGroups, guestDetails, stage, generatedBy, existing } = input
-  const presentation = input.presentation ?? existing?.presentation ?? 'B2B_ITEMISED'
+  const { itinerary, services, quoteGroups, guestDetails, generatedBy, existing } = input
+  const layoutMode = layoutModeFromPresentation(
+    input.presentation ?? existing?.presentation ?? 'B2B_ITEMISED',
+  )
+  const resolved = resolveInvoiceDocumentOptions(itinerary, { layoutMode })
+  const presentation = input.presentation ?? existing?.presentation ?? resolved.presentation
+  const stage = input.stage ?? resolved.lifecycleStage
+  const travelCounsellors = input.travelCounsellors ?? resolved.travelCounsellors
+  const renderingDepth: InvoiceRenderingDepth = travelCounsellors
+    ? 'rolled_up'
+    : (input.renderingDepth ?? resolved.renderingDepth)
   const quoteText = resolveQuoteText(itinerary.quoteTextDraft, input.quoteText ?? existing?.quoteText)
-  const showTerms = input.showTerms ?? existing?.showTerms ?? true
+  const showTerms = input.showTerms ?? resolved.showTerms
   const guests = partyGuests(itinerary, guestDetails)
   const rawLines =
     services.length > 0 ? linesFromServices(services, guests) : linesFromQuoteGroups(quoteGroups)
@@ -142,8 +169,18 @@ export function buildInvoiceSnapshot(input: {
   const invoiceDate = existing?.invoiceDate ?? generatedAt.slice(0, 10)
   const includesRows = buildIncludesRows(lines)
   const paymentSnapshot = buildPaymentSnapshot(itinerary, pricing.sellNumber)
-  const coverTitle = itinerary.title?.trim() || itineraryTitle(itinerary)
+  const coverTitle = documentCoverTitle(itinerary)
   const fingerprint = itineraryCommercialFp(services)
+  const totalAdults = guests.filter((g) => g.type === 'adult' || g.type === 'youth').length
+  const totalChildren = guests.filter((g) => g.type === 'child' || g.type === 'infant').length
+  const paxSplit: PaxPriceSplit = paxPriceSplit(lines, totalAdults, totalChildren)
+  const rolledUpRows =
+    presentation === 'B2B_ITEMISED' && renderingDepth === 'rolled_up'
+      ? buildRolledUpRows(lines, travelCounsellors)
+      : undefined
+  const packagedCategoryRows = isPackagedPresentation(presentation)
+    ? buildPackagedCategoryRows(rawLines)
+    : undefined
 
   const docLines = scheduleGroups.flatMap((group) =>
     group.rows.map((row, i) => ({
@@ -154,6 +191,8 @@ export function buildInvoiceSnapshot(input: {
       service: row.service,
       pax: row.pax,
       qty: row.qty,
+      duration: row.duration,
+      unitPrice: row.unitPrice,
       amount: row.amount,
       category: group.name,
     })),
@@ -165,6 +204,8 @@ export function buildInvoiceSnapshot(input: {
     invoiceNumber: existing?.invoiceNumber ?? invoiceNumberFor(itinerary),
     lifecycleStage: stage,
     presentation,
+    renderingDepth,
+    travelCounsellors,
     fingerprint,
     generatedAt,
     generatedBy,
@@ -174,7 +215,9 @@ export function buildInvoiceSnapshot(input: {
     sellTotal: pricing.sellNumber,
     lines: docLines,
     categoryTotals,
+    packagedCategoryRows,
     scheduleGroups,
+    rolledUpRows,
     pricingSummary: {
       grossSell: lines.reduce((sum, l) => sum + (l.net ?? 0), 0),
       sellTotal: pricing.sellNumber,
@@ -189,6 +232,7 @@ export function buildInvoiceSnapshot(input: {
     depositPctOfSell: deposits.depositPctOfSell,
     includesRows,
     paymentSnapshot,
+    paxPriceSplit: paxSplit,
     quoteText,
     showTerms,
     paymentPosition,
@@ -217,6 +261,7 @@ export type InvoiceRenderModel = {
   grossSell: number
   scheduleGroups: InvoiceDocument['scheduleGroups']
   categoryTotals: InvoiceDocument['categoryTotals']
+  packagedCategoryRows?: InvoiceDocument['packagedCategoryRows']
   pricingSummary: InvoiceDocument['pricingSummary']
   optionRows: InvoiceDocument['optionRows']
   depositTotal: number
@@ -227,8 +272,12 @@ export type InvoiceRenderModel = {
   generatedBy?: string
   revisions: InvoiceRevisionEntry[]
   presentation: QuotePresentation
+  renderingDepth: InvoiceRenderingDepth
+  travelCounsellors: boolean
+  rolledUpRows?: InvoiceDocument['rolledUpRows']
   includesRows: InvoiceDocument['includesRows']
   paymentSnapshot: NonNullable<InvoiceDocument['paymentSnapshot']>
+  paxPriceSplit: PaxPriceSplit
   quoteText: QuoteTextContent
   showTerms: boolean
 }
@@ -247,6 +296,7 @@ export function renderModelFromSnapshot(invoice: InvoiceDocument, stale: boolean
     grossSell: invoice.pricingSummary.grossSell,
     scheduleGroups: invoice.scheduleGroups,
     categoryTotals: invoice.categoryTotals,
+    packagedCategoryRows: invoice.packagedCategoryRows,
     pricingSummary: invoice.pricingSummary,
     optionRows: invoice.optionRows,
     depositTotal: invoice.depositTotal,
@@ -257,6 +307,9 @@ export function renderModelFromSnapshot(invoice: InvoiceDocument, stale: boolean
     generatedBy: invoice.generatedBy,
     revisions: invoice.revisions,
     presentation: invoice.presentation ?? 'B2B_ITEMISED',
+    renderingDepth: invoice.renderingDepth ?? 'full',
+    travelCounsellors: invoice.travelCounsellors ?? false,
+    rolledUpRows: invoice.rolledUpRows,
     includesRows: invoice.includesRows ?? [],
     paymentSnapshot:
       invoice.paymentSnapshot ?? {
@@ -264,6 +317,8 @@ export function renderModelFromSnapshot(invoice: InvoiceDocument, stale: boolean
         amountPaid: invoice.paymentPosition.paid,
         balanceDue: invoice.paymentPosition.balance,
       },
+    // Fallback covers invoices generated before BR-I58 (older localStorage snapshots).
+    paxPriceSplit: invoice.paxPriceSplit ?? { totalAdults: 0, totalChildren: 0, totalAdultPrice: 0, totalChildPrice: 0 },
     quoteText: resolveQuoteText(undefined, invoice.quoteText),
     showTerms: invoice.showTerms ?? true,
   }
@@ -276,23 +331,21 @@ export function renderModelFromLive(input: {
   guestDetails: GuestDetail[]
   stage?: InvoiceLifecycleStage
   presentation?: QuotePresentation
+  renderingDepth?: InvoiceRenderingDepth
+  travelCounsellors?: boolean
   quoteText?: QuoteTextContent
   showTerms?: boolean
 }): InvoiceRenderModel {
   const snap = buildInvoiceSnapshot({
     ...input,
-    stage: input.stage ?? 'deposit',
     generatedBy: 'preview',
-    presentation: input.presentation,
-    quoteText: input.quoteText,
-    showTerms: input.showTerms,
   })
   return {
     mode: 'draft',
     stale: false,
     invoiceNumber: snap.invoiceNumber,
     lifecycleStage: snap.lifecycleStage,
-    refLabel: `${input.itinerary.reference} · draft`,
+    refLabel: input.itinerary.reference,
     coverTitle: snap.coverTitle,
     reference: snap.reference,
     invoiceDate: snap.invoiceDate,
@@ -300,6 +353,7 @@ export function renderModelFromLive(input: {
     grossSell: snap.pricingSummary.grossSell,
     scheduleGroups: snap.scheduleGroups,
     categoryTotals: snap.categoryTotals,
+    packagedCategoryRows: snap.packagedCategoryRows,
     pricingSummary: snap.pricingSummary,
     optionRows: snap.optionRows,
     depositTotal: snap.depositTotal,
@@ -308,8 +362,12 @@ export function renderModelFromLive(input: {
     paymentPosition: snap.paymentPosition,
     revisions: [],
     presentation: snap.presentation ?? 'B2B_ITEMISED',
+    renderingDepth: snap.renderingDepth ?? 'full',
+    travelCounsellors: snap.travelCounsellors ?? false,
+    rolledUpRows: snap.rolledUpRows,
     includesRows: snap.includesRows ?? [],
     paymentSnapshot: snap.paymentSnapshot!,
+    paxPriceSplit: snap.paxPriceSplit,
     quoteText: snap.quoteText!,
     showTerms: snap.showTerms ?? true,
   }
@@ -323,7 +381,7 @@ export function invoiceAsQuoteRenderModel(model: InvoiceRenderModel): QuoteRende
   return {
     mode: model.mode,
     stale: model.stale,
-    presentation: model.presentation === 'B2B_PACKAGED' ? 'B2B_PACKAGED' : 'B2B_ITEMISED',
+    presentation: model.presentation ?? 'B2B_ITEMISED',
     versionLabel: model.invoiceNumber,
     refLabel: model.refLabel,
     coverTitle: model.coverTitle,
@@ -333,6 +391,10 @@ export function invoiceAsQuoteRenderModel(model: InvoiceRenderModel): QuoteRende
     grossSell: model.grossSell,
     scheduleGroups: model.scheduleGroups,
     categoryTotals: model.categoryTotals,
+    packagedCategoryRows: resolvePackagedCategoryRows({
+      packagedCategoryRows: model.packagedCategoryRows,
+      categoryTotals: model.categoryTotals,
+    }),
     pricingSummary: model.pricingSummary,
     optionRows: model.optionRows,
     depositTotal: model.depositTotal,
@@ -341,6 +403,7 @@ export function invoiceAsQuoteRenderModel(model: InvoiceRenderModel): QuoteRende
     rateBasis: 'nett',
     includesRows: model.includesRows ?? [],
     paymentSnapshot: model.paymentSnapshot,
+    paxPriceSplit: model.paxPriceSplit,
     quoteText: model.quoteText,
     showTerms: model.showTerms,
     priceMode: 'total',

@@ -7,12 +7,20 @@ import { Button } from '@/components/ui/button'
 import {
   buildLedgerCancellationRows,
   buildLedgerPaymentTerms,
+  documentCoverTitle,
   fmtLedgerDateLong,
 } from '@/features/quote-doc/quoteLedgerModel'
 import { DocumentSendDialog } from '@/features/quote-doc/DocumentSendDialog'
 import { QuotePackagedContent } from '@/features/quote-doc/QuotePackagedContent'
 import { QuoteTextEditor } from '@/features/quote-doc/QuoteTextEditor'
-import { presentationLabel } from '@/features/quote-doc/quotePackagedModel'
+import { DocumentLayoutPicker } from '@/features/quote-doc/DocumentLayoutPicker'
+import {
+  invoiceDocumentOptionsSummary,
+  layoutModeFromPresentation,
+  resolveInvoiceDocumentOptions,
+  type DocumentLayoutMode,
+} from '@/features/quote-doc/documentOptionsModel'
+import { isPackagedPresentation, presentationLabel } from '@/features/quote-doc/quotePackagedModel'
 import { resolveQuoteText } from '@/features/quote-doc/quoteTextModel'
 import { InvoiceLedgerContent } from '@/features/invoice-doc/InvoiceLedgerContent'
 import {
@@ -27,7 +35,7 @@ import {
   linesFromQuoteGroups,
   linesFromServices,
 } from '@/features/summary/summaryModel'
-import type { InvoiceLifecycleStage, QuotePresentation, QuoteTextContent } from '@/shared/lib/types'
+import type { QuoteTextContent } from '@/shared/lib/types'
 import { nightsBetween, partyGuests } from '@/shared/lib/helpers'
 import { cn } from '@/shared/lib/utils'
 
@@ -56,9 +64,7 @@ export function InvoiceDocPage() {
 
   const zoom = 100
   const [optionsOpen, setOptionsOpen] = useState(false)
-  const [showTerms, setShowTerms] = useState(true)
-  const [stage, setStage] = useState<InvoiceLifecycleStage>('deposit')
-  const [presentation, setPresentation] = useState<QuotePresentation>('B2B_ITEMISED')
+  const [layoutMode, setLayoutMode] = useState<DocumentLayoutMode>('itemised')
   const [quoteText, setQuoteText] = useState<QuoteTextContent>(() => resolveQuoteText(itinerary?.quoteTextDraft))
   const [sendOpen, setSendOpen] = useState(false)
   const [activePage, setActivePage] = useState(1)
@@ -70,28 +76,49 @@ export function InvoiceDocPage() {
   const isDraftMode = !invoice
   const stale = invoice ? isInvoiceStale(invoice, currentFp) : false
 
+  const docOptions = useMemo(
+    () => (itinerary ? resolveInvoiceDocumentOptions(itinerary, { layoutMode }) : null),
+    [itinerary, layoutMode],
+  )
+
+  const snapshotLayoutMode = invoice
+    ? layoutModeFromPresentation(invoice.presentation ?? 'B2B_ITEMISED')
+    : null
+  const useFrozenSnapshot =
+    Boolean(invoice && itinerary && !stale && snapshotLayoutMode === layoutMode)
+
   const renderModel = useMemo(() => {
-    if (invoice && itinerary) return renderModelFromSnapshot(invoice, stale)
-    if (itinerary) {
+    if (useFrozenSnapshot && invoice) return renderModelFromSnapshot(invoice, stale)
+    if (itinerary && docOptions) {
       return renderModelFromLive({
         itinerary,
         services,
         quoteGroups,
         guestDetails,
-        stage,
-        presentation,
+        presentation: docOptions.presentation,
+        stage: docOptions.lifecycleStage,
+        renderingDepth: docOptions.renderingDepth,
+        travelCounsellors: docOptions.travelCounsellors,
         quoteText,
-        showTerms,
+        showTerms: docOptions.showTerms,
       })
     }
     return null
-  }, [invoice, itinerary, stale, services, quoteGroups, guestDetails, stage, presentation, quoteText, showTerms])
+  }, [
+    useFrozenSnapshot,
+    invoice,
+    itinerary,
+    stale,
+    services,
+    quoteGroups,
+    guestDetails,
+    docOptions,
+    quoteText,
+  ])
 
   useEffect(() => {
-    if (invoice?.lifecycleStage) setStage(invoice.lifecycleStage)
-    if (invoice?.presentation) setPresentation(invoice.presentation)
-    if (invoice?.showTerms !== undefined) setShowTerms(invoice.showTerms)
-  }, [invoice?.lifecycleStage, invoice?.presentation, invoice?.showTerms])
+    if (invoice?.presentation) setLayoutMode(layoutModeFromPresentation(invoice.presentation))
+  }, [invoice?.presentation])
 
   useEffect(() => {
     if (itinerary) setQuoteText(resolveQuoteText(itinerary.quoteTextDraft, invoice?.quoteText))
@@ -138,8 +165,10 @@ export function InvoiceDocPage() {
     [lines, itinerary?.travelDateFrom, itinerary?.travelDateTo],
   )
 
-  const isPackaged = (renderModel?.presentation ?? presentation) === 'B2B_PACKAGED'
-  const termsOn = invoice ? (renderModel?.showTerms ?? true) : showTerms
+  const isPackaged = isPackagedPresentation(renderModel?.presentation ?? docOptions?.presentation ?? 'B2B_ITEMISED')
+  const termsOn = renderModel?.showTerms ?? docOptions?.showTerms ?? true
+  const travelCounsellors = renderModel?.travelCounsellors ?? docOptions?.travelCounsellors ?? false
+  const lifecycleStage = renderModel?.lifecycleStage ?? docOptions?.lifecycleStage ?? 'deposit'
 
   const pageDefs = useMemo<PageDef[]>(() => {
     if (isPackaged) {
@@ -149,6 +178,7 @@ export function InvoiceDocPage() {
         { key: 3, label: 'Totals' },
       ]
       if (termsOn) base.push({ key: 4, label: 'Terms' })
+      base.push({ key: base.length + 1, label: 'Remittance' }, { key: base.length + 2, label: 'Offices' })
       return base
     }
     const base: PageDef[] = [
@@ -158,13 +188,14 @@ export function InvoiceDocPage() {
       { key: 4, label: 'Inclusions' },
     ]
     if (termsOn) base.push({ key: 5, label: 'Terms' })
+    base.push({ key: base.length + 1, label: 'Remittance' }, { key: base.length + 2, label: 'Offices' })
     return base
   }, [isPackaged, termsOn])
 
   const totalPages = pageDefs.length
-  const refLabel = renderModel?.refLabel ?? `${id} · draft`
+  const refLabel = renderModel?.refLabel ?? itinerary?.reference ?? id
   const invoiceNumber = renderModel?.invoiceNumber ?? `${id}-INV`
-  const coverTitle = renderModel?.coverTitle ?? itinerary?.title ?? 'Safari'
+  const coverTitle = renderModel?.coverTitle ?? documentCoverTitle(itinerary)
   const issuedOn = renderModel?.invoiceDate
     ? fmtLedgerDateLong(renderModel.invoiceDate)
     : fmtLedgerDateLong(new Date().toISOString().slice(0, 10))
@@ -223,12 +254,15 @@ export function InvoiceDocPage() {
       showFlash('Invoice generation is blocked while Finance Lock is engaged')
       return
     }
+    if (!docOptions) return
     const doc = generateInvoice(id, {
-      stage,
+      stage: docOptions.lifecycleStage,
       generatedBy: itinerary!.safariPlanner || 'Safari planner',
-      presentation,
+      presentation: docOptions.presentation,
+      renderingDepth: docOptions.renderingDepth,
+      travelCounsellors: docOptions.travelCounsellors,
       quoteText,
-      showTerms,
+      showTerms: docOptions.showTerms,
       transitionToInvoiced: itinerary!.status === 'APPROVED',
     })
     if (!doc) {
@@ -267,7 +301,7 @@ export function InvoiceDocPage() {
         <span className="text-[13px] font-semibold text-white">{itinerary.reference}</span>
         <span className="text-[12px] text-[#A1A1AA]">
           {isDraftMode
-            ? `Draft preview (${lifecycleStageLabel(stage).toLowerCase()})`
+            ? `Preview · ${docOptions ? invoiceDocumentOptionsSummary(docOptions).toLowerCase() : 'itemised'}`
             : `${invoiceNumber}${stale ? ' · stale' : ''}`}
         </span>
         <div className="flex-1" />
@@ -279,52 +313,23 @@ export function InvoiceDocPage() {
           >
             <SlidersHorizontal className="size-4" /> Document options
           </button>
-          {optionsOpen ? (
-            <div className="absolute right-0 top-10 z-30 w-[280px] rounded-xl border bg-white p-4 shadow-xl">
-              <p className="mb-2 text-[11.5px] font-bold uppercase tracking-wide text-[#A1A1A1]">Presentation</p>
-              <div className="mb-3 flex flex-col gap-1.5">
-                {([
-                  ['B2B_ITEMISED', 'Itemised (Ledger)'],
-                  ['B2B_PACKAGED', 'Packaged (Includes only)'],
-                ] as const).map(([mode, label]) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    onClick={() => setPresentation(mode)}
-                    className={cn(
-                      'h-[32px] rounded-lg border px-3 text-left text-[12px] font-semibold',
-                      presentation === mode
-                        ? 'border-[#931115] bg-[#FDF2F2] text-[#931115]'
-                        : 'border-[#E5E7EB] text-[#525252]',
-                    )}
-                  >
-                    {label}
-                  </button>
-                ))}
+          {optionsOpen && docOptions ? (
+            <div className="absolute right-0 top-10 z-30 w-[248px] rounded-xl border bg-white p-4 shadow-xl">
+              <DocumentLayoutPicker
+                value={layoutMode}
+                onChange={setLayoutMode}
+                contextLine={
+                  docOptions.travelCounsellors
+                    ? 'Travel Counsellors agency — rolled-up schedule and head-office invoicing apply automatically.'
+                    : undefined
+                }
+              />
+              <div className="mt-3 rounded-lg bg-[#FAFAFA] px-3 py-2 text-[11px] leading-relaxed text-[#737373]">
+                <span className="font-semibold text-[#525252]">Applied automatically</span>
+                <br />
+                {lifecycleStageLabel(lifecycleStage)} invoice · Payment terms included
+                {docOptions.travelCounsellors ? ' · Travel Counsellors' : ''}
               </div>
-              <p className="mb-2 text-[11.5px] font-bold uppercase tracking-wide text-[#A1A1A1]">Lifecycle stage</p>
-              <div className="flex flex-col gap-1.5">
-                {([
-                  ['deposit', 'Deposit — full value, deposit in terms'],
-                  ['full', 'Full — entire balance due now'],
-                ] as const).map(([mode, label]) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    onClick={() => setStage(mode)}
-                    className={cn(
-                      'h-[32px] rounded-lg border px-3 text-left text-[12px] font-semibold',
-                      stage === mode
-                        ? 'border-[#931115] bg-[#FDF2F2] text-[#931115]'
-                        : 'border-[#E5E7EB] text-[#525252]',
-                    )}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <div className="my-3 h-px bg-[#E5E7EB]" />
-              <OptionToggle label="Payment terms & cancellation" on={showTerms} onClick={() => setShowTerms((v) => !v)} />
             </div>
           ) : null}
         </div>
@@ -392,11 +397,11 @@ export function InvoiceDocPage() {
               type="button"
               onClick={() => scrollToPage(page.key)}
               className={cn(
-                'flex w-full flex-col items-center gap-1.5 px-3 py-2.5',
+                'flex w-full flex-col items-start gap-1.5 px-3 py-2.5',
                 activePage === page.key && 'bg-[#3F3F46]',
               )}
             >
-              <span className={cn('text-center text-[10.5px] font-semibold', activePage === page.key ? 'text-white' : 'text-[#A1A1AA]')}>
+              <span className={cn('text-left text-[10.5px] font-semibold', activePage === page.key ? 'text-white' : 'text-[#A1A1AA]')}>
                 {index + 1} · {page.label}
               </span>
             </button>
@@ -440,6 +445,8 @@ export function InvoiceDocPage() {
                 cancellationRows={cancellationRows}
                 optionRows={optionRows}
                 totalsFooterLeft={`Invoice date ${issuedOn}`}
+                documentKind="invoice"
+                travelCounsellors={travelCounsellors}
               />
             ) : null}
             {renderModel && !isPackaged ? (
@@ -493,17 +500,3 @@ export function InvoiceDocPage() {
   )
 }
 
-function OptionToggle({ label, on, onClick }: { label: string; on: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex w-full items-center justify-between rounded-lg border border-[#E5E7EB] px-3 py-2 text-[12px] font-semibold text-[#525252]"
-    >
-      {label}
-      <span className={cn('rounded px-2 py-0.5 text-[10px]', on ? 'bg-[#DCFCE7] text-[#166534]' : 'bg-[#F4F4F5] text-[#737373]')}>
-        {on ? 'On' : 'Off'}
-      </span>
-    </button>
-  )
-}

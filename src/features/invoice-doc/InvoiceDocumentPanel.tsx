@@ -40,11 +40,11 @@ export function InvoiceDocumentPanel({
         <p className="mt-2 text-[13px] text-[#737373]">
           No invoice generated yet.{' '}
           {canGenerate
-            ? 'Preview the draft invoice, then use Generate invoice on that page.'
-            : 'You can preview the draft layout below. Generate invoice becomes available once the itinerary is Approved.'}
+            ? 'Preview the invoice layout, then use Generate invoice on that page.'
+            : 'You can preview the layout below. Generate invoice becomes available once the itinerary is Approved.'}
         </p>
         <Button asChild variant="outline" className="mt-4 h-9">
-          <Link to={`/invoice-doc/${itineraryId}`}>Preview draft invoice</Link>
+          <Link to={`/invoice-doc/${itineraryId}`}>Preview invoice</Link>
         </Button>
       </section>
     )

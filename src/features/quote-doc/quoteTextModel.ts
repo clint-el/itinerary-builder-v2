@@ -4,36 +4,95 @@ import {
 } from '@/features/quote-doc/quoteLedgerModel'
 import type { QuoteTextContent } from '@/shared/lib/types'
 
-export function defaultQuoteText(): QuoteTextContent {
-  return {
-    generalInclusions: [...GENERAL_LEDGER_INCLUSIONS],
-    generalExclusions: [...GENERAL_LEDGER_EXCLUSIONS],
-    notes: '',
-    standingCommercial:
-      'Rates are subject to statutory increases, park fees, and fuel surcharges beyond our control.',
-  }
+/** Persisted shape before TipTap — still accepted on read for localStorage migration. */
+export type LegacyQuoteTextContent = {
+  generalInclusions?: string[]
+  generalExclusions?: string[]
+  notes?: string
+  standingCommercial?: string
 }
 
-export function resolveQuoteText(
-  draft?: QuoteTextContent | null,
-  frozen?: QuoteTextContent | null,
-): QuoteTextContent {
-  const base = frozen ?? draft ?? defaultQuoteText()
-  return {
-    generalInclusions: [...(base.generalInclusions?.length ? base.generalInclusions : GENERAL_LEDGER_INCLUSIONS)],
-    generalExclusions: [...(base.generalExclusions?.length ? base.generalExclusions : GENERAL_LEDGER_EXCLUSIONS)],
-    notes: base.notes ?? '',
-    standingCommercial: base.standingCommercial ?? defaultQuoteText().standingCommercial,
-  }
-}
-
-export function parseQuoteTextLines(text: string): string[] {
+function escapeHtml(text: string) {
   return text
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+}
+
+export function linesToBulletHtml(lines: string[]) {
+  if (!lines.length) return ''
+  return `<ul>${lines.map((line) => `<li><p>${escapeHtml(line)}</p></li>`).join('')}</ul>`
+}
+
+export function plainToParagraphHtml(text: string) {
+  const trimmed = text.trim()
+  if (!trimmed) return ''
+  return trimmed
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean)
+    .map((line) => `<p>${escapeHtml(line)}</p>`)
+    .join('')
 }
 
-export function quoteTextLinesToText(lines: string[]): string {
-  return lines.join('\n')
+export function hasRichTextContent(html: string | undefined) {
+  if (!html) return false
+  const stripped = html
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .trim()
+  return stripped.length > 0
+}
+
+export function defaultQuoteText(): QuoteTextContent {
+  return {
+    generalInclusionsHtml: linesToBulletHtml(GENERAL_LEDGER_INCLUSIONS),
+    generalExclusionsHtml: linesToBulletHtml(GENERAL_LEDGER_EXCLUSIONS),
+    notesHtml: '',
+    standingCommercialHtml: plainToParagraphHtml(
+      'Rates are subject to statutory increases, park fees, and fuel surcharges beyond our control.',
+    ),
+  }
+}
+
+function isModernQuoteText(value: QuoteTextContent | LegacyQuoteTextContent): value is QuoteTextContent {
+  return 'generalInclusionsHtml' in value
+}
+
+export function resolveQuoteText(
+  draft?: QuoteTextContent | LegacyQuoteTextContent | null,
+  frozen?: QuoteTextContent | LegacyQuoteTextContent | null,
+): QuoteTextContent {
+  const base = frozen ?? draft
+  const defaults = defaultQuoteText()
+  if (!base) return defaults
+
+  if (isModernQuoteText(base)) {
+    return {
+      generalInclusionsHtml: hasRichTextContent(base.generalInclusionsHtml)
+        ? base.generalInclusionsHtml
+        : defaults.generalInclusionsHtml,
+      generalExclusionsHtml: hasRichTextContent(base.generalExclusionsHtml)
+        ? base.generalExclusionsHtml
+        : defaults.generalExclusionsHtml,
+      notesHtml: base.notesHtml ?? '',
+      standingCommercialHtml: hasRichTextContent(base.standingCommercialHtml)
+        ? base.standingCommercialHtml
+        : defaults.standingCommercialHtml,
+    }
+  }
+
+  return {
+    generalInclusionsHtml: linesToBulletHtml(
+      base.generalInclusions?.length ? base.generalInclusions : GENERAL_LEDGER_INCLUSIONS,
+    ),
+    generalExclusionsHtml: linesToBulletHtml(
+      base.generalExclusions?.length ? base.generalExclusions : GENERAL_LEDGER_EXCLUSIONS,
+    ),
+    notesHtml: plainToParagraphHtml(base.notes ?? ''),
+    standingCommercialHtml: hasRichTextContent(base.standingCommercial)
+      ? plainToParagraphHtml(base.standingCommercial!)
+      : defaults.standingCommercialHtml,
+  }
 }
