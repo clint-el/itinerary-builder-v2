@@ -35,7 +35,9 @@ import {
 } from '@/features/summary/summaryModel'
 import { DocumentLayoutPicker } from '@/features/quote-doc/DocumentLayoutPicker'
 import {
+  isTravelCounsellorsAgency,
   layoutModeFromPresentation,
+  quotationCoverKindLabel,
   resolveQuoteDocumentOptions,
   type DocumentLayoutMode,
 } from '@/features/quote-doc/documentOptionsModel'
@@ -171,9 +173,15 @@ export function QuoteDocPage() {
     if (activeQuote?.priceMode) setPriceMode(activeQuote.priceMode)
   }, [activeQuote?.priceMode, activeQuote?.id])
 
+  const isTravelCounsellors = itinerary ? isTravelCounsellorsAgency(itinerary) : false
+
   useEffect(() => {
+    if (isTravelCounsellors) {
+      setLayoutMode('itemised')
+      return
+    }
     if (activeQuote?.presentation) setLayoutMode(layoutModeFromPresentation(activeQuote.presentation))
-  }, [activeQuote?.presentation])
+  }, [activeQuote?.presentation, isTravelCounsellors])
 
   useEffect(() => {
     if (activeQuote?.rateBasis) setRateBasisSelection(activeQuote.rateBasis)
@@ -469,7 +477,11 @@ export function QuoteDocPage() {
             <div className="absolute right-0 top-10 z-30 w-[308px] rounded-xl border bg-white p-4 shadow-xl">
               {docOptions ? (
                 <>
-                  <DocumentLayoutPicker value={layoutMode} onChange={setLayoutMode} />
+                  <DocumentLayoutPicker
+                    value={layoutMode}
+                    onChange={setLayoutMode}
+                    lockedMode={isTravelCounsellors ? 'itemised' : undefined}
+                  />
                   <div className="my-3 h-px bg-[#E5E7EB]" />
                 </>
               ) : null}
@@ -706,7 +718,9 @@ export function QuoteDocPage() {
                     className="block h-auto w-44 brightness-0 invert"
                   />
                   <div className="text-right">
-                    <div className="text-[9.5px] font-semibold uppercase tracking-[1.6px] text-[#C79393]">Quotation</div>
+                    <div className="text-[9.5px] font-semibold uppercase tracking-[1.6px] text-[#C79393]">
+                      {quotationCoverKindLabel(isTravelCounsellors, false)}
+                    </div>
                     <div className="mt-0.5 font-['IBM_Plex_Mono'] text-lg font-medium text-white">{refLabel}</div>
                   </div>
                 </div>

@@ -214,6 +214,14 @@ export interface Itinerary {
   invoiceFingerprint?: string
   /** Stamped once on first invoice generation (IB 12.1). */
   firstInvoiceDate?: string
+  /** Who the invoice cover addresses — agency (B2B default) or client (B2C default). */
+  invoiceAddresseeType?: 'agency' | 'client'
+  /** Guest roster id for client invoicing; falls back to invoiceContact / lead guest. */
+  invoiceAddresseeGuestId?: string
+  /** Plain-text billing address for client invoices (line breaks preserved on PDF). */
+  clientBillingAddress?: string
+  clientBillingEmail?: string
+  clientBillingPhone?: string
   /** Per payable-entity voucher outcome — keyed by PayableEntity.id (PR-F02). */
   supplierVouchers?: Record<string, SupplierVoucherStatus>
   /** Per-entity issue/token/response tracking — keyed by PayableEntity.id. */
@@ -306,6 +314,15 @@ export interface InvoiceDocument {
   quoteText?: QuoteTextContent
   showTerms?: boolean
   paymentPosition: InvoicePaymentPosition
+  /** Frozen at invoice generation — legal addressee on the cover. */
+  invoiceAddressee?: {
+    type: 'agency' | 'client'
+    legalName: string
+    addressLines: string[]
+    email?: string
+    phone?: string
+    guestId?: string
+  }
   revisions: InvoiceRevisionEntry[]
   sendHistory?: DocumentSendRecord[]
   lastSentAt?: string
@@ -665,6 +682,8 @@ export interface GuestDetail {
   preferences?: string
   note?: string
   lead?: boolean
+  /** At most one guest — default invoice contact for B2C client addressee. */
+  invoiceContact?: boolean
 }
 
 export interface CreateItineraryInput {

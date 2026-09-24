@@ -15,7 +15,13 @@ import { QuotePackagedContent } from '@/features/quote-doc/QuotePackagedContent'
 import { QuoteTextEditor } from '@/features/quote-doc/QuoteTextEditor'
 import { DocumentLayoutPicker } from '@/features/quote-doc/DocumentLayoutPicker'
 import {
+  effectiveInvoiceAddresseeType,
+  invoiceAddresseeReady,
+  type InvoiceAddresseeType,
+} from '@/features/invoice-doc/invoiceAddresseeModel'
+import {
   invoiceDocumentOptionsSummary,
+  isTravelCounsellorsAgency,
   layoutModeFromPresentation,
   resolveInvoiceDocumentOptions,
   type DocumentLayoutMode,
@@ -116,9 +122,15 @@ export function InvoiceDocPage() {
     quoteText,
   ])
 
+  const isTravelCounsellors = itinerary ? isTravelCounsellorsAgency(itinerary) : false
+
   useEffect(() => {
+    if (isTravelCounsellors) {
+      setLayoutMode('itemised')
+      return
+    }
     if (invoice?.presentation) setLayoutMode(layoutModeFromPresentation(invoice.presentation))
-  }, [invoice?.presentation])
+  }, [invoice?.presentation, isTravelCounsellors])
 
   useEffect(() => {
     if (itinerary) setQuoteText(resolveQuoteText(itinerary.quoteTextDraft, invoice?.quoteText))
@@ -265,7 +277,12 @@ export function InvoiceDocPage() {
       showFlash('Invoice generation is blocked while Finance Lock is engaged')
       return
     }
-    if (!docOptions) return
+    if (!docOptions || !itinerary) return
+    const addresseeReady = invoiceAddresseeReady(itinerary, guestDetails)
+    if (!addresseeReady.ok) {
+      showFlash(addresseeReady.message)
+      return
+    }
     const doc = generateInvoice(id, {
       stage: docOptions.lifecycleStage,
       generatedBy: itinerary!.safariPlanner || 'Safari planner',
@@ -358,17 +375,47 @@ export function InvoiceDocPage() {
               <DocumentLayoutPicker
                 value={layoutMode}
                 onChange={setLayoutMode}
+                lockedMode={isTravelCounsellors ? 'itemised' : undefined}
                 contextLine={
-                  docOptions.travelCounsellors
-                    ? 'Travel Counsellors agency — rolled-up schedule and head-office invoicing apply automatically.'
+                  isTravelCounsellors
+                    ? 'Invoiced to Travel Counsellors Head Office · 6% head-office commission on qualifying services.'
                     : undefined
                 }
               />
+              {!isTravelCounsellors ? (
+                <div className="mt-3">
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-[#A1A1A1]">
+                    Invoiced to
+                  </div>
+                  <div className="mt-1.5 inline-flex overflow-hidden rounded-lg border border-[#E5E7EB]">
+                    {(['agency', 'client'] as InvoiceAddresseeType[]).map((value) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() =>
+                          upsertItinerary({ ...itinerary, invoiceAddresseeType: value })
+                        }
+                        className={cn(
+                          'h-[32px] border-0 border-r border-[#E5E7EB] px-3 text-[12px] font-semibold capitalize last:border-r-0',
+                          effectiveInvoiceAddresseeType(itinerary) === value
+                            ? 'bg-[#931115] text-white'
+                            : 'bg-white text-[#525252]',
+                        )}
+                      >
+                        {value}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="mt-1.5 text-[10.5px] leading-relaxed text-[#737373]">
+                    Client uses the invoice contact from Guests. Billing address is edited on the guest
+                    roster.
+                  </p>
+                </div>
+              ) : null}
               <div className="mt-3 rounded-lg bg-[#FAFAFA] px-3 py-2 text-[11px] leading-relaxed text-[#737373]">
                 <span className="font-semibold text-[#525252]">Applied automatically</span>
                 <br />
                 {lifecycleStageLabel(lifecycleStage)} invoice · Payment terms included
-                {docOptions.travelCounsellors ? ' · Travel Counsellors' : ''}
               </div>
             </div>
           ) : null}

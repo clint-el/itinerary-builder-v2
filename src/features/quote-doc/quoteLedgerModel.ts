@@ -1,3 +1,4 @@
+import { resolveInvoiceAddresseeProfile } from '@/features/invoice-doc/invoiceAddresseeModel'
 import { resolveServiceOption } from '@/features/builder/serviceOptions'
 import {
   policiesFor,
@@ -555,7 +556,7 @@ const AGENCY_PROFILES: Record<string, string[]> = {
   ],
 }
 
-function parseAgencyAddress(raw: string): string[] {
+export function parseAgencyAddress(raw: string): string[] {
   if (raw.includes('\n')) {
     return raw
       .split('\n')
@@ -622,25 +623,22 @@ const AGENT_INVOICE_PROFILES: Record<string, AgentInvoiceProfile> = {
 }
 
 export function invoiceRecipientProfile(
-  itinerary: Pick<Itinerary, 'agency' | 'agent' | 'agencyAddress'>,
+  itinerary: Pick<
+    Itinerary,
+    | 'agency'
+    | 'agent'
+    | 'agencyAddress'
+    | 'invoiceAddresseeType'
+    | 'invoiceAddresseeGuestId'
+    | 'clientBillingAddress'
+    | 'clientBillingEmail'
+    | 'clientBillingPhone'
+  >,
   travelCounsellors = false,
+  guests: GuestDetail[] = [],
 ): AgentInvoiceProfile {
-  if (travelCounsellors) return TRAVEL_COUNSELLORS_INVOICE_PROFILE
-
-  const agency = itinerary.agency?.trim() || ''
-  const catalog = agency ? AGENT_INVOICE_PROFILES[agency] : undefined
-  if (catalog) return catalog
-
-  const raw = itinerary.agencyAddress?.trim()
-  if (raw) {
-    const lines = parseAgencyAddress(raw)
-    return {
-      legalName: itinerary.agent?.trim() || agency || '—',
-      addressLines: lines,
-    }
-  }
-
-  return INTRIQ_JOURNEY_PROFILE
+  const profile = resolveInvoiceAddresseeProfile({ itinerary, guests, travelCounsellors })
+  return { legalName: profile.legalName, addressLines: profile.addressLines }
 }
 
 export { SUMMARY_TYPE_META, buildPriceGroups }

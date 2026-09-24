@@ -116,6 +116,7 @@ const LEAD_NAMES: Record<string, { first: string; last: string; salutation?: str
   CPS5687: { first: 'Oliver', last: 'Bennett', salutation: 'Mr' },
   'CPS5687-1': { first: 'Oliver', last: 'Bennett', salutation: 'Mr' },
   CPS5688: { first: 'James', last: 'Harper', salutation: 'Mr' },
+  CPS5689: { first: 'Sarah', last: 'Thompson', salutation: 'Ms' },
 }
 
 const CHILD_AGES: Record<string, number[]> = {
@@ -1522,26 +1523,34 @@ export function withSeedQuoteFingerprints(
   })
 }
 
-/** Seed a deposit invoice on CPS5681 (APPROVED) for the documents panel demo. */
+/** Seed deposit invoices on demo itineraries (standard B2B + Travel Counsellors). */
 export function buildSeedInvoiceDocumentsMap(): Record<string, InvoiceDocument> {
   const map: Record<string, InvoiceDocument> = {}
-  const it = SEED_ITINERARIES_FULL.find((row) => row.id === 'CPS5681')
-  if (!it) return map
+  const seeds: { id: string; generatedAt: string; invoiceDate: string }[] = [
+    { id: 'CPS5681', generatedAt: '2026-07-05T09:00:00Z', invoiceDate: '2026-07-05' },
+    { id: 'CPS5689', generatedAt: '2026-07-12T11:00:00Z', invoiceDate: '2026-07-12' },
+  ]
 
-  const services = buildSeedServices(it)
-  const quoteGroups = buildSeedQuoteGroups(it)
-  const guestDetails = buildSeedGuests(it)
-  const doc = buildInvoiceSnapshot({
-    itinerary: it,
-    services,
-    quoteGroups,
-    guestDetails,
-    stage: 'deposit',
-    generatedBy: it.safariPlanner || 'Safari planner',
-  })
-  doc.generatedAt = '2026-07-05T09:00:00Z'
-  doc.invoiceDate = '2026-07-05'
-  map[it.id] = doc
+  for (const seed of seeds) {
+    const it = SEED_ITINERARIES_FULL.find((row) => row.id === seed.id)
+    if (!it) continue
+
+    const services = buildSeedServices(it)
+    const quoteGroups = buildSeedQuoteGroups(it)
+    const guestDetails = buildSeedGuests(it)
+    const doc = buildInvoiceSnapshot({
+      itinerary: it,
+      services,
+      quoteGroups,
+      guestDetails,
+      stage: 'deposit',
+      generatedBy: it.safariPlanner || 'Safari planner',
+    })
+    doc.generatedAt = seed.generatedAt
+    doc.invoiceDate = seed.invoiceDate
+    map[it.id] = doc
+  }
+
   return map
 }
 

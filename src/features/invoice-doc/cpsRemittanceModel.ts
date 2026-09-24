@@ -81,7 +81,7 @@ export const CPS_OFFICES: CpsOffice[] = [
   },
 ]
 
-/** Bank remittance (2 pages) + office details — appended to every invoice. */
+/** Bank remittance (all accounts on page 1) + office details (page 2) — appended to every invoice. */
 export const CPS_REMITTANCE_PAGE_COUNT = 2
 
 export function remittanceStartPage(isPackaged: boolean, showTerms: boolean): number {

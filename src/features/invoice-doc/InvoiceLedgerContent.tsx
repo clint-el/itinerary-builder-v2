@@ -1,3 +1,4 @@
+import { invoiceCoverKindLabel } from '@/features/quote-doc/documentOptionsModel'
 import {
   buildLedgerPaymentTerms,
   fmtLedgerAmount,
@@ -5,7 +6,6 @@ import {
   fmtLedgerUsd,
   bookedByContact,
   guestDetailLines,
-  invoiceRecipientProfile,
   type LedgerCancellationRow,
   type LedgerOptionRow,
 } from '@/features/quote-doc/quoteLedgerModel'
@@ -106,7 +106,7 @@ export function InvoiceLedgerContent({
             />
             <div className="text-right">
               <div className="text-[9.5px] font-semibold uppercase tracking-[1.6px] text-[#C79393]">
-                Tour Package Invoice
+                {invoiceCoverKindLabel(travelCounsellors)}
               </div>
               <div className="mt-0.5 font-['IBM_Plex_Mono'] text-lg font-medium text-white">{refLabel}</div>
             </div>
@@ -143,7 +143,7 @@ export function InvoiceLedgerContent({
               <MetaRow label="Countries" value={countries} />
             </MetaColumn>
             <MetaColumn title="Invoiced to" last>
-              <InvoicedToProfile profile={invoiceRecipientProfile(itinerary, travelCounsellors)} />
+              <InvoicedToProfile profile={renderModel.invoiceAddressee} />
             </MetaColumn>
           </div>
 
@@ -333,17 +333,6 @@ export function InvoiceLedgerContent({
           </div>
 
           <div className="mt-7">
-            <SectionLabel>Payment terms</SectionLabel>
-            <p className="mt-2 text-[12px] leading-relaxed text-[#525252]">
-              Deposit {fmtLedgerUsd(renderModel.depositTotal)} ({renderModel.depositPctOfSell}% of booking total) ·
-              Balance {fmtLedgerUsd(renderModel.depositBalance)} due per supplier terms below.
-            </p>
-            <p className="mt-1 text-[11px] text-[#8A8A8A]">
-              Applied strictest terms: deposit {paymentTerms.appliedDeposit} · balance {paymentTerms.appliedBalance}
-            </p>
-          </div>
-
-          <div className="mt-7">
             <SectionLabel>Passenger price split</SectionLabel>
             <div className="mt-2 grid grid-cols-4 gap-3">
               <PaxSplitCell label="Total adults" value={String(paxPriceSplit.totalAdults)} />
@@ -444,31 +433,14 @@ export function InvoiceLedgerContent({
               <div className="mt-2 flex flex-col gap-4">
                 {cancellationRows.length ? (
                   cancellationRows.map((row) => (
-                    <div key={row.supplier} className="border border-[#E4E4E4] px-4 py-3">
-                      <div className="flex items-baseline justify-between gap-3">
-                        <span className="text-[12px] font-semibold">{row.supplier}</span>
-                        <span
-                          className={cn(
-                            'text-[10px] font-bold uppercase',
-                            row.refundableTone === 'red' ? 'text-[#B91C1C]' : 'text-[#0369A1]',
-                          )}
-                        >
-                          {row.refundableLabel}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-[11px] font-medium text-[#3D3D3D]">{row.policy}</p>
+                    <div key={row.supplier} className="border border-[#E4E4E4] px-4 py-3 text-[11px] leading-relaxed text-[#3D3D3D]">
+                      <p className="font-semibold">{row.supplier}</p>
+                      <p className="mt-2">{row.policy}</p>
+                      <p className="mt-1 text-[#525252]">
+                        {row.travelDates} · {row.refundableLabel}
+                      </p>
                       {row.description ? (
-                        <p className="mt-1.5 text-[11px] leading-relaxed text-[#525252]">{row.description}</p>
-                      ) : null}
-                      {row.charges.length ? (
-                        <ul className="mt-2 list-none space-y-1 p-0 text-[10.5px] text-[#6E6E6E]">
-                          {row.charges.map((charge) => (
-                            <li key={charge.label} className="flex justify-between gap-3">
-                              <span>{charge.label}</span>
-                              <span className="shrink-0 font-['IBM_Plex_Mono'] font-medium">{charge.amount}</span>
-                            </li>
-                          ))}
-                        </ul>
+                        <p className="mt-2 whitespace-pre-wrap text-[#525252]">{row.description}</p>
                       ) : null}
                     </div>
                   ))

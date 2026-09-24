@@ -29,6 +29,7 @@ import {
   linesFromServices,
   type DepositSummary,
 } from '@/features/summary/summaryModel'
+import { resolveInvoiceAddresseeProfile } from '@/features/invoice-doc/invoiceAddresseeModel'
 import { itineraryCommercialFp } from '@/shared/lib/lifecycleRules'
 import { partyGuests } from '@/shared/lib/helpers'
 import type {
@@ -181,6 +182,11 @@ export function buildInvoiceSnapshot(input: {
   const packagedCategoryRows = isPackagedPresentation(presentation)
     ? buildPackagedCategoryRows(rawLines)
     : undefined
+  const invoiceAddressee = resolveInvoiceAddresseeProfile({
+    itinerary,
+    guests: guestDetails,
+    travelCounsellors,
+  })
 
   const docLines = scheduleGroups.flatMap((group) =>
     group.rows.map((row, i) => ({
@@ -236,6 +242,7 @@ export function buildInvoiceSnapshot(input: {
     quoteText,
     showTerms,
     paymentPosition,
+    invoiceAddressee,
     sendHistory: existing?.sendHistory,
     lastSentAt: existing?.lastSentAt,
   }
@@ -280,6 +287,7 @@ export type InvoiceRenderModel = {
   paxPriceSplit: PaxPriceSplit
   quoteText: QuoteTextContent
   showTerms: boolean
+  invoiceAddressee: NonNullable<InvoiceDocument['invoiceAddressee']>
 }
 
 export function renderModelFromSnapshot(invoice: InvoiceDocument, stale: boolean): InvoiceRenderModel {
@@ -321,6 +329,11 @@ export function renderModelFromSnapshot(invoice: InvoiceDocument, stale: boolean
     paxPriceSplit: invoice.paxPriceSplit ?? { totalAdults: 0, totalChildren: 0, totalAdultPrice: 0, totalChildPrice: 0 },
     quoteText: resolveQuoteText(undefined, invoice.quoteText),
     showTerms: invoice.showTerms ?? true,
+    invoiceAddressee: invoice.invoiceAddressee ?? {
+      type: 'agency',
+      legalName: '—',
+      addressLines: [],
+    },
   }
 }
 
@@ -370,6 +383,7 @@ export function renderModelFromLive(input: {
     paxPriceSplit: snap.paxPriceSplit,
     quoteText: snap.quoteText!,
     showTerms: snap.showTerms ?? true,
+    invoiceAddressee: snap.invoiceAddressee!,
   }
 }
 
@@ -409,5 +423,6 @@ export function invoiceAsQuoteRenderModel(model: InvoiceRenderModel): QuoteRende
     priceMode: 'total',
     generatedAt: model.generatedAt,
     generatedBy: model.generatedBy,
+    invoiceAddressee: model.invoiceAddressee,
   }
 }

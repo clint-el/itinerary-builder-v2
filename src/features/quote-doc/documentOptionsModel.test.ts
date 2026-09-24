@@ -2,11 +2,16 @@ import { describe, expect, it } from 'vitest'
 import {
   deriveInvoiceLifecycleStage,
   deriveRenderingDepth,
+  effectiveLayoutMode,
+  invoiceCoverKindLabel,
+  invoiceDocumentOptionsSummary,
   isB2cChannel,
   isTravelCounsellorsAgency,
   layoutModeFromPresentation,
   presentationFromLayoutMode,
+  quotationCoverKindLabel,
   resolveInvoiceDocumentOptions,
+  resolveQuoteDocumentOptions,
 } from '@/features/quote-doc/documentOptionsModel'
 
 describe('documentOptionsModel', () => {
@@ -57,5 +62,29 @@ describe('documentOptionsModel', () => {
   it('treats known agencies as B2B channels', () => {
     expect(isB2cChannel({ agency: 'CPS' })).toBe(false)
     expect(isB2cChannel({ agency: '' })).toBe(true)
+  })
+
+  it('locks Travel Counsellors to itemised B2B even when packaged is requested', () => {
+    expect(effectiveLayoutMode({ agency: 'Travel Counsellors UK' }, 'packaged')).toBe('itemised')
+    const options = resolveInvoiceDocumentOptions(
+      { agency: 'Travel Counsellors UK', paymentStatus: 'UNPAID', totalUsd: 5000, balanceUsd: 5000 },
+      { layoutMode: 'packaged' },
+    )
+    expect(options.layoutMode).toBe('itemised')
+    expect(options.presentation).toBe('B2B_ITEMISED')
+    expect(options.renderingDepth).toBe('rolled_up')
+    expect(invoiceDocumentOptionsSummary(options)).toBe('Travel Counsellors · Rolled up · Deposit')
+  })
+
+  it('locks Travel Counsellors quotes to itemised B2B', () => {
+    const options = resolveQuoteDocumentOptions({ agency: 'Travel Counsellors' }, { layoutMode: 'packaged' })
+    expect(options.presentation).toBe('B2B_ITEMISED')
+  })
+
+  it('uses dedicated cover labels for Travel Counsellors documents', () => {
+    expect(invoiceCoverKindLabel(true)).toBe('Travel Counsellors Invoice')
+    expect(invoiceCoverKindLabel(false)).toBe('Tour Package Invoice')
+    expect(quotationCoverKindLabel(true, false)).toBe('Travel Counsellors Quotation')
+    expect(quotationCoverKindLabel(false, true)).toBe('Packaged quotation')
   })
 })

@@ -1,3 +1,4 @@
+import type { InvoiceAddresseeProfile } from '@/features/invoice-doc/invoiceAddresseeModel'
 import type {
   AgentInvoiceProfile,
   BookedByContact,
@@ -72,15 +73,28 @@ export function BookingConsultantRow({ contact }: { contact: BookedByContact }) 
   )
 }
 
-export function InvoicedToProfile({ profile }: { profile: AgentInvoiceProfile }) {
+export function InvoicedToProfile({
+  profile,
+}: {
+  profile: AgentInvoiceProfile | InvoiceAddresseeProfile
+}) {
+  const extended = profile as InvoiceAddresseeProfile
   return (
     <div className="py-2">
       <div className="text-[12.5px] font-semibold leading-snug text-[#101010]">{profile.legalName}</div>
       {profile.addressLines.length ? (
-        <div className="mt-1 flex flex-col gap-0.5 text-[11px] leading-relaxed text-[#525252]">
+        <div className="mt-1 flex flex-col gap-0.5 whitespace-pre-wrap text-[11px] leading-relaxed text-[#525252]">
           {profile.addressLines.map((line) => (
             <div key={line}>{line}</div>
           ))}
+        </div>
+      ) : null}
+      {extended.email ? (
+        <div className="mt-1 text-[11px] leading-snug text-[#525252]">{extended.email}</div>
+      ) : null}
+      {extended.phone ? (
+        <div className="mt-0.5 font-['IBM_Plex_Mono'] text-[11px] leading-snug text-[#525252]">
+          {extended.phone}
         </div>
       ) : null}
     </div>

@@ -1,3 +1,4 @@
+import type { InvoiceAddresseeProfile } from '@/features/invoice-doc/invoiceAddresseeModel'
 import {
   buildLedgerOptionRows,
   buildLedgerScheduleGroups,
@@ -172,6 +173,8 @@ export type QuoteRenderModel = {
   quoteText: QuoteTextContent
   showTerms: boolean
   priceMode: 'total' | 'pp'
+  /** Present on invoice documents rendered through packaged layout. */
+  invoiceAddressee?: InvoiceAddresseeProfile
 }
 
 function baseRenderFields(quote: QuoteDocument, stale: boolean): QuoteRenderModel {

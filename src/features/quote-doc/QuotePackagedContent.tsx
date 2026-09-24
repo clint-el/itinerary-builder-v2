@@ -6,7 +6,6 @@ import {
   bookedByContact,
   bookingAgentBlock,
   guestDetailLines,
-  invoiceRecipientProfile,
   paxComposition,
   type LedgerCancellationRow,
   type LedgerOptionRow,
@@ -22,6 +21,7 @@ import {
   GuestDetailsSection,
   InvoicedToProfile,
 } from '@/features/quote-doc/quoteCoverMeta'
+import { invoiceCoverKindLabel } from '@/features/quote-doc/documentOptionsModel'
 import { CpsRemittancePages } from '@/features/invoice-doc/CpsRemittancePages'
 import { remittanceStartPage } from '@/features/invoice-doc/cpsRemittanceModel'
 import type { QuoteRenderModel } from '@/features/quote-doc/quoteSnapshotModel'
@@ -115,7 +115,9 @@ export function QuotePackagedContent({
             />
             <div className="text-right">
               <div className="text-[9.5px] font-semibold uppercase tracking-[1.6px] text-[#C79393]">
-                {documentKind === 'invoice' ? 'Tour Package Invoice' : 'Packaged quotation'}
+                {documentKind === 'invoice'
+                  ? invoiceCoverKindLabel(travelCounsellors)
+                  : 'Packaged quotation'}
               </div>
               <div className="mt-0.5 font-['IBM_Plex_Mono'] text-lg font-medium text-white">{refLabel}</div>
             </div>
@@ -153,7 +155,15 @@ export function QuotePackagedContent({
             </MetaColumn>
             {documentKind === 'invoice' ? (
               <MetaColumn title="Invoiced to" last>
-                <InvoicedToProfile profile={invoiceRecipientProfile(itinerary, travelCounsellors)} />
+                <InvoicedToProfile
+                  profile={
+                    renderModel.invoiceAddressee ?? {
+                      type: 'agency',
+                      legalName: '—',
+                      addressLines: [],
+                    }
+                  }
+                />
               </MetaColumn>
             ) : (
               <MetaColumn title="Booking" last>
@@ -363,22 +373,38 @@ export function QuotePackagedContent({
               </div>
             ) : null}
 
-            <div className="mt-[26px]">
-              <SectionLabel>Payment terms (summary)</SectionLabel>
-              <div className="mt-2 text-[11px] text-[#3D3D3D]">
-                Applied deposit {paymentTerms.appliedDeposit} · Balance due {paymentTerms.appliedBalance}
+            {documentKind === 'quote' ? (
+              <div className="mt-[26px]">
+                <SectionLabel>Payment terms (summary)</SectionLabel>
+                <div className="mt-2 text-[11px] text-[#3D3D3D]">
+                  Applied deposit {paymentTerms.appliedDeposit} · Balance due {paymentTerms.appliedBalance}
+                </div>
               </div>
-            </div>
+            ) : null}
 
             {cancellationRows.length ? (
               <div className="mt-4">
                 <SectionLabel>Cancellation (summary)</SectionLabel>
-                <div className="mt-2 flex flex-col gap-2">
+                <div className="mt-2 flex flex-col gap-3">
                   {cancellationRows.slice(0, 4).map((row) => (
-                    <div key={row.supplier} className="text-[11px] leading-snug text-[#3D3D3D]">
-                      <b>{row.supplier}</b> — {row.policy}
+                    <div
+                      key={row.supplier}
+                      className="text-[11px] leading-relaxed text-[#3D3D3D]"
+                    >
+                      <p className="font-semibold">{row.supplier}</p>
+                      <p className="mt-1">{row.policy}</p>
+                      <p className="mt-1 text-[#525252]">
+                        {row.travelDates} · {row.refundableLabel}
+                      </p>
                       {row.description ? (
-                        <p className="mt-0.5 text-[10.5px] text-[#6E6E6E]">{row.description}</p>
+                        <p
+                          className={cn(
+                            'mt-1 whitespace-pre-wrap text-[#525252]',
+                            documentKind === 'invoice' ? 'text-[11px]' : 'text-[10.5px]',
+                          )}
+                        >
+                          {row.description}
+                        </p>
                       ) : null}
                     </div>
                   ))}

@@ -49,12 +49,13 @@ export function CpsRemittancePages({
             transfers.
           </p>
           <div className="mt-5 flex flex-col gap-4">
-            <BankBlock account={CPS_BANK_ACCOUNTS[0]!} />
-            <BankBlock account={CPS_BANK_ACCOUNTS[1]!} />
+            {CPS_BANK_ACCOUNTS.map((account) => (
+              <BankBlock key={account.country} account={account} />
+            ))}
           </div>
           <div className="flex-1" />
           <PageFooter
-            left="Use the Kenya or Tanzania account matching the invoicing entity for this booking"
+            left="Use the Kenya, Tanzania, or Rwanda account matching the invoicing entity for this booking"
             right={`${startPage} / ${totalPages}`}
           />
         </div>
@@ -65,17 +66,12 @@ export function CpsRemittancePages({
         className={pageClass}
         style={{ width: PAGE_W, minHeight: PAGE_H }}
       >
-        <Header title="Bank remittance & office details" refLabel={refLabel} />
+        <Header title="Office details" refLabel={refLabel} />
         <div className="flex flex-1 flex-col px-14 pb-8 pt-[34px]">
-          <BankBlock account={CPS_BANK_ACCOUNTS[2]!} />
-
-          <div className="mt-7">
-            <SectionLabel>Office details</SectionLabel>
-            <div className="mt-3 grid grid-cols-3 gap-4">
-              {CPS_OFFICES.map((office) => (
-                <OfficeBlock key={office.country} office={office} />
-              ))}
-            </div>
+          <div className="grid grid-cols-3 gap-4">
+            {CPS_OFFICES.map((office) => (
+              <OfficeBlock key={office.country} office={office} />
+            ))}
           </div>
 
           <div className="flex-1" />
@@ -145,12 +141,6 @@ function DetailRow({ label, value, mono }: { label: string; value: string; mono?
         {value}
       </dd>
     </>
-  )
-}
-
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="text-[9px] font-semibold uppercase tracking-[1.2px] text-[#931115]">{children}</div>
   )
 }
 

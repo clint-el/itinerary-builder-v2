@@ -10,11 +10,32 @@ export function DocumentLayoutPicker({
   value,
   onChange,
   contextLine,
+  lockedMode,
 }: {
   value: DocumentLayoutMode
   onChange: (mode: DocumentLayoutMode) => void
   contextLine?: string
+  /** When set, layout is fixed (Travel Counsellors — itemised rolled-up only). */
+  lockedMode?: DocumentLayoutMode
 }) {
+  if (lockedMode) {
+    return (
+      <div>
+        <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-[#A1A1A1]">Layout</p>
+        <div className="rounded-lg border border-[#FECACA] bg-[#FEF2F2] px-3 py-2.5">
+          <div className="text-[12px] font-semibold text-[#931115]">Travel Counsellors · Itemised</div>
+          <p className="mt-1 text-[11px] leading-relaxed text-[#737373]">
+            Rolled-up schedule with head-office commission. Packaged layout is not available for TC
+            bookings.
+          </p>
+        </div>
+        {contextLine ? (
+          <p className="mt-2 text-[11px] leading-relaxed text-[#737373]">{contextLine}</p>
+        ) : null}
+      </div>
+    )
+  }
+
   return (
     <div>
       <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-[#A1A1A1]">Layout</p>

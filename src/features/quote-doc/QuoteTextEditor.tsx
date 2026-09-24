@@ -40,19 +40,19 @@ export function QuoteTextEditor({
       </div>
       <div className="rounded-lg border border-[#E5E7EB] bg-[#FAFAFA] p-3">
         <div className="text-[11px] font-bold uppercase tracking-wide text-[#737373]">
-          Notes &amp; standing commercial copy
+          Safari specific notes &amp; general notes
         </div>
         <div className="mt-3">
-          <div className="text-[10px] font-bold uppercase tracking-wide text-[#A1A1A1]">Notes</div>
+          <div className="text-[10px] font-bold uppercase tracking-wide text-[#A1A1A1]">Safari specific notes</div>
           <RichTextEditor
             value={draft.notesHtml}
             onChange={(notesHtml) => update({ notesHtml })}
-            placeholder="Planner notes printed on the document…"
+            placeholder="Safari-specific planner notes printed on the document…"
             minHeight={90}
           />
         </div>
         <div className="mt-3">
-          <div className="text-[10px] font-bold uppercase tracking-wide text-[#A1A1A1]">Standing commercial copy</div>
+          <div className="text-[10px] font-bold uppercase tracking-wide text-[#A1A1A1]">General notes</div>
           <RichTextEditor
             value={draft.standingCommercialHtml}
             onChange={(standingCommercialHtml) => update({ standingCommercialHtml })}

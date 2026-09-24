@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { useStore } from '@/app/store'
 import type { DietaryStatus, GuestDetail, Itinerary } from '@/shared/lib/types'
 import { cn } from '@/shared/lib/utils'
+import { guestsWithInvoiceContact } from '@/features/invoice-doc/invoiceAddresseeModel'
 import { GuestDetailsPanel } from './GuestDetailsPanel'
+import { GuestInvoiceBillingSection } from './GuestInvoiceBillingSection'
 import {
   autoAllocateGuestOnServices,
   bandToRole,
@@ -31,6 +33,7 @@ interface GuestFormState {
   note: string
   dietary: string
   dietaryNone: boolean
+  invoiceContact: boolean
 }
 
 interface GuestDetailsSheetProps {
@@ -112,12 +115,24 @@ export function GuestDetailsSheet({ open, onClose, itinerary, inline = false }: 
 
   if (!open && !inline) return null
 
-  function persist(next: GuestDetail[], nextServices = services) {
+  function persist(next: GuestDetail[], nextServices = services, itineraryPatch?: Partial<Itinerary>) {
     saveGuestDetails(itinerary.id, next)
-    upsertItinerary(syncItineraryPaxFromGuests(itinerary, next))
+    upsertItinerary(syncItineraryPaxFromGuests({ ...itinerary, ...itineraryPatch }, next))
     if (nextServices !== services) saveServices(itinerary.id, nextServices)
     setGuests(next)
     setTick((t) => t + 1)
+  }
+
+  function persistItinerary(patch: Partial<Itinerary>) {
+    upsertItinerary({ ...itinerary, ...patch })
+  }
+
+  function selectInvoiceGuest(guestId: string) {
+    const nextGuests = guestsWithInvoiceContact(guests, guestId || null)
+    persist(nextGuests, services, {
+      invoiceAddresseeGuestId: guestId || undefined,
+      invoiceAddresseeType: 'client',
+    })
   }
 
   function pushPending(kind: string, text: string) {
@@ -139,6 +154,7 @@ export function GuestDetailsSheet({ open, onClose, itinerary, inline = false }: 
       note: '',
       dietary: '',
       dietaryNone: false,
+      invoiceContact: false,
     })
     setBreachAck(false)
   }
@@ -155,6 +171,7 @@ export function GuestDetailsSheet({ open, onClose, itinerary, inline = false }: 
       note: g.note || '',
       dietary: dietaryStatusOf(g) === 'recorded' ? g.dietary || '' : '',
       dietaryNone: dietaryStatusOf(g) === 'none',
+      invoiceContact: !!g.invoiceContact,
     })
     setBreachAck(false)
   }
@@ -192,7 +209,7 @@ export function GuestDetailsSheet({ open, onClose, itinerary, inline = false }: 
     if (form.id) {
       const prev = guests.find((g) => g.id === form.id)
       if (!prev) return
-      const next = guests.map((g) =>
+      let next = guests.map((g) =>
         g.id !== form.id
           ? g
           : {
@@ -205,9 +222,21 @@ export function GuestDetailsSheet({ open, onClose, itinerary, inline = false }: 
               note: form.note,
               dietary: form.dietaryNone ? '' : form.dietary.trim(),
               dietaryStatus: dietaryStatusFromForm(form),
+              invoiceContact: form.invoiceContact,
             },
       )
-      persist(next)
+      if (form.invoiceContact) {
+        next = guestsWithInvoiceContact(next, form.id)
+        persist(next, services, {
+          invoiceAddresseeGuestId: form.id,
+          invoiceAddresseeType: 'client',
+        })
+      } else if (prev.invoiceContact) {
+        next = guestsWithInvoiceContact(next, null)
+        persist(next, services, { invoiceAddresseeGuestId: undefined })
+      } else {
+        persist(next)
+      }
       const nm =
         [form.first, form.last].filter(Boolean).join(' ').trim() || 'Unnamed Guest'
       if (form.wasPlaceholder && nm !== 'Unnamed Guest') {
@@ -230,9 +259,17 @@ export function GuestDetailsSheet({ open, onClose, itinerary, inline = false }: 
       g.note = form.note
       g.dietary = form.dietaryNone ? '' : form.dietary.trim()
       g.dietaryStatus = dietaryStatusFromForm(form)
-      const next = [...guests, g]
+      g.invoiceContact = form.invoiceContact
+      let next = [...guests, g]
+      if (form.invoiceContact) next = guestsWithInvoiceContact(next, g.id)
       const nextServices = autoAllocateGuestOnServices(services, next.length)
-      persist(next, nextServices)
+      persist(
+        next,
+        nextServices,
+        form.invoiceContact
+          ? { invoiceAddresseeGuestId: g.id, invoiceAddresseeType: 'client' }
+          : undefined,
+      )
       const nm =
         [form.first, form.last].filter(Boolean).join(' ').trim() || 'Unnamed Guest'
       pushPending(
@@ -272,17 +309,26 @@ export function GuestDetailsSheet({ open, onClose, itinerary, inline = false }: 
   const deleteBlocked = deleteLines.some((l) => l.locked)
 
   const panel = (
-    <GuestDetailsPanel
-      guests={guests}
-      lines={lines}
-      assignments={assignments}
-      pending={pending}
-      onClearPending={() => setPending([])}
-      onAdd={openAdd}
-      onEdit={openEdit}
-      onDelete={(g) => setDeleteId(g.id)}
-      deleteBlockedIds={deleteBlockedIds}
-    />
+    <div className="flex flex-col gap-4">
+      <GuestInvoiceBillingSection
+        itinerary={itinerary}
+        guests={guests}
+        onChange={persistItinerary}
+        onSelectInvoiceGuest={selectInvoiceGuest}
+      />
+      <GuestDetailsPanel
+        itinerary={itinerary}
+        guests={guests}
+        lines={lines}
+        assignments={assignments}
+        pending={pending}
+        onClearPending={() => setPending([])}
+        onAdd={openAdd}
+        onEdit={openEdit}
+        onDelete={(g) => setDeleteId(g.id)}
+        deleteBlockedIds={deleteBlockedIds}
+      />
+    </div>
   )
 
   const formAge = form && form.age !== '' ? Number(form.age) : null
@@ -435,6 +481,20 @@ export function GuestDetailsSheet({ open, onClose, itinerary, inline = false }: 
               <span className="text-[11.5px] text-[#B45309]">{ageHint(form)}</span>
             ) : null}
           </section>
+
+          <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-[#E5E7EB] bg-[#FAFAFA] px-3 py-2.5">
+            <input
+              type="checkbox"
+              checked={form.invoiceContact}
+              onChange={(e) => setForm({ ...form, invoiceContact: e.target.checked })}
+              className="mt-0.5"
+            />
+            <span className="text-[12.5px] leading-snug text-[#525252]">
+              <span className="font-semibold text-[#171717]">Invoice contact</span>
+              <br />
+              Use this guest as the client name on the invoice when Invoiced to is set to Client.
+            </span>
+          </label>
 
           <div className="border-t border-dashed border-[#E5E7EB]" />
 

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { guestRoleLabel } from '@/shared/lib/helpers'
-import type { GuestDetail } from '@/shared/lib/types'
+import type { GuestDetail, Itinerary } from '@/shared/lib/types'
 import { cn } from '@/shared/lib/utils'
 import {
   buildGuestIssues,
@@ -16,6 +16,10 @@ import {
 } from './guestUtils'
 
 interface GuestDetailsPanelProps {
+  itinerary?: Pick<
+    Itinerary,
+    'agency' | 'invoiceAddresseeType' | 'invoiceAddresseeGuestId'
+  >
   guests: GuestDetail[]
   lines: ServiceLineRef[]
   assignments: Map<string, string[]>
@@ -28,6 +32,7 @@ interface GuestDetailsPanelProps {
 }
 
 export function GuestDetailsPanel({
+  itinerary,
   guests,
   lines,
   assignments,
@@ -82,7 +87,7 @@ export function GuestDetailsPanel({
       ? `${partial.length} partially allocated`
       : 'All guests fully allocated'
 
-  const issues = buildGuestIssues(guests, assignments, lines)
+  const issues = buildGuestIssues(guests, assignments, lines, itinerary)
 
   return (
     <div className="flex flex-col gap-4 font-sans">
@@ -312,6 +317,9 @@ function GuestRow({
           </span>
           {guest.lead ? (
             <span className="text-[11px] font-semibold text-[#931115]">Lead Traveler</span>
+          ) : null}
+          {guest.invoiceContact ? (
+            <span className="text-[11px] font-semibold text-[#0369A1]">Invoice contact</span>
           ) : null}
           {placeholder ? (
             <span className="inline-flex h-[18px] w-fit items-center rounded-full bg-[#FEF3C7] px-1.5 text-[10.5px] font-bold uppercase tracking-wide text-[#92400E]">

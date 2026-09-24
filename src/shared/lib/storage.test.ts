@@ -98,7 +98,7 @@ describe('storage', () => {
 
   it('generates next inquiry id after highest root CPS number', () => {
     const next = nextInquiryId(listItineraries())
-    expect(next).toBe('CPS5689')
+    expect(next).toBe('CPS5690')
   })
 
   it('seeds CPS5688 draft from legacy CSV with all service tabs', () => {

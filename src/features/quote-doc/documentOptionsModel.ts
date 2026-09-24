@@ -18,6 +18,14 @@ export function isTravelCounsellorsAgency(itinerary: Pick<Itinerary, 'agency'>):
   return /travel counsellors/i.test(itinerary.agency ?? '')
 }
 
+/** TC always uses rolled-up B2B itemised — packaged layout is not offered (BR-I56). */
+export function effectiveLayoutMode(
+  itinerary: Pick<Itinerary, 'agency'>,
+  requested: DocumentLayoutMode,
+): DocumentLayoutMode {
+  return isTravelCounsellorsAgency(itinerary) ? 'itemised' : requested
+}
+
 /** Direct client bookings have no agency; packaged output uses B2C disclosure rules. */
 export function isB2cChannel(itinerary: Pick<Itinerary, 'agency'>): boolean {
   const agency = itinerary.agency?.trim() ?? ''
@@ -66,9 +74,10 @@ export function resolveInvoiceDocumentOptions(
   input: { layoutMode: DocumentLayoutMode },
 ): ResolvedInvoiceDocumentOptions {
   const travelCounsellors = isTravelCounsellorsAgency(itinerary)
+  const layoutMode = effectiveLayoutMode(itinerary, input.layoutMode)
   return {
-    layoutMode: input.layoutMode,
-    presentation: presentationFromLayoutMode(input.layoutMode, itinerary),
+    layoutMode,
+    presentation: travelCounsellors ? 'B2B_ITEMISED' : presentationFromLayoutMode(layoutMode, itinerary),
     lifecycleStage: deriveInvoiceLifecycleStage(itinerary),
     renderingDepth: deriveRenderingDepth(travelCounsellors),
     travelCounsellors,
@@ -86,9 +95,11 @@ export function resolveQuoteDocumentOptions(
   itinerary: Pick<Itinerary, 'agency'>,
   input: { layoutMode: DocumentLayoutMode },
 ): ResolvedQuoteDocumentOptions {
+  const travelCounsellors = isTravelCounsellorsAgency(itinerary)
+  const layoutMode = effectiveLayoutMode(itinerary, input.layoutMode)
   return {
-    layoutMode: input.layoutMode,
-    presentation: presentationFromLayoutMode(input.layoutMode, itinerary),
+    layoutMode,
+    presentation: travelCounsellors ? 'B2B_ITEMISED' : presentationFromLayoutMode(layoutMode, itinerary),
     showTerms: true,
   }
 }
@@ -102,7 +113,18 @@ function lifecycleStageLabel(stage: InvoiceLifecycleStage): string {
 }
 
 export function invoiceDocumentOptionsSummary(options: ResolvedInvoiceDocumentOptions): string {
-  const parts = [documentLayoutLabel(options.layoutMode), lifecycleStageLabel(options.lifecycleStage)]
-  if (options.travelCounsellors) parts.push('Travel Counsellors')
-  return parts.join(' · ')
+  if (options.travelCounsellors) {
+    return `Travel Counsellors · Rolled up · ${lifecycleStageLabel(options.lifecycleStage)}`
+  }
+  return [documentLayoutLabel(options.layoutMode), lifecycleStageLabel(options.lifecycleStage)].join(' · ')
+}
+
+export function invoiceCoverKindLabel(travelCounsellors: boolean): string {
+  return travelCounsellors ? 'Travel Counsellors Invoice' : 'Tour Package Invoice'
+}
+
+export function quotationCoverKindLabel(travelCounsellors: boolean, packaged: boolean): string {
+  if (travelCounsellors) return 'Travel Counsellors Quotation'
+  if (packaged) return 'Packaged quotation'
+  return 'Quotation'
 }

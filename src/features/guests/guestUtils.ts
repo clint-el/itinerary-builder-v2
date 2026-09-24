@@ -1,3 +1,4 @@
+import { invoiceAddresseeReady } from '@/features/invoice-doc/invoiceAddresseeModel'
 import { guestRoleLabel } from '@/shared/lib/helpers'
 import type { AddedService, GuestDetail, Itinerary, QuoteGroup } from '@/shared/lib/types'
 
@@ -178,6 +179,10 @@ export function buildGuestIssues(
   guests: GuestDetail[],
   assignments: Map<string, string[]>,
   lines: ServiceLineRef[],
+  itinerary?: Pick<
+    Itinerary,
+    'agency' | 'invoiceAddresseeType' | 'invoiceAddresseeGuestId'
+  >,
 ): { text: string }[] {
   const issues: { text: string }[] = []
   const unassigned = guests.filter((g) => {
@@ -202,6 +207,10 @@ export function buildGuestIssues(
     issues.push({
       text: `${noAge.length} guest${noAge.length === 1 ? '' : 's'} without an age — supplier age bands cannot be validated automatically.`,
     })
+  }
+  if (itinerary) {
+    const ready = invoiceAddresseeReady(itinerary, guests)
+    if (!ready.ok) issues.push({ text: ready.message })
   }
   return issues
 }
