@@ -596,38 +596,6 @@ export type AgentInvoiceProfile = {
   addressLines: string[]
 }
 
-const INTRIQ_JOURNEY_PROFILE: AgentInvoiceProfile = {
-  legalName: 'INTRIQ JOURNEY LIMITED',
-  addressLines: [
-    '8/F., SI TOI COMMERCIAL BUILDING,',
-    '62-63 CONNAUGHT ROAD WEST,',
-    'SHEUNG WAN, H.K',
-  ],
-}
-
-const TRAVEL_COUNSELLORS_INVOICE_PROFILE: AgentInvoiceProfile = {
-  legalName: 'Travel Counsellors Head Office',
-  addressLines: [
-    'Nottingham House',
-    'Riverside Business Park',
-    'Nottingham NG2 1RU',
-    'United Kingdom',
-  ],
-}
-
-/** Demo agent legal-entity profiles — printed in the invoice Invoiced to block. */
-const AGENT_INVOICE_PROFILES: Record<string, AgentInvoiceProfile> = {
-  'Black Tomato': INTRIQ_JOURNEY_PROFILE,
-  'Zoo Groups': {
-    legalName: 'ZOO GROUPS TRAVEL LTD',
-    addressLines: ['14 Wildlife Lane', 'Nairobi', 'Kenya'],
-  },
-  CPS: {
-    legalName: 'CHELI & PEACOCK SAFARIS LTD',
-    addressLines: ['Fedha Towers, Muindi Mbingu Street', 'Nairobi', 'Kenya'],
-  },
-}
-
 export function invoiceRecipientProfile(
   itinerary: Pick<
     Itinerary,
