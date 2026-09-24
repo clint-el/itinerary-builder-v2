@@ -249,6 +249,17 @@ export function InvoiceDocPage() {
     upsertItinerary({ ...itinerary, quoteTextDraft: next })
   }
 
+  function handleDownloadPdf() {
+    const previousTitle = document.title
+    document.title = invoiceNumber
+    const restoreTitle = () => {
+      document.title = previousTitle
+      window.removeEventListener('afterprint', restoreTitle)
+    }
+    window.addEventListener('afterprint', restoreTitle)
+    window.print()
+  }
+
   function handleGenerateInvoice() {
     if (financeBlocked) {
       showFlash('Invoice generation is blocked while Finance Lock is engaged')
@@ -282,10 +293,39 @@ export function InvoiceDocPage() {
       <style>{`
         @media print {
           @page { size: A4; margin: 0; }
+          html, body {
+            height: auto !important;
+            overflow: visible !important;
+            background: #FFFFFF !important;
+          }
+          body, .inv-print-area, .inv-print-area * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
           .inv-chrome { display: none !important; }
-          .inv-scroll { overflow: visible !important; padding: 0 !important; }
-          .inv-print-area { transform: none !important; gap: 0 !important; }
-          .inv-page { box-shadow: none !important; page-break-after: always; }
+          .inv-shell, .inv-scroll {
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            padding: 0 !important;
+            background: #FFFFFF !important;
+          }
+          .inv-print-area {
+            transform: none !important;
+            width: auto !important;
+            margin: 0 !important;
+            gap: 0 !important;
+          }
+          .inv-page, .qd-page {
+            box-shadow: none !important;
+            margin: 0 !important;
+            overflow: visible !important;
+            break-after: page;
+            break-inside: avoid;
+            page-break-after: always;
+            page-break-inside: avoid;
+          }
+          .inv-page:last-of-type, .qd-page:last-of-type { break-after: auto; page-break-after: auto; }
         }
       `}</style>
 
@@ -352,7 +392,7 @@ export function InvoiceDocPage() {
             <Mail className="size-3.5" /> Send to agent
           </Button>
         ) : null}
-        <Button className="h-[34px] shrink-0 bg-[#931115] hover:bg-[#7a0e12]" onClick={() => window.print()}>
+        <Button className="h-[34px] shrink-0 bg-[#931115] hover:bg-[#7a0e12]" onClick={handleDownloadPdf}>
           <Download className="size-3.5" /> Download PDF
         </Button>
       </div>
