@@ -55,6 +55,17 @@ export const CPS_BANK_ACCOUNTS: CpsBankAccount[] = [
     correspondentSwift: 'CITIUS33',
     taxLines: ['TIN No. 107721702'],
   },
+  {
+    country: 'Uganda',
+    accountName: 'Cheli & Peacock Safaris Uganda Ltd.',
+    bankLines: ['Stanbic Bank Uganda Limited', 'Crested Towers Branch', 'Kampala, Uganda'],
+    accountNumber: '9030012345678',
+    swiftCode: 'SBICUGKX',
+    correspondentName: 'Standard Bank Johannesburg',
+    correspondentAccount: '004215998',
+    correspondentSwift: 'SBZAZAJJ',
+    taxLines: ['TIN No. 1012345678'],
+  },
 ]
 
 export const CPS_OFFICES: CpsOffice[] = [
@@ -68,23 +79,28 @@ export const CPS_OFFICES: CpsOffice[] = [
     phones: ['+254 730 721 000'],
   },
   {
+    country: 'Tanzania',
+    addressLines: ['Sopa Plaza 99, Serengeti Road', 'P.O. Box 1246, Arusha, Tanzania'],
+    email: 'info@chelipeacock.com',
+    phones: ['+255 764 039 900', 'Office Mobile — +255 762 784 565'],
+  },
+  {
     country: 'Rwanda',
     addressLines: ['Kigali Alliance Business Centre', 'KN 5 RD, Block B, First Floor, Kigali, Rwanda'],
     email: 'info@chelipeacock.com',
     phones: ['+250 788 317 757'],
   },
   {
-    country: 'Tanzania',
-    addressLines: ['Sopa Plaza 99, Serengeti Road', 'P.O. Box 1246, Arusha, Tanzania'],
+    country: 'Uganda',
+    addressLines: ['Plot 14 Parliament Avenue', 'Crested Towers, 4th Floor, Kampala, Uganda'],
     email: 'info@chelipeacock.com',
-    phones: ['+255 764 039 900', 'Office Mobile — +255 762 784 565'],
+    phones: ['+256 414 258 900', 'Office Mobile — +256 772 345 678'],
   },
 ]
 
 /** Bank remittance (all accounts on page 1) + office details (page 2) — appended to every invoice. */
 export const CPS_REMITTANCE_PAGE_COUNT = 2
 
-export function remittanceStartPage(isPackaged: boolean, showTerms: boolean): number {
-  if (isPackaged) return showTerms ? 5 : 4
+export function remittanceStartPage(_isPackaged: boolean, showTerms: boolean): number {
   return showTerms ? 6 : 5
 }

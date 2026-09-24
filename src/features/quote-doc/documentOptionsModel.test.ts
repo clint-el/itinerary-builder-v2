@@ -83,7 +83,7 @@ describe('documentOptionsModel', () => {
 
   it('uses dedicated cover labels for Travel Counsellors documents', () => {
     expect(invoiceCoverKindLabel(true)).toBe('Travel Counsellors Invoice')
-    expect(invoiceCoverKindLabel(false)).toBe('Tour Package Invoice')
+    expect(invoiceCoverKindLabel(false)).toBe('Safari Invoice')
     expect(quotationCoverKindLabel(true, false)).toBe('Travel Counsellors Quotation')
     expect(quotationCoverKindLabel(false, true)).toBe('Packaged quotation')
   })

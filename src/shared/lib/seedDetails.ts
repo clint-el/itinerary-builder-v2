@@ -1,4 +1,5 @@
 import { buildInvoiceSnapshot } from '@/features/invoice-doc/invoiceSnapshotModel'
+import { defaultQuoteText } from '@/features/quote-doc/quoteTextModel'
 import { buildQuoteSnapshot } from '@/features/quote-doc/quoteSnapshotModel'
 import { CATALOG, SEED_ITINERARIES, SEED_QUOTE_GROUPS, TAB_META } from './catalogs'
 import { nightsBetween, quoteGroupsTotal } from './helpers'
@@ -1545,6 +1546,7 @@ export function buildSeedInvoiceDocumentsMap(): Record<string, InvoiceDocument> 
       guestDetails,
       stage: 'deposit',
       generatedBy: it.safariPlanner || 'Safari planner',
+      quoteText: defaultQuoteText(),
     })
     doc.generatedAt = seed.generatedAt
     doc.invoiceDate = seed.invoiceDate

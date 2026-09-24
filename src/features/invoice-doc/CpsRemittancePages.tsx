@@ -48,14 +48,14 @@ export function CpsRemittancePages({
             Please remit payment in USD to the appropriate account below. Quote the invoice reference on all
             transfers.
           </p>
-          <div className="mt-5 flex flex-col gap-4">
+          <div className="mt-5 grid grid-cols-2 gap-4">
             {CPS_BANK_ACCOUNTS.map((account) => (
               <BankBlock key={account.country} account={account} />
             ))}
           </div>
           <div className="flex-1" />
           <PageFooter
-            left="Use the Kenya, Tanzania, or Rwanda account matching the invoicing entity for this booking"
+            left="Use the Kenya, Tanzania, Rwanda, or Uganda account matching the invoicing entity for this booking"
             right={`${startPage} / ${totalPages}`}
           />
         </div>
@@ -68,14 +68,17 @@ export function CpsRemittancePages({
       >
         <Header title="Office details" refLabel={refLabel} />
         <div className="flex flex-1 flex-col px-14 pb-8 pt-[34px]">
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 gap-4">
             {CPS_OFFICES.map((office) => (
               <OfficeBlock key={office.country} office={office} />
             ))}
           </div>
 
           <div className="flex-1" />
-          <PageFooter left="Cheli & Peacock Safaris — Kenya · Tanzania · Rwanda" right={`${startPage + 1} / ${totalPages}`} />
+          <PageFooter
+            left="Cheli & Peacock Safaris — Kenya · Tanzania · Rwanda · Uganda"
+            right={`${startPage + 1} / ${totalPages}`}
+          />
         </div>
       </section>
     </>

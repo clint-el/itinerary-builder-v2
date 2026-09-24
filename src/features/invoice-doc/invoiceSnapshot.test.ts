@@ -2,10 +2,13 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import {
   buildInvoiceSnapshot,
   buildPaymentPosition,
+  clientPaymentsOnSell,
   invoiceNumberFor,
   isInvoiceStale,
 } from '@/features/invoice-doc/invoiceSnapshotModel'
 import { itineraryCommercialFp } from '@/shared/lib/lifecycleRules'
+import { linesForRateBasis } from '@/features/quote-doc/quoteRateBasisModel'
+import { plainToParagraphHtml } from '@/features/quote-doc/quoteTextModel'
 import { buildDepositSummary, buildSummaryPricing, linesFromServices } from '@/features/summary/summaryModel'
 import {
   ensureSeeded,
@@ -70,6 +73,26 @@ describe('invoiceSnapshotModel', () => {
     localStorage.clear()
   })
 
+  it('freezes general cancellation policy on quoteText', () => {
+    const itinerary = baseItinerary()
+    const services = [service('s1', 10000, 7700)]
+    const snap = buildInvoiceSnapshot({
+      itinerary,
+      services,
+      quoteGroups: [],
+      guestDetails: [],
+      generatedBy: 'Planner',
+      quoteText: {
+        generalInclusionsHtml: '',
+        generalExclusionsHtml: '',
+        notesHtml: '',
+        standingCommercialHtml: '',
+        generalCancellationPolicyHtml: plainToParagraphHtml('Standard agency cancellation applies.'),
+      },
+    })
+    expect(snap.quoteText?.generalCancellationPolicyHtml).toContain('Standard agency cancellation')
+  })
+
   it('builds deposit invoice with full total and payment position', () => {
     const itinerary = baseItinerary()
     const services = [service('s1', 10000, 7700)]
@@ -85,8 +108,9 @@ describe('invoiceSnapshotModel', () => {
     expect(snap.sellTotal).toBe(7700)
     expect(snap.lifecycleStage).toBe('deposit')
     expect(snap.paymentPosition.total).toBe(7700)
-    expect(snap.paymentPosition.paid).toBe(5000)
-    expect(snap.paymentPosition.balance).toBe(5000)
+    expect(snap.paymentPosition.paid).toBe(3850)
+    expect(snap.paymentPosition.balance).toBe(3850)
+    expect(snap.paymentPosition.paid + snap.paymentPosition.balance).toBe(7700)
   })
 
   it('updates in place with same invoice number and revision log', () => {
@@ -145,14 +169,26 @@ describe('invoiceSnapshotModel', () => {
     expect(getItinerary('CPS5681')?.firstInvoiceDate).toBe('2026-07-05')
   })
 
-  it('full stage sets amount due immediately to balance', () => {
+  it('full stage puts outstanding balance on balance payment due', () => {
     const itinerary = baseItinerary({ balanceUsd: 3000 })
     const services = [service('s1', 10000, 7700)]
-    const lines = linesFromServices(services, [])
+    const lines = linesForRateBasis(linesFromServices(services, []), 'nett')
     const pricing = buildSummaryPricing(lines, 2)
     const deposits = buildDepositSummary(lines, pricing.sellNumber)
-    const pos = buildPaymentPosition(itinerary, pricing.sellNumber, deposits, 'full')
-    expect(pos.amountDueImmediately).toBe(3000)
+    const pos = buildPaymentPosition(itinerary, pricing.sellNumber, deposits, 'full', '2026-09-01')
+    expect(pricing.sellNumber).toBe(7700)
+    expect(pos.amountDueImmediately).toBe(0)
+    expect(pos.futureAmountDue).toBe(2310)
+    expect(pos.paid + (pos.futureAmountDue ?? 0)).toBe(7700)
+    expect(pos.futureDueDate).toBeTruthy()
+  })
+
+  it('clientPaymentsOnSell scales ledger when booking total differs from sell', () => {
+    const itinerary = baseItinerary({ totalUsd: 10000, balanceUsd: 5000 })
+    const { paid, balance } = clientPaymentsOnSell(itinerary, 7700)
+    expect(paid).toBe(3850)
+    expect(balance).toBe(3850)
+    expect(paid + balance).toBe(7700)
   })
 
   it('invoiceNumberFor uses reference suffix', () => {

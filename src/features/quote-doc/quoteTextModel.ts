@@ -45,6 +45,13 @@ export function hasRichTextContent(html: string | undefined) {
   return stripped.length > 0
 }
 
+export const DEFAULT_GENERAL_CANCELLATION_POLICY = [
+  'Cancellations must be submitted in writing to your safari planner.',
+  'Services remain provisional until deposit is received and suppliers confirm.',
+  'After confirmation, refunds follow each supplier’s policy below; non-refundable supplier costs and reasonable agency fees may apply.',
+  'Comprehensive travel insurance including cancellation cover is strongly recommended.',
+].join('\n')
+
 export function defaultQuoteText(): QuoteTextContent {
   return {
     generalInclusionsHtml: linesToBulletHtml(GENERAL_LEDGER_INCLUSIONS),
@@ -53,6 +60,7 @@ export function defaultQuoteText(): QuoteTextContent {
     standingCommercialHtml: plainToParagraphHtml(
       'Rates are subject to statutory increases, park fees, and fuel surcharges beyond our control.',
     ),
+    generalCancellationPolicyHtml: plainToParagraphHtml(DEFAULT_GENERAL_CANCELLATION_POLICY),
   }
 }
 
@@ -80,6 +88,9 @@ export function resolveQuoteText(
       standingCommercialHtml: hasRichTextContent(base.standingCommercialHtml)
         ? base.standingCommercialHtml
         : defaults.standingCommercialHtml,
+      generalCancellationPolicyHtml: hasRichTextContent(base.generalCancellationPolicyHtml)
+        ? base.generalCancellationPolicyHtml!
+        : defaults.generalCancellationPolicyHtml,
     }
   }
 
@@ -94,5 +105,6 @@ export function resolveQuoteText(
     standingCommercialHtml: hasRichTextContent(base.standingCommercial)
       ? plainToParagraphHtml(base.standingCommercial!)
       : defaults.standingCommercialHtml,
+    generalCancellationPolicyHtml: defaults.generalCancellationPolicyHtml,
   }
 }

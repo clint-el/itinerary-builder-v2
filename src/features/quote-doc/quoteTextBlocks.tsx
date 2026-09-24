@@ -10,14 +10,12 @@ export function QuoteTextSupplement({ quoteText }: { quoteText: QuoteTextContent
 
   return (
     <div className="mt-[26px] border-t border-[#EFEFEF] pt-[26px]">
-      <div className="text-[9px] font-semibold uppercase tracking-[1.2px] text-[#931115]">
-        Safari specific notes &amp; general notes
-      </div>
-
-      <div className="mt-4 rounded-lg border border-[#E5E7EB] px-4 py-3">
-        <div className="text-[9px] font-semibold uppercase tracking-[1.2px] text-[#931115]">Safari specific notes</div>
+      <div>
+        <div className="text-[9px] font-semibold uppercase tracking-[1.2px] text-[#8A8A8A]">
+          Safari specific notes
+        </div>
         {hasNotes ? (
-          <RichTextDocumentContent html={notes} variant="plain" className="mt-2 text-[#3D3D3D]" />
+          <RichTextDocumentContent html={notes} variant="muted" className="mt-2" />
         ) : (
           <p className="mt-2 text-[11px] text-[#A1A1AA]">No safari specific notes added.</p>
         )}

@@ -94,7 +94,10 @@ export function InvoiceDocPage() {
     Boolean(invoice && itinerary && !stale && snapshotLayoutMode === layoutMode)
 
   const renderModel = useMemo(() => {
-    if (useFrozenSnapshot && invoice) return renderModelFromSnapshot(invoice, stale)
+    if (useFrozenSnapshot && invoice) {
+      const frozen = renderModelFromSnapshot(invoice, stale)
+      return { ...frozen, quoteText }
+    }
     if (itinerary && docOptions) {
       return renderModelFromLive({
         itinerary,
@@ -186,11 +189,15 @@ export function InvoiceDocPage() {
     if (isPackaged) {
       const base: PageDef[] = [
         { key: 1, label: 'Cover' },
-        { key: 2, label: 'Includes' },
-        { key: 3, label: 'Totals' },
+        { key: 2, label: 'Schedule' },
+        { key: 3, label: 'Payment' },
+        { key: 4, label: 'Inclusions' },
       ]
-      if (termsOn) base.push({ key: 4, label: 'Terms' })
-      base.push({ key: base.length + 1, label: 'Remittance' }, { key: base.length + 2, label: 'Offices' })
+      if (termsOn) base.push({ key: 5, label: 'Terms' })
+      base.push(
+        { key: termsOn ? 6 : 5, label: 'Remittance' },
+        { key: termsOn ? 7 : 6, label: 'Offices' },
+      )
       return base
     }
     const base: PageDef[] = [
@@ -495,12 +502,20 @@ export function InvoiceDocPage() {
           ))}
         </div>
 
-        {isDraftMode ? (
-          <div className="inv-chrome w-[300px] shrink-0 overflow-y-auto border-r border-[#18181B] bg-[#FAFAFA] p-3">
-            <div className="mb-2 text-[10px] font-bold uppercase tracking-wide text-[#737373]">Invoice text</div>
-            <QuoteTextEditor value={quoteText} onChange={setQuoteText} onPersist={persistQuoteText} />
-          </div>
-        ) : null}
+        <div className="inv-chrome w-[300px] shrink-0 overflow-y-auto border-r border-[#18181B] bg-[#FAFAFA] p-3">
+          <div className="mb-2 text-[10px] font-bold uppercase tracking-wide text-[#737373]">Invoice text</div>
+          {invoice && !stale ? (
+            <p className="mb-2 text-[10px] leading-snug text-[#737373]">
+              Update invoice to freeze changes into the sent PDF.
+            </p>
+          ) : null}
+          <QuoteTextEditor
+            value={quoteText}
+            onChange={setQuoteText}
+            onPersist={persistQuoteText}
+            includeInvoiceTerms
+          />
+        </div>
 
         <div ref={viewportRef} className="inv-scroll min-w-0 flex-1 overflow-auto py-7">
           <div

@@ -28,6 +28,7 @@ import { partyGuests } from '@/shared/lib/helpers'
 import type {
   AddedService,
   GuestDetail,
+  InvoicePaymentPosition,
   Itinerary,
   PaxPriceSplit,
   QuoteDocument,
@@ -175,6 +176,8 @@ export type QuoteRenderModel = {
   priceMode: 'total' | 'pp'
   /** Present on invoice documents rendered through packaged layout. */
   invoiceAddressee?: InvoiceAddresseeProfile
+  /** Packaged invoice page 3 — payment position (itemised parity). */
+  paymentPosition?: InvoicePaymentPosition
 }
 
 function baseRenderFields(quote: QuoteDocument, stale: boolean): QuoteRenderModel {

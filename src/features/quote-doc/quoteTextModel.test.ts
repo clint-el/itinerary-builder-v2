@@ -31,6 +31,28 @@ describe('quoteTextModel', () => {
     })
 
     expect(resolved.notesHtml).toBe(html)
+    expect(resolved.generalCancellationPolicyHtml).toContain('Cancellations must be submitted')
+  })
+
+  it('seeds default general cancellation policy when unset', () => {
+    const resolved = resolveQuoteText({
+      generalInclusionsHtml: linesToBulletHtml(['One']),
+      generalExclusionsHtml: linesToBulletHtml(['Two']),
+      notesHtml: '',
+      standingCommercialHtml: plainToParagraphHtml('Footer'),
+    })
+    expect(resolved.generalCancellationPolicyHtml).toContain('travel insurance')
+  })
+
+  it('preserves general cancellation policy HTML', () => {
+    const resolved = resolveQuoteText({
+      generalInclusionsHtml: linesToBulletHtml(['One']),
+      generalExclusionsHtml: linesToBulletHtml(['Two']),
+      notesHtml: '',
+      standingCommercialHtml: '',
+      generalCancellationPolicyHtml: '<p>All bookings subject to our standard terms.</p>',
+    })
+    expect(resolved.generalCancellationPolicyHtml).toContain('standard terms')
   })
 
   it('detects empty rich text', () => {

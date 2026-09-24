@@ -13,6 +13,11 @@ import { BookingConsultantRow, GuestDetailsSection, InvoicedToProfile } from '@/
 import { RichTextDocumentContent } from '@/features/quote-doc/RichTextDocumentContent'
 import { QuoteTextSupplement } from '@/features/quote-doc/quoteTextBlocks'
 import {
+  GeneralCancellationPolicySection,
+  PerSupplierPaymentTermsTable,
+  SupplierCancellationPolicyCard,
+} from '@/features/invoice-doc/invoiceTermsSections'
+import {
   CpsRemittancePages,
   RemittanceLedgerHeader,
 } from '@/features/invoice-doc/CpsRemittancePages'
@@ -22,6 +27,12 @@ import {
   type InvoiceRenderModel,
 } from '@/features/invoice-doc/invoiceSnapshotModel'
 import type { Guest, GuestDetail, Itinerary } from '@/shared/lib/types'
+import {
+  DottedTotalRow,
+  PaxSplitCell,
+  PaymentPosRow,
+  paymentDueRowLabel,
+} from '@/features/quote-doc/documentTotalsBlocks'
 import { cn } from '@/shared/lib/utils'
 
 const PAGE_W = 794
@@ -204,7 +215,7 @@ export function InvoiceLedgerContent({
                   >
                     <span className="text-[#3D3D3D]">{row.description}</span>
                     <span className="text-right font-medium">{fmtLedgerAmount(row.grossPrice)}</span>
-                    <span className="text-right font-['IBM_Plex_Mono'] text-[#6E6E6E]">
+                    <span className="text-right text-[#6E6E6E]">
                       {row.commission != null ? fmtLedgerAmount(row.commission) : '—'}
                     </span>
                     <span className="text-right font-medium">{fmtLedgerAmount(row.netAmount)}</span>
@@ -253,14 +264,14 @@ export function InvoiceLedgerContent({
                         key={`${group.name}-${i}`}
                         className={cn(GRID_SCHEDULE, 'border-b border-[#F5F5F5] py-[5px] text-[10.5px] leading-snug')}
                       >
-                        <span className="font-['IBM_Plex_Mono'] text-[#6E6E6E]">{row.date}</span>
-                        <span className="font-semibold">{row.supplier}</span>
+                        <span className="text-[#6E6E6E]">{row.date}</span>
+                        <span className="font-semibold text-[#3D3D3D]">{row.supplier}</span>
                         <span className="text-[#3D3D3D]">{row.service}</span>
                         <span className="text-center text-[#6E6E6E]">{row.pax}</span>
-                        <span className="text-center font-['IBM_Plex_Mono'] text-[#6E6E6E]">{row.qty}</span>
-                        <span className="text-center font-['IBM_Plex_Mono'] text-[#6E6E6E]">{row.duration}</span>
-                        <span className="text-right font-['IBM_Plex_Mono'] text-[#6E6E6E]">{fmtLedgerAmount(row.unitPrice)}</span>
-                        <span className="text-right font-medium">{fmtLedgerAmount(row.amount)}</span>
+                        <span className="text-center text-[#6E6E6E]">{row.qty}</span>
+                        <span className="text-center text-[#6E6E6E]">{row.duration}</span>
+                        <span className="text-right text-[#6E6E6E]">{fmtLedgerAmount(row.unitPrice)}</span>
+                        <span className="text-right font-medium text-[#3D3D3D]">{fmtLedgerAmount(row.amount)}</span>
                       </div>
                     ))}
                   </div>
@@ -318,13 +329,18 @@ export function InvoiceLedgerContent({
           <div className="mt-7">
             <SectionLabel>Payment position</SectionLabel>
             <div className="mt-3 flex flex-col gap-2">
-              <PaymentPosRow label="Total trip cost" value={fmtLedgerUsd(pos.total)} tone="neutral" />
-              <PaymentPosRow label="Amount paid" value={fmtLedgerUsd(pos.paid)} tone="paid" />
-              <PaymentPosRow label="Balance due" value={fmtLedgerUsd(pos.balance)} tone="balance" />
-              <PaymentPosRow label="Due immediately" value={fmtLedgerUsd(pos.amountDueImmediately)} tone="urgent" />
+              <PaymentPosRow label="Total Safari Cost" value={fmtLedgerUsd(pos.total)} tone="neutral" />
+              <PaymentPosRow label="Deposit Paid" value={fmtLedgerUsd(pos.paid)} tone="paid" />
+              {pos.amountDueImmediately > 0 ? (
+                <PaymentPosRow
+                  label={paymentDueRowLabel('Deposit due', pos.depositDueDate)}
+                  value={fmtLedgerUsd(pos.amountDueImmediately)}
+                  tone="urgent"
+                />
+              ) : null}
               {pos.futureAmountDue != null && pos.futureAmountDue > 0 ? (
                 <PaymentPosRow
-                  label={`Future due${pos.futureDueDate ? ` · ${pos.futureDueDate}` : ''}`}
+                  label={paymentDueRowLabel('Balance payment due', pos.futureDueDate)}
                   value={fmtLedgerUsd(pos.futureAmountDue)}
                   tone="future"
                 />
@@ -333,7 +349,7 @@ export function InvoiceLedgerContent({
           </div>
 
           <div className="mt-7">
-            <SectionLabel>Passenger price split</SectionLabel>
+            <SectionLabel>Guest price split</SectionLabel>
             <div className="mt-2 grid grid-cols-4 gap-3">
               <PaxSplitCell label="Total adults" value={String(paxPriceSplit.totalAdults)} />
               <PaxSplitCell label="Total children" value={String(paxPriceSplit.totalChildren)} />
@@ -405,47 +421,18 @@ export function InvoiceLedgerContent({
         >
           <LedgerHeader title="Payment terms and cancellation" refLabel={refLabel} />
           <div className="flex flex-1 flex-col px-14 pb-8 pt-[34px]">
-            <SectionLabel>Per-supplier payment terms</SectionLabel>
-            <div className="mt-2 border border-[#101010]">
-              <div className="grid grid-cols-[1fr_120px_80px_100px_80px] gap-2 border-b border-[#EFEFEF] px-4 py-[7px] text-[8.5px] font-semibold uppercase tracking-[0.9px] text-[#8A8A8A]">
-                <span>Supplier</span>
-                <span>Term</span>
-                <span>Deposit</span>
-                <span>Balance due</span>
-                <span>Tax code</span>
-              </div>
-              {paymentTerms.rows.map((row) => (
-                <div
-                  key={row.supplier}
-                  className="grid grid-cols-[1fr_120px_80px_100px_80px] gap-2 border-b border-[#EFEFEF] px-4 py-3 text-[11px] last:border-b-0"
-                >
-                  <span className="font-semibold">{row.supplier}</span>
-                  <span>{row.term}</span>
-                  <span>{row.deposit}</span>
-                  <span>{row.balanceDue}</span>
-                  <span className="text-[#8A8A8A]">{row.taxCode}</span>
-                </div>
-              ))}
-            </div>
+            <PerSupplierPaymentTermsTable paymentTerms={paymentTerms} />
+            <GeneralCancellationPolicySection quoteText={quoteText} />
 
             <div className="mt-7">
-              <SectionLabel>Cancellation policies</SectionLabel>
+              <SectionLabel>Supplier cancellation policies</SectionLabel>
               <div className="mt-2 flex flex-col gap-4">
                 {cancellationRows.length ? (
                   cancellationRows.map((row) => (
-                    <div key={row.supplier} className="border border-[#E4E4E4] px-4 py-3 text-[11px] leading-relaxed text-[#3D3D3D]">
-                      <p className="font-semibold">{row.supplier}</p>
-                      <p className="mt-2">{row.policy}</p>
-                      <p className="mt-1 text-[#525252]">
-                        {row.travelDates} · {row.refundableLabel}
-                      </p>
-                      {row.description ? (
-                        <p className="mt-2 whitespace-pre-wrap text-[#525252]">{row.description}</p>
-                      ) : null}
-                    </div>
+                    <SupplierCancellationPolicyCard key={row.supplier} row={row} />
                   ))
                 ) : (
-                  <p className="text-[12px] text-[#8A8A8A]">Cancellation policies appear once suppliers are on the itinerary.</p>
+                  <p className="text-[12px] text-[#8A8A8A]">Supplier cancellation policies appear once suppliers are on the itinerary.</p>
                 )}
               </div>
             </div>
@@ -551,59 +538,3 @@ function PageFooter({ left, right, bordered }: { left: string; right: string; bo
   )
 }
 
-function DottedTotalRow({
-  label,
-  amount,
-  accent,
-}: {
-  label: string
-  amount: string
-  accent?: string
-}) {
-  return (
-    <div className="flex items-baseline gap-2 py-1.5 text-[12.5px]">
-      <span className="shrink-0 text-[#525252]">{label}</span>
-      <span className="min-w-0 flex-1 border-b border-dotted border-[#D4D4D4]" />
-      <span className="shrink-0 font-medium" style={accent ? { color: accent } : undefined}>
-        {amount}
-      </span>
-    </div>
-  )
-}
-
-function PaxSplitCell({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-[#E5E7EB] px-3 py-2.5">
-      <div className="text-[9px] font-semibold uppercase tracking-wide text-[#8A8A8A]">{label}</div>
-      <div className="mt-0.5 font-['IBM_Plex_Mono'] text-[13px] font-semibold">{value}</div>
-    </div>
-  )
-}
-
-type PaymentPosTone = 'neutral' | 'paid' | 'balance' | 'urgent' | 'future'
-
-const PAYMENT_POS_TONES: Record<PaymentPosTone, { row: string; value: string }> = {
-  neutral: { row: 'border-[#E5E7EB] bg-[#FAFAFA]', value: 'text-[#101010]' },
-  paid: { row: 'border-[#BBF7D0] bg-[#F0FDF4]', value: 'text-[#15803D]' },
-  balance: { row: 'border-[#FDE68A] bg-[#FFFBEB]', value: 'text-[#B45309]' },
-  urgent: { row: 'border-[#FECACA] bg-[#FEF2F2]', value: 'text-[#931115]' },
-  future: { row: 'border-[#BFDBFE] bg-[#EFF6FF]', value: 'text-[#1D4ED8]' },
-}
-
-function PaymentPosRow({
-  label,
-  value,
-  tone = 'neutral',
-}: {
-  label: string
-  value: string
-  tone?: PaymentPosTone
-}) {
-  const styles = PAYMENT_POS_TONES[tone]
-  return (
-    <div className={cn('flex items-center justify-between gap-4 rounded-lg border px-4 py-3', styles.row)}>
-      <div className="text-[9px] font-semibold uppercase tracking-[1px] text-[#8A8A8A]">{label}</div>
-      <div className={cn("font-['IBM_Plex_Mono'] text-[15px] font-semibold", styles.value)}>{value}</div>
-    </div>
-  )
-}

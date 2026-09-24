@@ -258,10 +258,11 @@ export function QuoteDocPage() {
     if (isPackaged) {
       const base: PageDef[] = [
         { key: 1, label: 'Cover' },
-        { key: 2, label: 'Includes' },
+        { key: 2, label: 'Schedule' },
         { key: 3, label: 'Totals' },
+        { key: 4, label: 'Inclusions' },
       ]
-      if (termsOn) base.push({ key: 4, label: 'Terms' })
+      if (termsOn) base.push({ key: 5, label: 'Terms' })
       return base
     }
     const base: PageDef[] = [
@@ -938,7 +939,7 @@ export function QuoteDocPage() {
                 </p>
 
                 <div className="mt-6">
-                  <SectionLabel>Passenger price split</SectionLabel>
+                  <SectionLabel>Guest price split</SectionLabel>
                   <div className="mt-2 grid grid-cols-4 gap-3">
                     <PaxSplitCell label="Total adults" value={String(renderModel.paxPriceSplit.totalAdults)} />
                     <PaxSplitCell label="Total children" value={String(renderModel.paxPriceSplit.totalChildren)} />
@@ -1077,7 +1078,7 @@ export function QuoteDocPage() {
                   </div>
 
                   <div className="mt-[26px]">
-                    <SectionLabel>Cancellation policies</SectionLabel>
+                    <SectionLabel>Supplier cancellation policies</SectionLabel>
                     <div className="mt-2 grid grid-cols-[148px_124px_104px_minmax(0,1fr)] gap-x-3.5 border-b border-[#F0F0F0] py-2 text-[8.5px] font-semibold uppercase tracking-[0.9px] text-[#8A8A8A]">
                       <span>Supplier / contract</span>
                       <span>Policy</span>
@@ -1114,7 +1115,7 @@ export function QuoteDocPage() {
                         </div>
                       ))
                     ) : (
-                      <p className="py-4 text-[12px] text-[#8A8A8A]">Cancellation policies appear once suppliers are on the itinerary.</p>
+                      <p className="py-4 text-[12px] text-[#8A8A8A]">Supplier cancellation policies appear once suppliers are on the itinerary.</p>
                     )}
                   </div>
 

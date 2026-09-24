@@ -56,6 +56,42 @@ export function isInvoiceStale(invoice: InvoiceDocument, currentFp: string): boo
   return invoice.fingerprint !== currentFp
 }
 
+/** Deposit due now, or balance payment due when the invoice is full-stage. */
+export function paymentDueNowAmount(pos: InvoicePaymentPosition): number {
+  return pos.amountDueImmediately > 0 ? pos.amountDueImmediately : pos.futureAmountDue ?? 0
+}
+
+/**
+ * Map booking ledger (totalUsd / balanceUsd) onto invoice sell so payment position
+ * reconciles: sell total = deposit paid + deposit due + balance payment due.
+ */
+export function clientPaymentsOnSell(
+  itinerary: Pick<Itinerary, 'totalUsd' | 'balanceUsd'>,
+  sellTotal: number,
+): { paid: number; balance: number } {
+  const bookingTotal = itinerary.totalUsd ?? sellTotal
+  const bookingBalance = itinerary.balanceUsd ?? bookingTotal
+  const paidOnBooking = Math.max(0, Math.round((bookingTotal - bookingBalance) * 100) / 100)
+
+  if (bookingTotal <= 0) {
+    return { paid: 0, balance: Math.round(sellTotal * 100) / 100 }
+  }
+
+  if (Math.abs(bookingTotal - sellTotal) < 0.01) {
+    return {
+      paid: paidOnBooking,
+      balance: Math.round(bookingBalance * 100) / 100,
+    }
+  }
+
+  const paid = Math.min(
+    sellTotal,
+    Math.round((paidOnBooking / bookingTotal) * sellTotal * 100) / 100,
+  )
+  const balance = Math.round((sellTotal - paid) * 100) / 100
+  return { paid, balance }
+}
+
 export function buildPaymentPosition(
   itinerary: Itinerary,
   sellTotal: number,
@@ -63,34 +99,41 @@ export function buildPaymentPosition(
   stage: InvoiceLifecycleStage,
   arrivalIso?: string,
 ): InvoicePaymentPosition {
-  const totalUsd = itinerary.totalUsd ?? sellTotal
-  const balanceUsd = itinerary.balanceUsd ?? totalUsd
-  const paid = Math.max(0, Math.round((totalUsd - balanceUsd) * 100) / 100)
-  const balance = Math.round(balanceUsd * 100) / 100
+  const { paid, balance } = clientPaymentsOnSell(itinerary, sellTotal)
+
+  const history = buildPaymentHistory(sellTotal, arrivalIso)
+  const nextUnpaid = history.rows.find((row) => row.status !== 'Paid')
 
   if (stage === 'full') {
+    const dueBalance = Math.max(0, balance)
     return {
       total: sellTotal,
       paid,
       balance,
-      amountDueImmediately: Math.max(0, balance),
+      amountDueImmediately: 0,
+      futureAmountDue: dueBalance > 0 ? dueBalance : undefined,
+      futureDueDate: dueBalance > 0 ? history.finalDue : undefined,
     }
   }
 
-  const history = buildPaymentHistory(sellTotal, arrivalIso)
-  const nextUnpaid = history.rows.find((row) => row.status !== 'Paid')
   const depositStillDue = Math.max(0, deposits.depositTotalNum - paid)
   const amountDueImmediately =
     balance <= 0 ? 0 : depositStillDue > 0 ? Math.min(balance, depositStillDue) : balance
   const futureAmountDue = Math.max(0, balance - amountDueImmediately)
+  const depositDueFromSummary = deposits.depositRows[0]?.due?.replace(/^Due\s+/i, '').trim()
+  const depositDueDate =
+    amountDueImmediately > 0
+      ? (nextUnpaid?.date ?? depositDueFromSummary ?? undefined)
+      : undefined
 
   return {
     total: sellTotal,
     paid,
     balance,
     amountDueImmediately,
+    depositDueDate,
     futureAmountDue: futureAmountDue > 0 ? futureAmountDue : undefined,
-    futureDueDate: futureAmountDue > 0 ? history.finalDue : nextUnpaid?.date,
+    futureDueDate: futureAmountDue > 0 ? history.finalDue : undefined,
   }
 }
 
@@ -424,5 +467,6 @@ export function invoiceAsQuoteRenderModel(model: InvoiceRenderModel): QuoteRende
     generatedAt: model.generatedAt,
     generatedBy: model.generatedBy,
     invoiceAddressee: model.invoiceAddressee,
+    paymentPosition: model.paymentPosition,
   }
 }

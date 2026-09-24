@@ -53,7 +53,10 @@ import {
   voucherIssueSignature,
 } from '@/features/summary/summaryModel'
 import { fmtLedgerUsd } from '@/features/quote-doc/quoteLedgerModel'
-import { buildInvoiceSnapshot } from '@/features/invoice-doc/invoiceSnapshotModel'
+import {
+  buildInvoiceSnapshot,
+  paymentDueNowAmount,
+} from '@/features/invoice-doc/invoiceSnapshotModel'
 import {
   buildQuoteSnapshot,
   nextQuoteSeq,
@@ -663,7 +666,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         to: nextStatus,
         label: isUpdate ? `Updated ${doc.invoiceNumber}` : `Generated ${doc.invoiceNumber}`,
         category: isUpdate ? 'invoice-update' : 'invoice-generate',
-        detail: `${doc.lifecycleStage} · ${doc.presentation ?? 'B2B_ITEMISED'} · ${fmtLedgerUsd(doc.paymentPosition.total)} · due now ${fmtLedgerUsd(doc.paymentPosition.amountDueImmediately)}`,
+        detail: `${doc.lifecycleStage} · ${doc.presentation ?? 'B2B_ITEMISED'} · ${fmtLedgerUsd(doc.paymentPosition.total)} · due now ${fmtLedgerUsd(paymentDueNowAmount(doc.paymentPosition))}`,
       }
       const lifecycleLog = [...(current.lifecycleLog ?? []), entry]
       if (nextStatus !== current.status) {
@@ -714,7 +717,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         to: current.status,
         label: `Sent ${invoice.invoiceNumber} to agent`,
         category: 'invoice-send',
-        detail: `${trimmed} · ${invoice.presentation ?? 'B2B_ITEMISED'} · due now ${fmtLedgerUsd(invoice.paymentPosition.amountDueImmediately)}`,
+        detail: `${trimmed} · ${invoice.presentation ?? 'B2B_ITEMISED'} · due now ${fmtLedgerUsd(paymentDueNowAmount(invoice.paymentPosition))}`,
       }
       upsertItineraryStorage({
         ...current,

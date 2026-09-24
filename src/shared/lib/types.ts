@@ -249,6 +249,8 @@ export interface QuoteTextContent {
   generalExclusionsHtml: string
   notesHtml: string
   standingCommercialHtml: string
+  /** Invoice terms page — below per-supplier payment terms. */
+  generalCancellationPolicyHtml?: string
 }
 
 export interface DocumentSendRecord {
@@ -266,7 +268,10 @@ export interface InvoicePaymentPosition {
   paid: number
   balance: number
   amountDueImmediately: number
+  /** Shown on invoice as “Deposit due · {date}”. */
+  depositDueDate?: string
   futureAmountDue?: number
+  /** Shown on invoice as “Balance payment due · {date}”. */
   futureDueDate?: string
 }
 

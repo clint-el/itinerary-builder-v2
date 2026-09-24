@@ -195,8 +195,8 @@ const CANCELLATION_POLICIES: Record<string, CancellationPolicy[]> = {
   [key('transportation', 'Hemingways Transfers')]: [
     policy({
       id: 'cp-hem-transfers',
-      name: 'Standard Transfer Policy',
-      description: 'Standard terms for pre-booked airport and inter-property transfers.',
+      name: 'Peak season cancellation policy',
+      description: '',
       refundable: true,
       travelDateFrom: '2025-01-01',
       travelDateTo: '2027-12-31',
@@ -340,7 +340,7 @@ const CANCELLATION_POLICIES: Record<string, CancellationPolicy[]> = {
     policy({
       id: 'cp-cp-kenya-activity',
       name: 'Non-Refundable Entrance Fee',
-      description: 'Pre-purchased entrance-fee product — non-refundable.',
+      description: '',
       refundable: false,
       travelDateFrom: '2025-01-01',
       travelDateTo: '2027-12-31',

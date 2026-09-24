@@ -1,6 +1,7 @@
 import { resolveInvoiceAddresseeProfile } from '@/features/invoice-doc/invoiceAddresseeModel'
 import { resolveServiceOption } from '@/features/builder/serviceOptions'
 import {
+  cancellationRuleCopy,
   policiesFor,
   sortedRulesForDisplay,
   type CancellationPolicy,
@@ -63,10 +64,13 @@ export type LedgerCancellationRow = {
   supplier: string
   /** Policy description from the cancellation API (PCP-519 `Policy.description`). */
   description: string
+  /** Policy name (PCP-519 `Policy.name`). */
   policy: string
   refundableLabel: string
   refundableTone: 'blue' | 'red'
   travelDates: string
+  /** Penalty rule copy for document display (matches builder Policy tab). */
+  ruleLines: string[]
   charges: { label: string; amount: string }[]
 }
 
@@ -412,13 +416,15 @@ export function buildLedgerCancellationRows(
     const policies = policiesFor(tabOf(line.type), line.supplier).filter((p) => p.status === 'Active')
     const policy = policies[0]
     if (!policy) continue
+    const description = policy.description.trim()
     rows.push({
       supplier: line.supplier,
-      description: policy.description || `${line.supplier} contract`,
+      description,
       policy: policyDisplayName(policy),
       refundableLabel: policy.refundable ? 'Refundable' : 'Non-refundable',
       refundableTone: policy.refundable ? 'blue' : 'red',
       travelDates: fmtTravelWindow(policy.travelDateFrom || travelFrom, policy.travelDateTo || travelTo),
+      ruleLines: sortedRulesForDisplay(policy.rules).map((rule) => cancellationRuleCopy(rule, false)),
       charges: policyCharges(policy),
     })
   }

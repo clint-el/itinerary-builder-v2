@@ -4,6 +4,7 @@ import { fmtLedgerUsd } from '@/features/quote-doc/quoteLedgerModel'
 import {
   isInvoiceStale,
   lifecycleStageLabel,
+  paymentDueNowAmount,
 } from '@/features/invoice-doc/invoiceSnapshotModel'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -82,7 +83,7 @@ export function InvoiceDocumentPanel({
         <Stat label="Total" value={fmtLedgerUsd(pos.total)} />
         <Stat label="Paid" value={fmtLedgerUsd(pos.paid)} />
         <Stat label="Balance" value={fmtLedgerUsd(pos.balance)} />
-        <Stat label="Due now" value={fmtLedgerUsd(pos.amountDueImmediately)} emphasis />
+        <Stat label="Due now" value={fmtLedgerUsd(paymentDueNowAmount(pos))} emphasis />
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-2">

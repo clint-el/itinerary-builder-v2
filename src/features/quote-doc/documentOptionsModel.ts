@@ -120,7 +120,7 @@ export function invoiceDocumentOptionsSummary(options: ResolvedInvoiceDocumentOp
 }
 
 export function invoiceCoverKindLabel(travelCounsellors: boolean): string {
-  return travelCounsellors ? 'Travel Counsellors Invoice' : 'Tour Package Invoice'
+  return travelCounsellors ? 'Travel Counsellors Invoice' : 'Safari Invoice'
 }
 
 export function quotationCoverKindLabel(travelCounsellors: boolean, packaged: boolean): string {
