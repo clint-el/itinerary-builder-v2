@@ -194,10 +194,7 @@ export function InvoiceDocPage() {
         { key: 4, label: 'Inclusions' },
       ]
       if (termsOn) base.push({ key: 5, label: 'Terms' })
-      base.push(
-        { key: termsOn ? 6 : 5, label: 'Remittance' },
-        { key: termsOn ? 7 : 6, label: 'Offices' },
-      )
+      base.push({ key: termsOn ? 6 : 5, label: 'Remittance' })
       return base
     }
     const base: PageDef[] = [
@@ -207,7 +204,7 @@ export function InvoiceDocPage() {
       { key: 4, label: 'Inclusions' },
     ]
     if (termsOn) base.push({ key: 5, label: 'Terms' })
-    base.push({ key: base.length + 1, label: 'Remittance' }, { key: base.length + 2, label: 'Offices' })
+    base.push({ key: base.length + 1, label: 'Remittance' })
     return base
   }, [isPackaged, termsOn])
 
@@ -549,6 +546,7 @@ export function InvoiceDocPage() {
                 totalsFooterLeft={`Invoice date ${issuedOn}`}
                 documentKind="invoice"
                 travelCounsellors={travelCounsellors}
+                lifecycleStage={lifecycleStage}
               />
             ) : null}
             {renderModel && !isPackaged ? (

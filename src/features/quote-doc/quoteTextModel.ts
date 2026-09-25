@@ -45,6 +45,13 @@ export function hasRichTextContent(html: string | undefined) {
   return stripped.length > 0
 }
 
+export const DEFAULT_GENERAL_PAYMENT_TERMS = [
+  'All prices are quoted in US dollars unless stated otherwise on the invoice.',
+  'A non-refundable deposit is due on acceptance to secure provisional bookings; the balance is payable by the date shown on the payment position.',
+  'Where supplier terms require a higher deposit or an earlier balance date, those stricter terms apply to the services concerned.',
+  'Payment must be received in cleared funds before travel documents are released.',
+].join('\n')
+
 export const DEFAULT_GENERAL_CANCELLATION_POLICY = [
   'Cancellations must be submitted in writing to your safari planner.',
   'Services remain provisional until deposit is received and suppliers confirm.',
@@ -60,6 +67,7 @@ export function defaultQuoteText(): QuoteTextContent {
     standingCommercialHtml: plainToParagraphHtml(
       'Rates are subject to statutory increases, park fees, and fuel surcharges beyond our control.',
     ),
+    generalPaymentTermsHtml: plainToParagraphHtml(DEFAULT_GENERAL_PAYMENT_TERMS),
     generalCancellationPolicyHtml: plainToParagraphHtml(DEFAULT_GENERAL_CANCELLATION_POLICY),
   }
 }
@@ -88,6 +96,9 @@ export function resolveQuoteText(
       standingCommercialHtml: hasRichTextContent(base.standingCommercialHtml)
         ? base.standingCommercialHtml
         : defaults.standingCommercialHtml,
+      generalPaymentTermsHtml: hasRichTextContent(base.generalPaymentTermsHtml)
+        ? base.generalPaymentTermsHtml!
+        : defaults.generalPaymentTermsHtml,
       generalCancellationPolicyHtml: hasRichTextContent(base.generalCancellationPolicyHtml)
         ? base.generalCancellationPolicyHtml!
         : defaults.generalCancellationPolicyHtml,
@@ -105,6 +116,7 @@ export function resolveQuoteText(
     standingCommercialHtml: hasRichTextContent(base.standingCommercial)
       ? plainToParagraphHtml(base.standingCommercial!)
       : defaults.standingCommercialHtml,
+    generalPaymentTermsHtml: defaults.generalPaymentTermsHtml,
     generalCancellationPolicyHtml: defaults.generalCancellationPolicyHtml,
   }
 }

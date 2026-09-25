@@ -14,6 +14,7 @@ import { RichTextDocumentContent } from '@/features/quote-doc/RichTextDocumentCo
 import { QuoteTextSupplement } from '@/features/quote-doc/quoteTextBlocks'
 import {
   GeneralCancellationPolicySection,
+  GeneralPaymentTermsSection,
   PerSupplierPaymentTermsTable,
   SupplierCancellationPolicyCard,
 } from '@/features/invoice-doc/invoiceTermsSections'
@@ -353,8 +354,8 @@ export function InvoiceLedgerContent({
             <div className="mt-2 grid grid-cols-4 gap-3">
               <PaxSplitCell label="Total adults" value={String(paxPriceSplit.totalAdults)} />
               <PaxSplitCell label="Total children" value={String(paxPriceSplit.totalChildren)} />
-              <PaxSplitCell label="Total adult price" value={fmtLedgerUsd(paxPriceSplit.totalAdultPrice)} />
-              <PaxSplitCell label="Total child price" value={fmtLedgerUsd(paxPriceSplit.totalChildPrice)} />
+              <PaxSplitCell label="Price per adult" value={fmtLedgerUsd(paxPriceSplit.totalAdultPrice)} />
+              <PaxSplitCell label="Price per child" value={fmtLedgerUsd(paxPriceSplit.totalChildPrice)} />
             </div>
           </div>
 
@@ -390,7 +391,7 @@ export function InvoiceLedgerContent({
                 <div className="grid grid-cols-[108px_88px_88px_1fr_1fr] gap-3 border-b border-[#EFEFEF] px-4 py-[7px] text-[8.5px] font-semibold uppercase tracking-[0.9px] text-[#8A8A8A]">
                   <span>Supplier</span>
                   <span>Service</span>
-                  <span>Option</span>
+                  <span>Basis</span>
                   <span>Includes</span>
                   <span>Excludes</span>
                 </div>
@@ -423,6 +424,7 @@ export function InvoiceLedgerContent({
         >
           <LedgerHeader title="Payment terms and cancellation" refLabel={refLabel} />
           <div className="flex flex-1 flex-col px-14 pb-8 pt-[34px]">
+            <GeneralPaymentTermsSection quoteText={quoteText} />
             <PerSupplierPaymentTermsTable paymentTerms={paymentTerms} />
             <GeneralCancellationPolicySection quoteText={quoteText} />
 

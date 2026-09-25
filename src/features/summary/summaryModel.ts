@@ -150,6 +150,12 @@ function discountOf(d: Record<string, unknown>, net: number, rack: number): Line
   return { label: offer.label, sellDelta: offer.sellDelta, costDelta: offer.costDelta }
 }
 
+function discountLabelForLine(baseLabel: string, supplier: string): string {
+  const name = supplier.trim()
+  if (!name) return baseLabel
+  return `${baseLabel} · ${name}`
+}
+
 function wholeUsd(n: number) {
   return `$${Math.round(n || 0).toLocaleString('en-US')}`
 }
@@ -206,7 +212,7 @@ export function linesFromServices(services: AddedService[], guests: Guest[]): Su
       const totalNet = group.reduce((a, l) => a + l.net, 0) || 1
       for (const l of group) {
         l.discount = {
-          label: disc.label,
+          label: discountLabelForLine(disc.label, l.supplier),
           sellDelta: Math.round(disc.sellDelta * (l.rack / totalRack) * 100) / 100,
           costDelta: Math.round(disc.costDelta * (l.net / totalNet) * 100) / 100,
         }

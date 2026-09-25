@@ -1,6 +1,7 @@
 import {
   buildLedgerPaymentTerms,
   balanceDueDate,
+  bookingAgentBlock,
   fmtLedgerDateLong,
   fmtLedgerAmount,
   fmtLedgerUsd,
@@ -13,22 +14,25 @@ import {
 import { RichTextDocumentContent } from '@/features/quote-doc/RichTextDocumentContent'
 import { QuoteTextSupplement } from '@/features/quote-doc/quoteTextBlocks'
 import {
-  DottedTotalRow,
   PaxSplitCell,
   PaymentPosRow,
   paymentDueRowLabel,
 } from '@/features/quote-doc/documentTotalsBlocks'
-import { rateBasisTag } from '@/features/quote-doc/quoteRateBasisModel'
-import { isB2C } from '@/features/quote-doc/quotePackagedModel'
 import {
   BookedByMetaRow,
+  BookingAgentSection,
   BookingConsultantRow,
   GuestDetailsSection,
   InvoicedToProfile,
 } from '@/features/quote-doc/quoteCoverMeta'
-import { invoiceCoverKindLabel } from '@/features/quote-doc/documentOptionsModel'
+import {
+  invoiceCoverKindLabel,
+  quotationCoverKindLabel,
+} from '@/features/quote-doc/documentOptionsModel'
+import { lifecycleStageLabel, type InvoiceLifecycleStage } from '@/features/invoice-doc/invoiceSnapshotModel'
 import {
   GeneralCancellationPolicySection,
+  GeneralPaymentTermsSection,
   PerSupplierPaymentTermsTable,
   SupplierCancellationPolicyCard,
 } from '@/features/invoice-doc/invoiceTermsSections'
@@ -72,6 +76,7 @@ export type QuotePackagedContentProps = {
   /** When set to invoice, the third meta column shows Invoiced to (agent profile) instead of Booking. */
   documentKind?: 'quote' | 'invoice'
   travelCounsellors?: boolean
+  lifecycleStage?: InvoiceLifecycleStage
 }
 
 export function QuotePackagedContent({
@@ -88,6 +93,7 @@ export function QuotePackagedContent({
   adults,
   children,
   infants,
+  lead,
   countries,
   guests,
   guestDetails,
@@ -99,6 +105,7 @@ export function QuotePackagedContent({
   totalsFooterLeft,
   documentKind = 'quote',
   travelCounsellors = false,
+  lifecycleStage = 'deposit',
 }: QuotePackagedContentProps) {
   const inclusionsHtml = renderModel.quoteText.generalInclusionsHtml
   const exclusionsHtml = renderModel.quoteText.generalExclusionsHtml
@@ -106,10 +113,7 @@ export function QuotePackagedContent({
   const {
     scheduleGroups,
     paxPriceSplit,
-    rateBasis,
     categoryTotals,
-    pricingSummary,
-    grossSell,
     sellTotal,
     depositTotal,
     depositBalance,
@@ -117,19 +121,15 @@ export function QuotePackagedContent({
     priceMode,
     paymentPosition,
   } = renderModel
-  const pricingDiscounts = pricingSummary.discounts
   const categoryGrid = categoryTotals
-  const rateTag = rateBasisTag(rateBasis)
   const balanceDue = balanceDueDate(itinerary.travelDateFrom || '')
   const depositPctLabel = `${depositPctOfSell}%`
   const depositTotalLabel = fmtLedgerUsd(depositTotal)
   const depositBalanceLabel = fmtLedgerUsd(depositBalance)
   const perPerson = totalGuests > 0 ? sellTotal / totalGuests : 0
   const pos = paymentPosition
-  const bookingName = coverTitle
-  const b2c = isB2C(renderModel.presentation)
-  const audienceLabel = b2c ? 'B2C' : 'B2B'
   const quoteText = renderModel.quoteText
+  const coverTotalLabel = documentKind === 'invoice' ? 'Booking total' : 'Safari total'
   const pageAttr = documentKind === 'invoice' ? 'data-inv-page' : 'data-qd-page'
   const pageProps = (n: number) => ({ [pageAttr]: String(n) })
 
@@ -154,7 +154,7 @@ export function QuotePackagedContent({
               <div className="text-[9.5px] font-semibold uppercase tracking-[1.6px] text-[#C79393]">
                 {documentKind === 'invoice'
                   ? invoiceCoverKindLabel(travelCounsellors)
-                  : 'Packaged quotation'}
+                  : quotationCoverKindLabel(travelCounsellors, true)}
               </div>
               <div className="mt-0.5 font-['IBM_Plex_Mono'] text-lg font-medium text-white">{refLabel}</div>
             </div>
@@ -170,45 +170,69 @@ export function QuotePackagedContent({
 
         <div className="flex flex-1 flex-col px-14 pb-9 pt-[26px]">
           <div className="grid grid-cols-3 border-t border-[#101010]">
-            <MetaColumn title="Document">
-              <MetaRow label="Reference" value={itinerary.reference} mono />
-              <MetaRow label="Version" value={versionLabel || '—'} mono />
-              <MetaRow label="Document date" value={issuedOn} mono />
-              <MetaRow label="Valid until" value={validUntil} mono accent />
-            </MetaColumn>
-            <MetaColumn title="Travel dates" bordered>
-              <MetaRow
-                label="Arrival"
-                value={itinerary.travelDateFrom ? fmtLedgerDateLong(itinerary.travelDateFrom) : 'TBC'}
-                mono
-              />
-              <MetaRow
-                label="Departure"
-                value={itinerary.travelDateTo ? fmtLedgerDateLong(itinerary.travelDateTo) : 'TBC'}
-                mono
-              />
-              <MetaRow label="Nights" value={String(nightsCount)} mono />
-              <MetaRow label="Countries" value={countries} />
-            </MetaColumn>
             {documentKind === 'invoice' ? (
-              <MetaColumn title="Invoiced to" last>
-                <InvoicedToProfile
-                  profile={
-                    renderModel.invoiceAddressee ?? {
-                      type: 'agency',
-                      legalName: '—',
-                      addressLines: [],
+              <>
+                <MetaColumn title="Document">
+                  <MetaRow label="Invoice number" value={versionLabel || '—'} mono />
+                  <MetaRow label="Reference" value={itinerary.reference} mono />
+                  <MetaRow label="Invoice date" value={issuedOn} mono />
+                  <MetaRow label="Stage" value={lifecycleStageLabel(lifecycleStage)} accent />
+                </MetaColumn>
+                <MetaColumn title="Travel dates" bordered>
+                  <MetaRow
+                    label="Arrival"
+                    value={itinerary.travelDateFrom ? fmtLedgerDateLong(itinerary.travelDateFrom) : 'TBC'}
+                    mono
+                  />
+                  <MetaRow
+                    label="Departure"
+                    value={itinerary.travelDateTo ? fmtLedgerDateLong(itinerary.travelDateTo) : 'TBC'}
+                    mono
+                  />
+                  <MetaRow label="Nights" value={String(nightsCount)} mono />
+                  <MetaRow label="Countries" value={countries} />
+                </MetaColumn>
+                <MetaColumn title="Invoiced to" last>
+                  <InvoicedToProfile
+                    profile={
+                      renderModel.invoiceAddressee ?? {
+                        type: 'agency',
+                        legalName: '—',
+                        addressLines: [],
+                      }
                     }
-                  }
-                />
-              </MetaColumn>
+                  />
+                </MetaColumn>
+              </>
             ) : (
-              <MetaColumn title="Booking" last>
-                <MetaRow label="Name" value={bookingName} />
-                <MetaRow label="Guests" value={String(totalGuests || '—')} mono />
-                <MetaRow label="Composition" value={paxComposition(adults, children, infants)} mono />
-                <BookedByMetaRow contact={bookedByContact(itinerary)} />
-              </MetaColumn>
+              <>
+                <MetaColumn title="Document">
+                  <MetaRow label="Reference" value={itinerary.reference} mono />
+                  <MetaRow label="Version" value={versionLabel || '—'} mono />
+                  <MetaRow label="Issued" value={issuedOn} mono />
+                  <MetaRow label="Valid until" value={validUntil} mono accent />
+                </MetaColumn>
+                <MetaColumn title="Travel dates" bordered>
+                  <MetaRow
+                    label="Arrival"
+                    value={itinerary.travelDateFrom ? fmtLedgerDateLong(itinerary.travelDateFrom) : 'TBC'}
+                    mono
+                  />
+                  <MetaRow
+                    label="Departure"
+                    value={itinerary.travelDateTo ? fmtLedgerDateLong(itinerary.travelDateTo) : 'TBC'}
+                    mono
+                  />
+                  <MetaRow label="Duration" value={`${daysCount} d · ${nightsCount} n`} mono />
+                  <MetaRow label="Countries" value={countries} />
+                </MetaColumn>
+                <MetaColumn title="PAX details" last>
+                  <MetaRow label="Guests" value={String(totalGuests || '—')} mono />
+                  <MetaRow label="Composition" value={paxComposition(adults, children, infants)} mono />
+                  <MetaRow label="Lead guest" value={lead} />
+                  <BookedByMetaRow contact={bookedByContact(itinerary)} />
+                </MetaColumn>
+              </>
             )}
           </div>
 
@@ -216,20 +240,24 @@ export function QuotePackagedContent({
             <BookingConsultantRow contact={bookedByContact(itinerary)} />
           ) : null}
 
-          <div className="mt-8">
+          <div className={cn('mt-8', documentKind === 'quote' && 'grid grid-cols-2 gap-7')}>
+            {documentKind === 'quote' ? (
+              <BookingAgentSection block={bookingAgentBlock(itinerary)} />
+            ) : null}
             <GuestDetailsSection lines={guestLines} />
           </div>
 
-          {documentKind === 'quote' ? (
-            <div className="mt-8 rounded border border-[#101010] px-[22px] py-5">
-              <SectionLabel>Presentation</SectionLabel>
-              <p className="mt-2 text-[12.5px] leading-relaxed text-[#3D3D3D]">
-                This is a packaged {audienceLabel} quote. Service descriptions follow on the next page; line prices are
-                not shown. Package totals appear on page 3.
-                {b2c ? ' No operator commission or net figures appear anywhere on this document.' : ''}
-              </p>
+          <div className="mt-8 flex items-center justify-between gap-5 border border-[#101010] px-[22px] py-5">
+            <div>
+              <SectionLabel>{coverTotalLabel}</SectionLabel>
+              <div className="mt-1 text-[11.5px] text-[#555555]">
+                {totalGuests || '—'} guest{totalGuests === 1 ? '' : 's'}
+              </div>
             </div>
-          ) : null}
+            <div className="font-['IBM_Plex_Mono'] text-[32px] font-semibold tracking-[-0.5px]">
+              {fmtLedgerUsd(sellTotal)}
+            </div>
+          </div>
 
           <div className="flex-1" />
           <PageFooter left="info@chelipeacock.com · +254 730 721 000" right={`1 / ${totalPages}`} />
@@ -248,7 +276,7 @@ export function QuotePackagedContent({
         <div className="flex flex-1 flex-col px-14 pb-8 pt-[30px]">
           <div className="flex items-baseline justify-end gap-4">
             <span className="text-[10px] font-semibold uppercase tracking-[1.4px] text-[#931115]">
-              {rateTag} · no line prices
+              No line prices
             </span>
           </div>
 
@@ -336,26 +364,18 @@ export function QuotePackagedContent({
             </div>
           ) : null}
 
-          <div className={documentKind === 'quote' ? 'mt-[22px]' : undefined}>
-            <DottedTotalRow label="Itinerary subtotal" amount={fmtLedgerAmount(grossSell)} />
-            {pricingDiscounts.map((d) => (
-              <DottedTotalRow
-                key={d.label}
-                label={d.label}
-                amount={`−${fmtLedgerAmount(Math.abs(d.amount))}`}
-                accent="#0369A1"
-              />
-            ))}
-          </div>
-
-          <div className="mt-5 flex items-end justify-between gap-5 border border-[#101010] bg-[#101010] px-[22px] py-[18px] text-white">
+          <div
+            className={cn(
+              'flex items-end justify-between gap-5 border border-[#101010] bg-[#101010] px-[22px] py-[18px] text-white',
+              documentKind === 'quote' && 'mt-[22px]',
+            )}
+          >
             <div>
               <div className="text-[9.5px] font-semibold uppercase tracking-[1.6px] text-[#B5B5B5]">
                 {documentKind === 'invoice' ? 'Booking total' : 'Safari total'}
               </div>
               <div className="mt-1 text-[11px] text-[#B5B5B5]">
-                {documentKind === 'invoice' ? 'All prices in USD net' : rateTag} · {totalGuests} guest
-                {totalGuests === 1 ? '' : 's'}
+                {totalGuests} guest{totalGuests === 1 ? '' : 's'}
                 {documentKind === 'quote' && priceMode === 'pp' && totalGuests
                   ? ` · ${fmtLedgerUsd(perPerson)} per person`
                   : ''}
@@ -423,8 +443,8 @@ export function QuotePackagedContent({
             <div className="mt-2 grid grid-cols-4 gap-3">
               <PaxSplitCell label="Total adults" value={String(paxPriceSplit.totalAdults)} />
               <PaxSplitCell label="Total children" value={String(paxPriceSplit.totalChildren)} />
-              <PaxSplitCell label="Total adult price" value={fmtLedgerUsd(paxPriceSplit.totalAdultPrice)} />
-              <PaxSplitCell label="Total child price" value={fmtLedgerUsd(paxPriceSplit.totalChildPrice)} />
+              <PaxSplitCell label="Price per adult" value={fmtLedgerUsd(paxPriceSplit.totalAdultPrice)} />
+              <PaxSplitCell label="Price per child" value={fmtLedgerUsd(paxPriceSplit.totalChildPrice)} />
             </div>
           </div>
 
@@ -471,7 +491,7 @@ export function QuotePackagedContent({
                     <div className="grid grid-cols-[108px_88px_88px_1fr_1fr] gap-3 border-b border-[#EFEFEF] px-4 py-[7px] text-[8.5px] font-semibold uppercase tracking-[0.9px] text-[#8A8A8A]">
                       <span>Supplier</span>
                       <span>Service</span>
-                      <span>Option</span>
+                      <span>Basis</span>
                       <span>Includes</span>
                       <span>Excludes</span>
                     </div>
@@ -522,7 +542,7 @@ export function QuotePackagedContent({
                 <div className="mt-2 grid grid-cols-[120px_88px_88px_minmax(0,1fr)_minmax(0,1fr)] gap-x-3 border-b border-[#F0F0F0] py-2 text-[8.5px] font-semibold uppercase tracking-[0.9px] text-[#8A8A8A]">
                   <span>Supplier</span>
                   <span>Service</span>
-                  <span>Option</span>
+                  <span>Basis</span>
                   <span>Includes</span>
                   <span>Excludes</span>
                 </div>
@@ -563,6 +583,7 @@ export function QuotePackagedContent({
           <div className="flex flex-1 flex-col px-14 pb-8 pt-[34px]">
             {documentKind === 'invoice' ? (
               <>
+                <GeneralPaymentTermsSection quoteText={quoteText} />
                 <PerSupplierPaymentTermsTable paymentTerms={paymentTerms} />
                 <GeneralCancellationPolicySection quoteText={quoteText} />
                 <div className="mt-7">

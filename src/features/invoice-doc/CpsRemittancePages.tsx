@@ -53,31 +53,22 @@ export function CpsRemittancePages({
               <BankBlock key={account.country} account={account} />
             ))}
           </div>
-          <div className="flex-1" />
-          <PageFooter
-            left="Use the Kenya, Tanzania, Rwanda, or Uganda account matching the invoicing entity for this booking"
-            right={`${startPage} / ${totalPages}`}
-          />
-        </div>
-      </section>
 
-      <section
-        {...{ [pageAttr]: startPage + 1 }}
-        className={pageClass}
-        style={{ width: PAGE_W, minHeight: PAGE_H }}
-      >
-        <Header title="Office details" refLabel={refLabel} />
-        <div className="flex flex-1 flex-col px-14 pb-8 pt-[34px]">
-          <div className="grid grid-cols-2 gap-4">
-            {CPS_OFFICES.map((office) => (
-              <OfficeBlock key={office.country} office={office} />
-            ))}
+          <div className="mt-8">
+            <div className="text-[9px] font-semibold uppercase tracking-[1.2px] text-[#931115]">
+              Office details
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-4">
+              {CPS_OFFICES.map((office) => (
+                <OfficeBlock key={office.country} office={office} />
+              ))}
+            </div>
           </div>
 
           <div className="flex-1" />
           <PageFooter
-            left="Cheli & Peacock Safaris — Kenya · Tanzania · Rwanda · Uganda"
-            right={`${startPage + 1} / ${totalPages}`}
+            left="Cheli & Peacock Safaris — Kenya · Tanzania · Rwanda · Uganda · Use the bank account matching the invoicing entity for this booking"
+            right={`${startPage} / ${totalPages}`}
           />
         </div>
       </section>

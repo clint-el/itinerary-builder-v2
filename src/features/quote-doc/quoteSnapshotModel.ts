@@ -14,7 +14,11 @@ import {
   buildPaymentSnapshot,
   resolvePackagedCategoryRows,
 } from '@/features/quote-doc/quotePackagedModel'
-import { linesForRateBasis } from '@/features/quote-doc/quoteRateBasisModel'
+import {
+  linesForRateBasis,
+  quoteDocumentRateBasis,
+  rackDiscountAmounts,
+} from '@/features/quote-doc/quoteRateBasisModel'
 import {
   buildDepositSummary,
   buildPriceGroups,
@@ -60,8 +64,8 @@ export function buildQuoteSnapshot(input: {
   priceMode?: 'total' | 'pp'
 }): QuoteDocument {
   const { itinerary, services, quoteGroups, guestDetails, seq, generatedBy } = input
-  const rateBasis = input.rateBasis ?? 'nett'
   const presentation = input.presentation ?? 'B2B_ITEMISED'
+  const rateBasis = quoteDocumentRateBasis(presentation, input.rateBasis ?? 'nett')
   const quoteText = resolveQuoteText(itinerary.quoteTextDraft, input.quoteText)
   const showTerms = input.showTerms ?? true
   const priceMode = input.priceMode ?? 'pp'
@@ -127,10 +131,7 @@ export function buildQuoteSnapshot(input: {
     pricingSummary: {
       grossSell,
       sellTotal: pricing.sellNumber,
-      discounts: pricing.discounts.map((d) => ({
-        label: d.label,
-        amount: Number.parseFloat(d.sellDelta.replace(/[^0-9.-]/g, '')) || 0,
-      })),
+      discounts: rackDiscountAmounts(rawLines),
     },
     optionRows,
     depositTotal: deposits.depositTotalNum,

@@ -34,6 +34,16 @@ describe('quoteTextModel', () => {
     expect(resolved.generalCancellationPolicyHtml).toContain('Cancellations must be submitted')
   })
 
+  it('seeds default general payment terms when unset', () => {
+    const resolved = resolveQuoteText({
+      generalInclusionsHtml: linesToBulletHtml(['One']),
+      generalExclusionsHtml: linesToBulletHtml(['Two']),
+      notesHtml: '',
+      standingCommercialHtml: plainToParagraphHtml('Footer'),
+    })
+    expect(resolved.generalPaymentTermsHtml).toContain('US dollars')
+  })
+
   it('seeds default general cancellation policy when unset', () => {
     const resolved = resolveQuoteText({
       generalInclusionsHtml: linesToBulletHtml(['One']),

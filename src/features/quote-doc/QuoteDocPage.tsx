@@ -943,8 +943,8 @@ export function QuoteDocPage() {
                   <div className="mt-2 grid grid-cols-4 gap-3">
                     <PaxSplitCell label="Total adults" value={String(renderModel.paxPriceSplit.totalAdults)} />
                     <PaxSplitCell label="Total children" value={String(renderModel.paxPriceSplit.totalChildren)} />
-                    <PaxSplitCell label="Total adult price" value={fmtLedgerUsd(renderModel.paxPriceSplit.totalAdultPrice)} />
-                    <PaxSplitCell label="Total child price" value={fmtLedgerUsd(renderModel.paxPriceSplit.totalChildPrice)} />
+                    <PaxSplitCell label="Price per adult" value={fmtLedgerUsd(renderModel.paxPriceSplit.totalAdultPrice)} />
+                    <PaxSplitCell label="Price per child" value={fmtLedgerUsd(renderModel.paxPriceSplit.totalChildPrice)} />
                   </div>
                 </div>
 
@@ -1000,7 +1000,7 @@ export function QuoteDocPage() {
                   <div className="mt-2 grid grid-cols-[120px_88px_88px_minmax(0,1fr)_minmax(0,1fr)] gap-x-3 border-b border-[#F0F0F0] py-2 text-[8.5px] font-semibold uppercase tracking-[0.9px] text-[#8A8A8A]">
                     <span>Supplier</span>
                     <span>Service</span>
-                    <span>Option</span>
+                    <span>Basis</span>
                     <span>Includes</span>
                     <span>Excludes</span>
                   </div>

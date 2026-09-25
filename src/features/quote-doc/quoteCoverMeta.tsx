@@ -37,10 +37,6 @@ function LeadBadge() {
   )
 }
 
-function isPhoneLine(line: string): boolean {
-  return /^\+?\d[\d\s()-]*$/.test(line.trim())
-}
-
 export function BookedByMetaRow({ contact }: { contact: BookedByContact }) {
   return (
     <div className="flex items-start justify-between gap-2.5 border-b border-[#EFEFEF] py-[7px]">
@@ -48,9 +44,7 @@ export function BookedByMetaRow({ contact }: { contact: BookedByContact }) {
       <div className="min-w-0 shrink text-right">
         <div className="text-[12.5px] font-semibold leading-snug text-[#101010]">{contact.name}</div>
         <div className="mt-0.5 text-[11px] leading-snug text-[#525252]">{contact.email}</div>
-        <div className="mt-0.5 font-['IBM_Plex_Mono'] text-[11px] leading-snug text-[#525252]">
-          {contact.phone}
-        </div>
+        <div className="mt-0.5 text-[11px] leading-snug text-[#525252]">{contact.phone}</div>
       </div>
     </div>
   )
@@ -65,9 +59,7 @@ export function BookingConsultantRow({ contact }: { contact: BookedByContact }) 
       <div className="min-w-0 shrink text-right">
         <div className="text-[12.5px] font-semibold leading-snug text-[#101010]">{contact.name}</div>
         <div className="mt-0.5 text-[11px] leading-snug text-[#525252]">{contact.email}</div>
-        <div className="mt-0.5 font-['IBM_Plex_Mono'] text-[11px] leading-snug text-[#525252]">
-          {contact.phone}
-        </div>
+        <div className="mt-0.5 text-[11px] leading-snug text-[#525252]">{contact.phone}</div>
       </div>
     </div>
   )
@@ -93,9 +85,7 @@ export function InvoicedToProfile({
         <div className="mt-1 text-[11px] leading-snug text-[#525252]">{extended.email}</div>
       ) : null}
       {extended.phone ? (
-        <div className="mt-0.5 font-['IBM_Plex_Mono'] text-[11px] leading-snug text-[#525252]">
-          {extended.phone}
-        </div>
+        <div className="mt-0.5 text-[11px] leading-snug text-[#525252]">{extended.phone}</div>
       ) : null}
     </div>
   )
@@ -143,12 +133,7 @@ export function BookingAgentSection({ block }: { block: BookingAgentBlock }) {
       {block.addressLines.length ? (
         <div className="mt-0.5 flex flex-col gap-0.5 text-[11.5px] leading-relaxed text-[#555555]">
           {block.addressLines.map((line) => (
-            <div
-              key={line}
-              className={cn(isPhoneLine(line) && "font-['IBM_Plex_Mono']")}
-            >
-              {line}
-            </div>
+            <div key={line}>{line}</div>
           ))}
         </div>
       ) : (

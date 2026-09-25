@@ -18,7 +18,11 @@ import {
   resolvePackagedCategoryRows,
 } from '@/features/quote-doc/quotePackagedModel'
 import { resolveQuoteText } from '@/features/quote-doc/quoteTextModel'
-import { linesForRateBasis } from '@/features/quote-doc/quoteRateBasisModel'
+import {
+  invoiceDocumentRateBasis,
+  linesForRateBasis,
+  rackDiscountAmounts,
+} from '@/features/quote-doc/quoteRateBasisModel'
 import { buildRolledUpRows } from '@/features/invoice-doc/invoiceRolledUpModel'
 import {
   buildDepositSummary,
@@ -199,7 +203,8 @@ export function buildInvoiceSnapshot(input: {
   const guests = partyGuests(itinerary, guestDetails)
   const rawLines =
     services.length > 0 ? linesFromServices(services, guests) : linesFromQuoteGroups(quoteGroups)
-  const lines = linesForRateBasis(rawLines, 'nett')
+  const invoiceRateBasis = invoiceDocumentRateBasis(presentation)
+  const lines = linesForRateBasis(rawLines, invoiceRateBasis)
   const priceGroups = buildPriceGroups(lines)
   const scheduleGroups = buildLedgerScheduleGroups(lines)
   const pricing = buildSummaryPricing(lines, guests.length || (itinerary.adults || 0) + (itinerary.children || 0))
@@ -268,12 +273,9 @@ export function buildInvoiceSnapshot(input: {
     scheduleGroups,
     rolledUpRows,
     pricingSummary: {
-      grossSell: lines.reduce((sum, l) => sum + (l.net ?? 0), 0),
+      grossSell: lines.reduce((sum, l) => sum + (l.rack ?? 0), 0),
       sellTotal: pricing.sellNumber,
-      discounts: pricing.discounts.map((d) => ({
-        label: d.label,
-        amount: Number.parseFloat(d.sellDelta.replace(/[^0-9.-]/g, '')) || 0,
-      })),
+      discounts: rackDiscountAmounts(rawLines),
     },
     optionRows,
     depositTotal: deposits.depositTotalNum,
@@ -457,7 +459,7 @@ export function invoiceAsQuoteRenderModel(model: InvoiceRenderModel): QuoteRende
     depositTotal: model.depositTotal,
     depositBalance: model.depositBalance,
     depositPctOfSell: model.depositPctOfSell,
-    rateBasis: 'nett',
+    rateBasis: invoiceDocumentRateBasis(model.presentation ?? 'B2B_ITEMISED'),
     includesRows: model.includesRows ?? [],
     paymentSnapshot: model.paymentSnapshot,
     paxPriceSplit: model.paxPriceSplit,

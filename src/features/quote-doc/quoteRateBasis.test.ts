@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { buildQuoteSnapshot, nextQuoteSeq } from '@/features/quote-doc/quoteSnapshotModel'
+import { buildInvoiceSnapshot } from '@/features/invoice-doc/invoiceSnapshotModel'
 import {
+  invoiceDocumentRateBasis,
   linesForRateBasis,
+  quoteDocumentRateBasis,
   rateBasisTag,
 } from '@/features/quote-doc/quoteRateBasisModel'
 import { appendQuote, listQuotes } from '@/shared/lib/storage'
@@ -53,6 +56,13 @@ function service(id: string, rack: number, net: number): AddedService {
     initial: 'A',
     expanded: true,
     draft: {},
+  }
+}
+
+function serviceWithEarlyBird(id: string, rack: number, net: number): AddedService {
+  return {
+    ...service(id, rack, net),
+    draft: { promotion: 'early-bird', discount: 0 },
   }
 }
 
@@ -120,6 +130,51 @@ describe('quoteRateBasisModel', () => {
     expect(docs[0].docNumber).toBe('Q1')
     expect(docs[1].docNumber).toBe('Q2')
     expect(docs[0].sellTotal).toBeGreaterThan(docs[1].sellTotal)
+  })
+
+  it('shows Early Bird discount amounts from sell (rack) on nett itemised quotes', () => {
+    const itinerary = baseItinerary()
+    const services = [serviceWithEarlyBird('s1', 5190, 4000)]
+    const nett = buildQuoteSnapshot({
+      itinerary,
+      services,
+      quoteGroups: [],
+      guestDetails: [],
+      seq: 1,
+      generatedBy: 'Planner',
+      rateBasis: 'nett',
+      presentation: 'B2B_ITEMISED',
+    })
+    expect(nett.pricingSummary.discounts[0]?.amount).toBe(519)
+    expect(nett.sellTotal).toBe(3600)
+  })
+
+  it('forces rack rate basis for packaged quotes and invoices', () => {
+    expect(quoteDocumentRateBasis('B2B_PACKAGED', 'nett')).toBe('rack')
+    expect(invoiceDocumentRateBasis('B2B_PACKAGED')).toBe('rack')
+    const itinerary = baseItinerary()
+    const services = [service('s1', 1200, 924)]
+    const packaged = buildQuoteSnapshot({
+      itinerary,
+      services,
+      quoteGroups: [],
+      guestDetails: [],
+      seq: 1,
+      generatedBy: 'Planner',
+      rateBasis: 'nett',
+      presentation: 'B2B_PACKAGED',
+    })
+    expect(packaged.rateBasis).toBe('rack')
+    expect(packaged.sellTotal).toBe(1200)
+    const inv = buildInvoiceSnapshot({
+      itinerary,
+      services,
+      quoteGroups: [],
+      guestDetails: [],
+      generatedBy: 'Planner',
+      presentation: 'B2B_PACKAGED',
+    })
+    expect(inv.sellTotal).toBe(1200)
   })
 
   it('remaps line rack amounts when transforming for nett', () => {

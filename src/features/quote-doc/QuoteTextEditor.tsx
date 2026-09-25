@@ -58,6 +58,18 @@ export function QuoteTextEditor({
         />
       </div>
       {includeInvoiceTerms ? (
+        <>
+        <div>
+          <div className="text-[11px] font-bold uppercase tracking-wide text-[#A1A1A1]">
+            General payment terms
+          </div>
+          <RichTextEditor
+            value={draft.generalPaymentTermsHtml ?? ''}
+            onChange={(generalPaymentTermsHtml) => update({ generalPaymentTermsHtml })}
+            placeholder="Agency-wide payment wording for this invoice…"
+            minHeight={100}
+          />
+        </div>
         <div>
           <div className="text-[11px] font-bold uppercase tracking-wide text-[#A1A1A1]">
             General cancellation policy
@@ -69,6 +81,7 @@ export function QuoteTextEditor({
             minHeight={100}
           />
         </div>
+        </>
       ) : null}
     </div>
   )

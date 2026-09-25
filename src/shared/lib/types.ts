@@ -249,6 +249,8 @@ export interface QuoteTextContent {
   generalExclusionsHtml: string
   notesHtml: string
   standingCommercialHtml: string
+  /** Invoice terms page — above per-supplier payment terms. */
+  generalPaymentTermsHtml?: string
   /** Invoice terms page — below per-supplier payment terms. */
   generalCancellationPolicyHtml?: string
 }

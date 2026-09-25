@@ -21,7 +21,7 @@ describe('cpsRemittanceModel', () => {
   })
 
   it('appends two remittance pages after terms on itemised invoices', () => {
-    expect(CPS_REMITTANCE_PAGE_COUNT).toBe(2)
+    expect(CPS_REMITTANCE_PAGE_COUNT).toBe(1)
     expect(remittanceStartPage(false, true)).toBe(6)
     expect(remittanceStartPage(false, false)).toBe(5)
     expect(remittanceStartPage(true, true)).toBe(6)

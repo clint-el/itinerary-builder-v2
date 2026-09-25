@@ -12,6 +12,20 @@ function TermsSectionLabel({ children }: { children: React.ReactNode }) {
   )
 }
 
+export function GeneralPaymentTermsSection({ quoteText }: { quoteText: QuoteTextContent }) {
+  if (!hasRichTextContent(quoteText.generalPaymentTermsHtml)) return null
+  return (
+    <div className="mb-7">
+      <TermsSectionLabel>General payment terms</TermsSectionLabel>
+      <RichTextDocumentContent
+        html={quoteText.generalPaymentTermsHtml!}
+        variant="muted"
+        className="mt-2"
+      />
+    </div>
+  )
+}
+
 export function PerSupplierPaymentTermsTable({
   paymentTerms,
 }: {
