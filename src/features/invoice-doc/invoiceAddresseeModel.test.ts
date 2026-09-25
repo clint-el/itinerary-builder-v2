@@ -29,6 +29,50 @@ describe('invoiceAddresseeModel', () => {
     expect(profile.legalName).toBe('INTRIQ JOURNEY LIMITED')
   })
 
+  it('uses default address lines on client invoices when billing address is blank', () => {
+    const profile = resolveInvoiceAddresseeProfile({
+      itinerary: {
+        agency: 'Zoo Groups',
+        agent: '',
+        agencyAddress: '',
+        invoiceAddresseeType: 'client',
+        invoiceAddresseeGuestId: 'g1',
+      },
+      guests: [namedGuest],
+    })
+    expect(profile.type).toBe('client')
+    expect(profile.addressLines).toEqual(['14 Wildlife Lane', 'Nairobi', 'Kenya'])
+  })
+
+  it('prefers client billing address over agency address on client invoices', () => {
+    const profile = resolveInvoiceAddresseeProfile({
+      itinerary: {
+        agency: 'Zoo Groups',
+        agent: '',
+        agencyAddress: '99 Agent Row, London, UK',
+        invoiceAddresseeType: 'client',
+        invoiceAddresseeGuestId: 'g1',
+        clientBillingAddress: '1 Client Street\nParis\nFrance',
+      },
+      guests: [namedGuest],
+    })
+    expect(profile.addressLines).toEqual(['1 Client Street', 'Paris', 'France'])
+  })
+
+  it('falls back to agency address when client billing is empty', () => {
+    const profile = resolveInvoiceAddresseeProfile({
+      itinerary: {
+        agency: 'Zoo Groups',
+        agent: '',
+        agencyAddress: '14 Wildlife Lane, Nairobi, Kenya',
+        invoiceAddresseeType: 'client',
+        invoiceAddresseeGuestId: 'g1',
+      },
+      guests: [namedGuest],
+    })
+    expect(profile.addressLines).toEqual(['14 Wildlife Lane', 'Nairobi', 'Kenya'])
+  })
+
   it('resolves client name from invoice contact guest', () => {
     const profile = resolveInvoiceAddresseeProfile({
       itinerary: {

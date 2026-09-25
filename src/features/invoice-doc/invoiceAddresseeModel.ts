@@ -38,6 +38,13 @@ const TRAVEL_COUNSELLORS_INVOICE_PROFILE = {
   ],
 }
 
+/** Shown on client invoices when no billing address has been entered yet (demo default). */
+export const DEFAULT_CLIENT_INVOICE_ADDRESS_LINES = [
+  '14 Wildlife Lane',
+  'Nairobi',
+  'Kenya',
+] as const
+
 const AGENT_INVOICE_PROFILES: Record<string, { legalName: string; addressLines: string[] }> = {
   'Black Tomato': INTRIQ_JOURNEY_PROFILE,
   'Zoo Groups': {
@@ -96,10 +103,20 @@ function agencyInvoiceProfile(
   return INTRIQ_JOURNEY_PROFILE
 }
 
+function clientInvoiceAddressLines(
+  itinerary: Pick<Itinerary, 'clientBillingAddress' | 'agencyAddress'>,
+): string[] {
+  const billing = parseAgencyAddress(itinerary.clientBillingAddress?.trim() || '')
+  if (billing.length) return billing
+  const agency = parseAgencyAddress(itinerary.agencyAddress?.trim() || '')
+  if (agency.length) return agency
+  return [...DEFAULT_CLIENT_INVOICE_ADDRESS_LINES]
+}
+
 function clientInvoiceProfile(
   itinerary: Pick<
     Itinerary,
-    'clientBillingAddress' | 'clientBillingEmail' | 'clientBillingPhone'
+    'clientBillingAddress' | 'clientBillingEmail' | 'clientBillingPhone' | 'agencyAddress'
   >,
   guests: GuestDetail[],
   guestId: string | undefined,
@@ -110,7 +127,7 @@ function clientInvoiceProfile(
     guests.find((g) => g.lead) ||
     guests[0]
   const legalName = guest ? guestDisplayName(guest, guests) : '—'
-  const addressLines = parseAgencyAddress(itinerary.clientBillingAddress?.trim() || '')
+  const addressLines = clientInvoiceAddressLines(itinerary)
   return {
     legalName,
     addressLines,
