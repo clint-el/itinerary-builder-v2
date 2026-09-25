@@ -29,7 +29,7 @@ import {
   invoiceCoverKindLabel,
   quotationCoverKindLabel,
 } from '@/features/quote-doc/documentOptionsModel'
-import { lifecycleStageLabel, type InvoiceLifecycleStage } from '@/features/invoice-doc/invoiceSnapshotModel'
+import { lifecycleStageLabel } from '@/features/invoice-doc/invoiceSnapshotModel'
 import {
   GeneralCancellationPolicySection,
   GeneralPaymentTermsSection,
@@ -39,7 +39,7 @@ import {
 import { CpsRemittancePages, RemittanceLedgerHeader } from '@/features/invoice-doc/CpsRemittancePages'
 import { remittanceStartPage } from '@/features/invoice-doc/cpsRemittanceModel'
 import type { QuoteRenderModel } from '@/features/quote-doc/quoteSnapshotModel'
-import type { Guest, GuestDetail, Itinerary } from '@/shared/lib/types'
+import type { Guest, GuestDetail, InvoiceLifecycleStage, Itinerary } from '@/shared/lib/types'
 import { cn } from '@/shared/lib/utils'
 
 const PAGE_W = 794
