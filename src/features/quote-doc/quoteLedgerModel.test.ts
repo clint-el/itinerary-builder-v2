@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   bookingAgentBlock,
+  buildLedgerOptionRows,
   buildLedgerScheduleGroups,
+  fmtLedgerTravelWindow,
   documentCoverTitle,
   guestDetailLines,
   invoiceRecipientProfile,
@@ -163,5 +165,35 @@ describe('bookingAgentBlock', () => {
     })
     expect(block.name).toBe('Custom Agency')
     expect(block.addressLines).toEqual(['Line one', 'Line two'])
+  })
+})
+
+describe('fmtLedgerTravelWindow', () => {
+  it('uses consistent dd/mm/yy on both ends of the range', () => {
+    expect(fmtLedgerTravelWindow('2025-01-01', '2027-12-31')).toBe('01/01/25 – 31/12/27')
+  })
+})
+
+describe('buildLedgerOptionRows', () => {
+  it('splits room type and meal basis into Service and Option columns', () => {
+    const [row] = buildLedgerOptionRows(
+      [
+        accommodationLine({
+          roomType: 'Double',
+          basis: 'FB',
+          serviceId: 'cat-four-seasons',
+        }),
+      ],
+      [
+        {
+          id: 'cat-four-seasons',
+          tab: 'accommodation',
+          title: 'Four Seasons',
+          draft: { roomType: 'double', basis: 'fb' },
+        } as never,
+      ],
+    )
+    expect(row.service).toBe('Double Room')
+    expect(row.option).toBe('Full Board')
   })
 })

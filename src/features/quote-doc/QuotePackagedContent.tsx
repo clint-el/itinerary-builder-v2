@@ -466,10 +466,11 @@ export function QuotePackagedContent({
               <QuoteTextSupplement quoteText={quoteText} />
               {optionRows.length ? (
                 <div className="mt-[26px]">
-                  <SectionLabel>Service options</SectionLabel>
+                  <SectionLabel>Supplier Service options</SectionLabel>
                   <div className="mt-2 border border-[#101010]">
-                    <div className="grid grid-cols-[120px_100px_1fr_1fr] gap-3 border-b border-[#EFEFEF] px-4 py-[7px] text-[8.5px] font-semibold uppercase tracking-[0.9px] text-[#8A8A8A]">
+                    <div className="grid grid-cols-[108px_88px_88px_1fr_1fr] gap-3 border-b border-[#EFEFEF] px-4 py-[7px] text-[8.5px] font-semibold uppercase tracking-[0.9px] text-[#8A8A8A]">
                       <span>Supplier</span>
+                      <span>Service</span>
                       <span>Option</span>
                       <span>Includes</span>
                       <span>Excludes</span>
@@ -477,9 +478,10 @@ export function QuotePackagedContent({
                     {optionRows.map((row, i) => (
                       <div
                         key={`${row.supplier}-${i}`}
-                        className="grid grid-cols-[120px_100px_1fr_1fr] gap-3 border-b border-[#EFEFEF] px-4 py-[11px] text-[11px] last:border-b-0"
+                        className="grid grid-cols-[108px_88px_88px_1fr_1fr] gap-3 border-b border-[#EFEFEF] px-4 py-[11px] text-[11px] last:border-b-0"
                       >
                         <span className="font-semibold">{row.supplier}</span>
+                        <span className="text-[#525252]">{row.service}</span>
                         <span className="text-[#525252]">{row.option}</span>
                         <span className="text-[#525252]">{row.includes}</span>
                         <span className="text-[#8A8A8A]">{row.excludes}</span>
@@ -516,23 +518,23 @@ export function QuotePackagedContent({
                 exclusions specific to each supplier service option are set out below.
               </p>
               <div className="mt-[26px]">
-                <SectionLabel>By supplier service option</SectionLabel>
-                <div className="mt-2 grid grid-cols-[150px_minmax(0,1fr)_minmax(0,1fr)] gap-x-3.5 border-b border-[#F0F0F0] py-2 text-[8.5px] font-semibold uppercase tracking-[0.9px] text-[#8A8A8A]">
-                  <span>Supplier / option</span>
+                <SectionLabel>Supplier Service options</SectionLabel>
+                <div className="mt-2 grid grid-cols-[120px_88px_88px_minmax(0,1fr)_minmax(0,1fr)] gap-x-3 border-b border-[#F0F0F0] py-2 text-[8.5px] font-semibold uppercase tracking-[0.9px] text-[#8A8A8A]">
+                  <span>Supplier</span>
+                  <span>Service</span>
+                  <span>Option</span>
                   <span>Includes</span>
                   <span>Excludes</span>
                 </div>
                 {optionRows.length ? (
                   optionRows.map((row) => (
                     <div
-                      key={`${row.supplier}-${row.option}`}
-                      className="grid grid-cols-[150px_minmax(0,1fr)_minmax(0,1fr)] gap-x-3.5 border-b border-[#F5F5F5] py-2.5 text-[11px] leading-snug"
+                      key={`${row.supplier}-${row.service}-${row.option}`}
+                      className="grid grid-cols-[120px_88px_88px_minmax(0,1fr)_minmax(0,1fr)] gap-x-3 border-b border-[#F5F5F5] py-2.5 text-[11px] leading-snug"
                     >
-                      <span>
-                        <b>{row.supplier}</b>
-                        <br />
-                        <span className="text-[#8A8A8A]">{row.option}</span>
-                      </span>
+                      <span className="font-semibold">{row.supplier}</span>
+                      <span className="text-[#3D3D3D]">{row.service}</span>
+                      <span className="text-[#3D3D3D]">{row.option}</span>
                       <span className="text-[#3D3D3D]">{row.includes}</span>
                       <span className="text-[#3D3D3D]">{row.excludes}</span>
                     </div>

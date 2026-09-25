@@ -385,10 +385,11 @@ export function InvoiceLedgerContent({
 
           {optionRows.length ? (
             <div className="mt-[26px]">
-              <SectionLabel>Service options</SectionLabel>
+              <SectionLabel>Supplier Service options</SectionLabel>
               <div className="mt-2 border border-[#101010]">
-                <div className="grid grid-cols-[120px_100px_1fr_1fr] gap-3 border-b border-[#EFEFEF] px-4 py-[7px] text-[8.5px] font-semibold uppercase tracking-[0.9px] text-[#8A8A8A]">
+                <div className="grid grid-cols-[108px_88px_88px_1fr_1fr] gap-3 border-b border-[#EFEFEF] px-4 py-[7px] text-[8.5px] font-semibold uppercase tracking-[0.9px] text-[#8A8A8A]">
                   <span>Supplier</span>
+                  <span>Service</span>
                   <span>Option</span>
                   <span>Includes</span>
                   <span>Excludes</span>
@@ -396,9 +397,10 @@ export function InvoiceLedgerContent({
                 {optionRows.map((row, i) => (
                   <div
                     key={`${row.supplier}-${i}`}
-                    className="grid grid-cols-[120px_100px_1fr_1fr] gap-3 border-b border-[#EFEFEF] px-4 py-[11px] text-[11px] last:border-b-0"
+                    className="grid grid-cols-[108px_88px_88px_1fr_1fr] gap-3 border-b border-[#EFEFEF] px-4 py-[11px] text-[11px] last:border-b-0"
                   >
                     <span className="font-semibold">{row.supplier}</span>
+                    <span className="text-[#525252]">{row.service}</span>
                     <span className="text-[#525252]">{row.option}</span>
                     <span className="text-[#525252]">{row.includes}</span>
                     <span className="text-[#8A8A8A]">{row.excludes}</span>

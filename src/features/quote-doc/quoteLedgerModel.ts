@@ -22,6 +22,7 @@ import type {
   ServiceTab,
 } from '@/shared/lib/types'
 import { guestRoleLabel } from '@/shared/lib/helpers'
+import { BASIS, roomTypeLabel } from '@/shared/lib/catalogs'
 
 export type LedgerScheduleRow = {
   date: string
@@ -46,6 +47,7 @@ export type LedgerScheduleGroup = {
 
 export type LedgerOptionRow = {
   supplier: string
+  service: string
   option: string
   includes: string
   excludes: string
@@ -274,17 +276,86 @@ function tabOf(type: SummaryLine['type']): ServiceTab {
 }
 
 function optionKey(line: SummaryLine) {
-  if (line.type === 'accommodation') return `${line.supplier}::${line.roomType || line.basis || 'Room'}`
+  if (line.type === 'accommodation') {
+    return `${line.supplier}::${line.roomType || 'Room'}::${line.basis || ''}`
+  }
   if (line.type === 'flight') return `${line.supplier}::${line.charter || line.route || 'Flight'}`
   if (line.type === 'transportation') return `${line.supplier}::${line.vType || line.kind || 'Transfer'}`
   return `${line.supplier}::${line.service || 'Service'}`
 }
 
+const BASIS_CODE: Record<string, keyof typeof BASIS> = {
+  fb: 'fb',
+  hb: 'hb',
+  bb: 'bb',
+  ro: 'ro',
+  gd: 'gd',
+  gp: 'gp',
+  fi: 'fi',
+}
+
+function normalizeBasisId(raw: string): keyof typeof BASIS | null {
+  const compact = raw.trim().toLowerCase().replace(/[^a-z]/g, '')
+  if (compact in BASIS) return compact as keyof typeof BASIS
+  const upper = raw.trim().toUpperCase()
+  const fromCode = BASIS_CODE[upper.toLowerCase()]
+  if (fromCode) return fromCode
+  return null
+}
+
+function mealBasisLabel(basisRaw: string, catalogServiceId: string): string {
+  const id = normalizeBasisId(basisRaw)
+  const resolved =
+    catalogServiceId && id ? resolveServiceOption(catalogServiceId, id) : null
+  if (resolved?.label) return resolved.label
+  if (id) return BASIS[id]
+  return basisRaw.trim() || '—'
+}
+
+function ledgerOptionServiceLabel(line: SummaryLine, draft: Record<string, unknown>): string {
+  switch (line.type) {
+    case 'accommodation': {
+      const room = roomTypeLabel(String(line.roomType || draft.roomType || 'Room'))
+      return /\broom\b/i.test(room) ? room : `${room} Room`
+    }
+    case 'transportation':
+      return String(line.vType || draft.vehicleType || 'Transfer')
+    case 'flight':
+      return String(line.route || line.charter || line.supplier)
+    default:
+      return String(line.service || line.supplier)
+  }
+}
+
+function ledgerOptionPlanLabel(
+  line: SummaryLine,
+  draft: Record<string, unknown>,
+  catalogServiceId: string,
+): string {
+  if (line.type === 'accommodation') {
+    const basisRaw = String(line.basis || draft.basis || '')
+    return mealBasisLabel(basisRaw, catalogServiceId)
+  }
+
+  const optionId = String(
+    draft.vehicleType ||
+      draft.activityType ||
+      draft.otherType ||
+      draft.flightOption ||
+      line.vType ||
+      '',
+  )
+  const resolved =
+    catalogServiceId && optionId ? resolveServiceOption(catalogServiceId, optionId) : null
+  if (resolved?.label) return resolved.label
+  if (line.type === 'flight') return 'Standard'
+  if (line.type === 'transportation') return 'Standard'
+  return optionId || 'Standard'
+}
+
 function fallbackIncludes(line: SummaryLine): string {
   if (line.type === 'accommodation') {
-    return [line.basis ? `${line.basis} basis` : null, 'taxes and statutory levies where applicable']
-      .filter(Boolean)
-      .join(' · ')
+    return 'Taxes and statutory levies where applicable'
   }
   if (line.type === 'flight') return 'One seat per sector · baggage allowance as per carrier'
   if (line.type === 'transportation') return 'Vehicle with driver · fuel and tolls'
@@ -312,32 +383,41 @@ export function buildLedgerOptionRows(
   return [...byKey.values()].slice(0, 8).map((line) => {
     const svc = serviceById.get(line.serviceId)
     const draft = (svc?.draft || {}) as Record<string, unknown>
-    const optionId =
-      String(draft.basis || draft.roomType || draft.vehicleType || draft.activityType || draft.otherType || draft.flightOption || '') ||
-      line.basis ||
-      line.roomType ||
-      ''
-    const resolved = line.serviceId && optionId ? resolveServiceOption(line.serviceId, optionId) : null
-    const optionLabel =
-      resolved?.label ||
-      line.roomType ||
-      line.basis ||
-      line.vType ||
-      line.service ||
-      'Standard'
+    const catalogServiceId = line.serviceId || String(draft.serviceId || '')
+    const basisId = normalizeBasisId(String(line.basis || draft.basis || ''))
+    const inclusionOptionId =
+      line.type === 'accommodation'
+        ? basisId || ''
+        : String(
+            draft.vehicleType ||
+              draft.activityType ||
+              draft.otherType ||
+              draft.flightOption ||
+              '',
+          )
+    const resolved =
+      catalogServiceId && inclusionOptionId
+        ? resolveServiceOption(catalogServiceId, inclusionOptionId)
+        : null
     return {
       supplier: line.supplier,
-      option: optionLabel,
+      service: ledgerOptionServiceLabel(line, draft),
+      option: ledgerOptionPlanLabel(line, draft, catalogServiceId),
       includes: resolved?.included || fallbackIncludes(line),
       excludes: resolved?.excluded || fallbackExcludes(line),
     }
   })
 }
 
-function fmtTravelWindow(from: string, to: string) {
+/** Policy / terms travel window — same short date style as the schedule (dd/mm/yy). */
+export function fmtLedgerTravelWindow(from: string, to: string) {
   if (!from && !to) return 'All travel dates'
-  if (from && to) return `${fmtLedgerDateShort(from).replace(/\//g, ' ')} – ${fmtLedgerDateLong(to).replace(/^\d+\s/, '')}`
-  return from ? `${fmtLedgerDateLong(from)} onwards` : 'All travel dates'
+  if (from && to) {
+    if (from === to) return fmtLedgerDateShort(from)
+    return `${fmtLedgerDateShort(from)} – ${fmtLedgerDateShort(to)}`
+  }
+  if (from) return `${fmtLedgerDateShort(from)} onwards`
+  return 'All travel dates'
 }
 
 export function buildLedgerPaymentTerms(lines: SummaryLine[]): {
@@ -424,7 +504,10 @@ export function buildLedgerCancellationRows(
       policy: policyDisplayName(policy),
       refundableLabel: policy.refundable ? 'Refundable' : 'Non-refundable',
       refundableTone: policy.refundable ? 'blue' : 'red',
-      travelDates: fmtTravelWindow(policy.travelDateFrom || travelFrom, policy.travelDateTo || travelTo),
+      travelDates: fmtLedgerTravelWindow(
+        policy.travelDateFrom || travelFrom,
+        policy.travelDateTo || travelTo,
+      ),
       ruleLines: sortedRulesForDisplay(policy.rules).map((rule) => cancellationRuleCopy(rule, false)),
       charges: policyCharges(policy),
     })

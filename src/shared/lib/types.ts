@@ -417,6 +417,9 @@ export interface QuoteDocumentLine {
 
 export interface QuoteOptionRow {
   supplier: string
+  /** Room type, vehicle, activity name, etc. */
+  service: string
+  /** Meal basis, rate plan, or contract option (e.g. Full Board). */
   option: string
   includes: string
   excludes: string
