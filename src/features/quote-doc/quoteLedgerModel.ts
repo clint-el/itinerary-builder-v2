@@ -117,8 +117,9 @@ export function fmtLedgerUsd(n: number) {
 
 export function fmtLedgerDateShort(iso: string) {
   if (!iso) return '—'
-  const [, m, d] = iso.split('-')
-  return `${d}/${m}`
+  const [y, m, d] = iso.split('-')
+  const yy = y?.length >= 2 ? y.slice(-2) : y
+  return `${d}/${m}/${yy}`
 }
 
 export function fmtLedgerDateLong(iso: string) {

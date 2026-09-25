@@ -597,7 +597,10 @@ export function lineStatusLabel(status: LineStatus): string {
 }
 
 export function supplierStatusLabel(status: SupplierStatus): string {
-  if (status === 'NeedsRequest') return 'Needs request'
+  if (status === 'NeedsRequest') return 'No hold yet'
   if (status === 'None') return '—'
+  if (status === 'Waiting') return 'Awaiting supplier reply'
+  if (status === 'Booked') return 'Booked with supplier'
+  if (status === 'Rejected') return 'Supplier declined'
   return status
 }

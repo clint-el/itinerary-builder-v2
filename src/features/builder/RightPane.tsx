@@ -7,9 +7,8 @@ import {
   isLineUpdated,
   lineStatusOf,
   roleAllowsLineAction,
-  supplierStatusLabel,
-  supplierStatusOf,
 } from '@/shared/lib/lifecycleRules'
+import { serviceListBadge } from '@/features/builder/serviceBadgeModel'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -31,8 +30,6 @@ export function RightPane({
   onEdit,
   onPickSearch,
   demoRole,
-  onConfirmLine,
-  onResetLine,
   onCancelLine,
   onRemoveLine,
   readOnly,
@@ -46,8 +43,6 @@ export function RightPane({
   onEdit: (svc: AddedService) => void
   onPickSearch: (tab: ServiceTab, item: { location: string; name: string; service: string }) => void
   demoRole: DemoRole
-  onConfirmLine: (svc: AddedService) => void
-  onResetLine: (svc: AddedService) => void
   onCancelLine: (svc: AddedService) => void
   onRemoveLine: (svc: AddedService) => void
   readOnly?: boolean
@@ -115,12 +110,6 @@ export function RightPane({
                     }}
                     className="flex w-full items-center gap-2 border-b px-2.5 py-2 text-left last:border-0 hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    <span
-                      className="flex size-7 items-center justify-center rounded-md text-xs font-bold"
-                      style={{ background: meta.bg, color: meta.fg }}
-                    >
-                      {meta.initial}
-                    </span>
                     <span className="min-w-0">
                       <span className="block truncate text-[13px] font-semibold">{r.name}</span>
                       <span className="text-[11px] text-[#A1A1A1]">{meta.label}</span>
@@ -184,12 +173,6 @@ export function RightPane({
                     }
                   >
                     <div className="flex items-start gap-2">
-                      <span
-                        className="flex size-6 shrink-0 items-center justify-center rounded-md text-[10px] font-bold"
-                        style={{ background: svc.bg, color: svc.fg }}
-                      >
-                        {svc.initial}
-                      </span>
                       <div className="min-w-0 flex-1">
                         <div className="flex min-w-0 items-center gap-1.5">
                           <div className="truncate text-[13px] font-bold text-[#171717]">
@@ -205,14 +188,24 @@ export function RightPane({
                           {svc.subtitle}
                         </div>
                         <div className="mt-1 flex flex-wrap gap-1">
-                          <span className="rounded bg-[#F3F4F6] px-1.5 py-0.5 text-[10px] font-semibold text-[#525252]">
-                            {lineStatusOf(svc)}
-                          </span>
-                          {supplierStatusOf(svc) !== 'None' ? (
-                            <span className="rounded bg-[#EEF2FF] px-1.5 py-0.5 text-[10px] font-semibold text-[#4338CA]">
-                              {supplierStatusLabel(supplierStatusOf(svc))}
+                          {lineStatusOf(svc) === 'Cancelled' ? (
+                            <span className="rounded bg-[#FEE2E2] px-1.5 py-0.5 text-[10px] font-semibold text-[#B91C1C]">
+                              Cancelled
                             </span>
                           ) : null}
+                          {(() => {
+                            const badge = serviceListBadge(svc)
+                            return badge ? (
+                              <span
+                                className={cn(
+                                  'rounded px-1.5 py-0.5 text-[10px] font-semibold',
+                                  badge.className,
+                                )}
+                              >
+                                {badge.label}
+                              </span>
+                            ) : null
+                          })()}
                         </div>
                       </div>
                       {!readOnly ? (
@@ -262,28 +255,8 @@ export function RightPane({
                       ) : null}
                     </div>
 
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {roleAllowsLineAction(demoRole, 'confirm') && lineStatusOf(svc) === 'New' ? (
-                        <button
-                          type="button"
-                          onClick={() => onConfirmLine(svc)}
-                          className="h-6 rounded-md border border-[#15803D] bg-[#DCFCE7] px-2 text-[10.5px] font-semibold text-[#15803D]"
-                        >
-                          Confirm
-                        </button>
-                      ) : null}
-                      {roleAllowsLineAction(demoRole, 'reset') &&
-                      lineStatusOf(svc) === 'Confirmed' &&
-                      !isEngaged(svc) ? (
-                        <button
-                          type="button"
-                          onClick={() => onResetLine(svc)}
-                          className="h-6 rounded-md border border-[#E5E7EB] bg-white px-2 text-[10.5px] font-semibold text-[#525252]"
-                        >
-                          Reset
-                        </button>
-                      ) : null}
-                      {roleAllowsLineAction(demoRole, 'cancel') && isEngaged(svc) ? (
+                    {roleAllowsLineAction(demoRole, 'cancel') && isEngaged(svc) ? (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
                         <button
                           type="button"
                           onClick={() => onCancelLine(svc)}
@@ -291,8 +264,8 @@ export function RightPane({
                         >
                           Cancel
                         </button>
-                      ) : null}
-                    </div>
+                      </div>
+                    ) : null}
 
                     <div className="mt-2 flex items-center justify-between">
                       <span className="text-[11.5px] text-[#525252]">{svc.meta}</span>

@@ -92,8 +92,6 @@ export function BuilderPage() {
     updateStatus,
     getGuestDetails,
     demoRole,
-    confirmServiceLine,
-    resetServiceLine,
     cancelServiceLine,
     removeServiceLine,
   } = useStore()
@@ -244,18 +242,6 @@ export function BuilderPage() {
   function refreshServices() {
     if (!id) return
     setServices(getServices(id))
-  }
-
-  function handleConfirmLine(svc: AddedService) {
-    const result = confirmServiceLine(id, svc.id)
-    if (!result.ok) window.alert(result.reason)
-    refreshServices()
-  }
-
-  function handleResetLine(svc: AddedService) {
-    const result = resetServiceLine(id, svc.id)
-    if (!result.ok) window.alert(result.reason)
-    refreshServices()
   }
 
   function handleCancelLine(svc: AddedService) {
@@ -611,8 +597,6 @@ export function BuilderPage() {
           demoRole={demoRole}
           readOnly={!canEdit}
           structureLocked={structureLocked}
-          onConfirmLine={handleConfirmLine}
-          onResetLine={handleResetLine}
           onCancelLine={handleCancelLine}
           onRemoveLine={handleRemoveLine}
           onPickSearch={(tab, item) => {

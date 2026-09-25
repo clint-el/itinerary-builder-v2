@@ -87,7 +87,7 @@ describe('quotePackagedModel', () => {
       line('2026-10-01', 'First Camp', 0),
       line('2026-10-02', 'Transfer Co', 200),
     ])
-    expect(rows.map((r) => r.date)).toEqual(['01/10', '02/10', '03/10'])
+    expect(rows.map((r) => r.date)).toEqual(['01/10/26', '02/10/26', '03/10/26'])
     expect(rows[0].description).toContain('First Camp')
     expect(rows.every((r) => !('amount' in r))).toBe(true)
   })
