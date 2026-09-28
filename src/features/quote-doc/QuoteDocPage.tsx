@@ -48,6 +48,17 @@ import { QuotePackagedContent } from '@/features/quote-doc/QuotePackagedContent'
 import { QuoteTextEditor } from '@/features/quote-doc/QuoteTextEditor'
 import { RichTextDocumentContent } from '@/features/quote-doc/RichTextDocumentContent'
 import { QuoteTextSupplement } from '@/features/quote-doc/quoteTextBlocks'
+import {
+  CpsRemittancePages,
+  RemittanceLedgerHeader,
+} from '@/features/invoice-doc/CpsRemittancePages'
+import { remittanceStartPage } from '@/features/invoice-doc/cpsRemittanceModel'
+import {
+  GeneralCancellationPolicySection,
+  GeneralPaymentTermsSection,
+  PerSupplierPaymentTermsTable,
+  SupplierCancellationPolicyCard,
+} from '@/features/invoice-doc/invoiceTermsSections'
 import { resolveQuoteText } from '@/features/quote-doc/quoteTextModel'
 import {
   isQuoteStale,
@@ -263,6 +274,7 @@ export function QuoteDocPage() {
         { key: 4, label: 'Inclusions' },
       ]
       if (termsOn) base.push({ key: 5, label: 'Terms' })
+      base.push({ key: termsOn ? 6 : 5, label: 'Remittance' })
       return base
     }
     const base: PageDef[] = [
@@ -272,6 +284,7 @@ export function QuoteDocPage() {
       { key: 4, label: 'Inclusions' },
     ]
     if (termsOn) base.push({ key: 5, label: 'Terms' })
+    base.push({ key: base.length + 1, label: 'Remittance' })
     return base
   }, [isPackaged, termsOn])
 
@@ -667,7 +680,12 @@ export function QuoteDocPage() {
         {isDraftMode ? (
           <div className="qd-chrome w-[300px] shrink-0 overflow-y-auto border-r border-[#18181B] bg-[#FAFAFA] p-3">
             <div className="mb-2 text-[10px] font-bold uppercase tracking-wide text-[#737373]">Quote text</div>
-            <QuoteTextEditor value={quoteText} onChange={setQuoteText} onPersist={persistQuoteText} />
+            <QuoteTextEditor
+              value={quoteText}
+              onChange={setQuoteText}
+              onPersist={persistQuoteText}
+              includeInvoiceTerms
+            />
           </div>
         ) : null}
 
@@ -799,8 +817,7 @@ export function QuoteDocPage() {
             >
               <LedgerHeader title="Schedule of services" refLabel={refLabel} />
               <div className="flex flex-1 flex-col px-14 pb-8 pt-[30px]">
-                <div className="flex items-baseline justify-between gap-4">
-                  <h2 className="m-0 text-[21px] font-semibold tracking-[-0.3px]">Safari Quotation</h2>
+                <div className="flex items-baseline justify-end gap-4">
                   <span className="text-[10px] font-semibold uppercase tracking-[1.4px] text-[#931115]">
                     {rateTag}
                   </span>
@@ -838,14 +855,14 @@ export function QuoteDocPage() {
                           key={`${group.name}-${i}`}
                           className={cn(GRID_SCHEDULE, 'border-b border-[#F5F5F5] py-[5px] text-[10.5px] leading-snug')}
                         >
-                          <span className="font-['IBM_Plex_Mono'] text-[#6E6E6E]">{row.date}</span>
-                          <span className="font-semibold">{row.supplier}</span>
+                          <span className="text-[#6E6E6E]">{row.date}</span>
+                          <span className="font-semibold text-[#3D3D3D]">{row.supplier}</span>
                           <span className="text-[#3D3D3D]">{row.service}</span>
                           <span className="text-center text-[#6E6E6E]">{row.pax}</span>
-                          <span className="text-center font-['IBM_Plex_Mono'] text-[#6E6E6E]">{row.qty}</span>
-                          <span className="text-center font-['IBM_Plex_Mono'] text-[#6E6E6E]">{row.duration}</span>
-                          <span className="text-right font-['IBM_Plex_Mono'] text-[#6E6E6E]">{fmtLedgerAmount(row.unitPrice)}</span>
-                          <span className="text-right font-medium">{fmtLedgerAmount(row.amount)}</span>
+                          <span className="text-center text-[#6E6E6E]">{row.qty}</span>
+                          <span className="text-center text-[#6E6E6E]">{row.duration}</span>
+                          <span className="text-right text-[#6E6E6E]">{fmtLedgerAmount(row.unitPrice)}</span>
+                          <span className="text-right font-medium text-[#3D3D3D]">{fmtLedgerAmount(row.amount)}</span>
                         </div>
                       ))}
                     </div>
@@ -953,7 +970,7 @@ export function QuoteDocPage() {
               </div>
             </section>
 
-            {/* INCLUSIONS */}
+            {/* INCLUSIONS — parity with invoice page 4 */}
             <section
               data-qd-page="4"
               className="qd-page flex shrink-0 flex-col overflow-hidden bg-white shadow-[0_12px_32px_rgba(0,0,0,0.35)]"
@@ -961,73 +978,51 @@ export function QuoteDocPage() {
             >
               <LedgerHeader title="Inclusions and exclusions" refLabel={refLabel} />
               <div className="flex flex-1 flex-col px-14 pb-8 pt-[34px]">
-                <h2 className="m-0 mb-[18px] text-[21px] font-semibold tracking-[-0.3px]">
-                  Safari Inclusions &amp; Exclusions
-                </h2>
-
-                <div className="grid grid-cols-2 border border-[#101010]">
-                  <div className="border-r border-[#E4E4E4] px-5 py-[18px]">
-                    <div className="text-[9px] font-semibold uppercase tracking-[1.2px] text-[#931115]">
-                      General inclusions
-                    </div>
-                    <RichTextDocumentContent
-                      html={docQuoteText.generalInclusionsHtml}
-                      variant="plain"
-                      className="mt-3 text-[#3D3D3D]"
-                    />
+                <div className="mb-[18px] grid grid-cols-2 gap-8">
+                  <div>
+                    <SectionLabel>General inclusions</SectionLabel>
+                    <RichTextDocumentContent html={docQuoteText.generalInclusionsHtml} variant="bullets" className="mt-3" />
                   </div>
-                  <div className="px-5 py-[18px]">
-                    <div className="text-[9px] font-semibold uppercase tracking-[1.2px] text-[#931115]">
-                      General exclusions
-                    </div>
-                    <RichTextDocumentContent
-                      html={docQuoteText.generalExclusionsHtml}
-                      variant="plain"
-                      className="mt-3 text-[#3D3D3D]"
-                    />
+                  <div>
+                    <SectionLabel>General exclusions</SectionLabel>
+                    <RichTextDocumentContent html={docQuoteText.generalExclusionsHtml} variant="bullets" className="mt-3" />
                   </div>
                 </div>
 
                 <QuoteTextSupplement quoteText={docQuoteText} />
 
-                <p className="mt-3.5 text-[11px] leading-relaxed text-[#8A8A8A]">
-                  These items are not included in bed and breakfast, half board or day room bookings. Inclusions and
-                  exclusions specific to each supplier service option are set out below.
-                </p>
-
-                <div className="mt-[26px]">
-                  <SectionLabel>Supplier Service options</SectionLabel>
-                  <div className="mt-2 grid grid-cols-[120px_88px_88px_minmax(0,1fr)_minmax(0,1fr)] gap-x-3 border-b border-[#F0F0F0] py-2 text-[8.5px] font-semibold uppercase tracking-[0.9px] text-[#8A8A8A]">
-                    <span>Supplier</span>
-                    <span>Service</span>
-                    <span>Basis</span>
-                    <span>Includes</span>
-                    <span>Excludes</span>
-                  </div>
-                  {optionRows.length ? (
-                    optionRows.map((row) => (
-                      <div
-                        key={`${row.supplier}-${row.service}-${row.option}`}
-                        className="grid grid-cols-[120px_88px_88px_minmax(0,1fr)_minmax(0,1fr)] gap-x-3 border-b border-[#F5F5F5] py-2.5 text-[11px] leading-snug"
-                      >
-                        <span className="font-semibold">{row.supplier}</span>
-                        <span className="text-[#3D3D3D]">{row.service}</span>
-                        <span className="text-[#3D3D3D]">{row.option}</span>
-                        <span className="text-[#3D3D3D]">{row.includes}</span>
-                        <span className="text-[#3D3D3D]">{row.excludes}</span>
+                {optionRows.length ? (
+                  <div className="mt-[26px]">
+                    <SectionLabel>Supplier Service options</SectionLabel>
+                    <div className="mt-2 border border-[#101010]">
+                      <div className="grid grid-cols-[108px_88px_88px_1fr_1fr] gap-3 border-b border-[#EFEFEF] px-4 py-[7px] text-[8.5px] font-semibold uppercase tracking-[0.9px] text-[#8A8A8A]">
+                        <span>Supplier</span>
+                        <span>Service</span>
+                        <span>Basis</span>
+                        <span>Includes</span>
+                        <span>Excludes</span>
                       </div>
-                    ))
-                  ) : (
-                    <p className="py-4 text-[12px] text-[#8A8A8A]">Add services to populate per-option inclusions.</p>
-                  )}
-                </div>
+                      {optionRows.map((row, i) => (
+                        <div
+                          key={`${row.supplier}-${i}`}
+                          className="grid grid-cols-[108px_88px_88px_1fr_1fr] gap-3 border-b border-[#EFEFEF] px-4 py-[11px] text-[11px] last:border-b-0"
+                        >
+                          <span className="font-semibold">{row.supplier}</span>
+                          <span className="text-[#525252]">{row.service}</span>
+                          <span className="text-[#525252]">{row.option}</span>
+                          <span className="text-[#525252]">{row.includes}</span>
+                          <span className="text-[#8A8A8A]">{row.excludes}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
 
                 <div className="flex-1" />
-                <PageFooter left="Full per-option terms continue on request" right={`4 / ${totalPages}`} bordered />
+                <PageFooter left="Per-supplier option detail from service contracts" right={`4 / ${totalPages}`} bordered />
               </div>
             </section>
 
-            {/* TERMS */}
             {termsOn ? (
               <section
                 data-qd-page="5"
@@ -1036,104 +1031,42 @@ export function QuoteDocPage() {
               >
                 <LedgerHeader title="Payment terms and cancellation" refLabel={refLabel} />
                 <div className="flex flex-1 flex-col px-14 pb-8 pt-[34px]">
-                  <h2 className="m-0 mb-1.5 text-[21px] font-semibold tracking-[-0.3px]">
-                    Supplier Payment Terms &amp; Cancellation Policies
-                  </h2>
-                  <p className="m-0 mb-5 text-[11px] leading-relaxed text-[#8A8A8A]">
-                    Each supplier sets its own terms for the travel dates quoted. The payment schedule on page 3 takes
-                    the strictest of them — the highest deposit and the earliest balance date across the itinerary — so
-                    a single deposit settles every booking.
-                  </p>
+                  <GeneralPaymentTermsSection quoteText={docQuoteText} />
+                  <PerSupplierPaymentTermsTable paymentTerms={paymentTerms} />
+                  <GeneralCancellationPolicySection quoteText={docQuoteText} />
 
-                  <SectionLabel>Payment terms</SectionLabel>
-                  <div className="mt-2 grid grid-cols-[minmax(0,1fr)_128px_62px_96px_62px] gap-x-3 border-b border-[#F0F0F0] py-2 text-[8.5px] font-semibold uppercase tracking-[0.9px] text-[#8A8A8A]">
-                    <span>Supplier / term</span>
-                    <span>Travel dates</span>
-                    <span className="text-right">Deposit</span>
-                    <span className="text-right">Balance due</span>
-                    <span className="text-right">Tax code</span>
-                  </div>
-                  {paymentTerms.rows.map((row) => (
-                    <div
-                      key={row.supplier}
-                      className="grid grid-cols-[minmax(0,1fr)_128px_62px_96px_62px] gap-x-3 border-b border-[#F5F5F5] py-2.5 text-[11px] leading-snug"
-                    >
-                      <span>
-                        <b>{row.supplier}</b>
-                        <br />
-                        <span className="text-[#8A8A8A]">{row.term}</span>
-                      </span>
-                      <span className="font-['IBM_Plex_Mono'] text-[10px] text-[#3D3D3D]">{row.travelDates}</span>
-                      <span className="text-right font-['IBM_Plex_Mono']">{row.deposit}</span>
-                      <span className="text-right text-[#3D3D3D]">{row.balanceDue}</span>
-                      <span className="text-right text-[10px] text-[#8A8A8A]">{row.taxCode}</span>
-                    </div>
-                  ))}
-                  <div className="grid grid-cols-[minmax(0,1fr)_128px_62px_96px_62px] gap-x-3 border-t border-[#101010] py-2 text-[11px]">
-                    <span className="font-semibold">Applied to this itinerary</span>
-                    <span className="text-[10px] text-[#8A8A8A]">Strictest across suppliers</span>
-                    <span className="text-right font-['IBM_Plex_Mono'] font-semibold">{paymentTerms.appliedDeposit}</span>
-                    <span className="text-right font-semibold">{paymentTerms.appliedBalance}</span>
-                    <span />
-                  </div>
-
-                  <div className="mt-[26px]">
+                  <div className="mt-7">
                     <SectionLabel>Supplier cancellation policies</SectionLabel>
-                    <div className="mt-2 grid grid-cols-[148px_124px_104px_minmax(0,1fr)] gap-x-3.5 border-b border-[#F0F0F0] py-2 text-[8.5px] font-semibold uppercase tracking-[0.9px] text-[#8A8A8A]">
-                      <span>Supplier / contract</span>
-                      <span>Policy</span>
-                      <span>Travel dates</span>
-                      <span>Charge if cancelled</span>
+                    <div className="mt-2 flex flex-col gap-4">
+                      {cancellationRows.length ? (
+                        cancellationRows.map((row) => (
+                          <SupplierCancellationPolicyCard key={row.supplier} row={row} />
+                        ))
+                      ) : (
+                        <p className="text-[12px] text-[#8A8A8A]">
+                          Supplier cancellation policies appear once suppliers are on the itinerary.
+                        </p>
+                      )}
                     </div>
-                    {cancellationRows.length ? (
-                      cancellationRows.map((row) => (
-                        <div
-                          key={row.supplier}
-                          className="grid grid-cols-[148px_124px_104px_minmax(0,1fr)] gap-x-3.5 border-b border-[#F5F5F5] py-[11px] text-[11px] leading-snug"
-                        >
-                          <span>
-                            <b>{row.supplier}</b>
-                            <br />
-                            <span className="text-[#8A8A8A]">{row.description}</span>
-                          </span>
-                          <span>
-                            {row.policy}
-                            <br />
-                            <span className={cn('text-[10px]', row.refundableTone === 'blue' ? 'text-[#0369A1]' : 'text-[#931115]')}>
-                              {row.refundableLabel}
-                            </span>
-                          </span>
-                          <span className="pt-px font-['IBM_Plex_Mono'] text-[10px] text-[#6E6E6E]">{row.travelDates}</span>
-                          <span className="flex flex-col gap-1">
-                            {row.charges.map((charge) => (
-                              <div key={charge.label} className="grid grid-cols-[minmax(0,1fr)_62px] gap-x-2.5 leading-snug">
-                                <span className="text-[#3D3D3D]">{charge.label}</span>
-                                <span className="text-right font-['IBM_Plex_Mono'] font-medium">{charge.amount}</span>
-                              </div>
-                            ))}
-                          </span>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="py-4 text-[12px] text-[#8A8A8A]">Supplier cancellation policies appear once suppliers are on the itinerary.</p>
-                    )}
                   </div>
-
-                  <p className="mt-4 text-[11px] leading-relaxed text-[#8A8A8A]">
-                    Charges are a percentage of the service value unless shown as a cash amount. Where a policy is marked
-                    non-refundable, no part of the service value is recoverable once the first charge band begins. Days
-                    are counted against the travel date of the service concerned, not the start of the safari.
-                  </p>
 
                   <div className="flex-1" />
                   <PageFooter
-                    left="Terms are those held against each supplier contract at the date of this quote"
+                    left="Per-supplier terms and cancellation policies as held at invoice generation"
                     right={`5 / ${totalPages}`}
                     bordered
                   />
                 </div>
               </section>
             ) : null}
+
+            <CpsRemittancePages
+              refLabel={refLabel}
+              totalPages={totalPages}
+              startPage={remittanceStartPage(false, termsOn)}
+              pageAttr="data-qd-page"
+              Header={RemittanceLedgerHeader}
+            />
             </>
             ) : null}
           </div>
