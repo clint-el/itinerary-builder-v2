@@ -21,7 +21,6 @@ import { Button } from '@/components/ui/button'
 import {
   depthOf,
   isBuilderStatus,
-  isTerminalStatus,
   nightsBetween,
   parentReference,
   partyGuests,
@@ -49,7 +48,6 @@ import {
   holdsSummaryOf,
   linesFromQuoteGroups,
   linesFromServices,
-  voucherOutstandingSummary,
   type PriceDisplayMode,
   type SummaryCard,
   type SummaryCellTone,
@@ -57,9 +55,7 @@ import {
   type VoucherValueMode,
 } from './summaryModel'
 import { InvoiceDocumentPanel } from '@/features/invoice-doc/InvoiceDocumentPanel'
-import { isInvoiceStale } from '@/features/invoice-doc/invoiceSnapshotModel'
 import { QuoteDocumentsPanel } from '@/features/quote-doc/QuoteDocumentsPanel'
-import { isQuoteStale } from '@/features/quote-doc/quoteSnapshotModel'
 import { VouchersView } from './VouchersView'
 
 function transitionButtonClass(t: LifecycleTransition) {
@@ -228,23 +224,6 @@ export function SummaryPage() {
     })
   }, [itinerary, lifecycle, services, demoRole])
 
-  const docHint = useMemo(() => {
-    if (!itinerary) return null
-    const fp = itineraryCommercialFp(services)
-    if (itinerary.status === 'PREPARED' || itinerary.status === 'QUOTED') {
-      if (!quotes.length) return 'No quote generated yet'
-      const latest = quotes.reduce((a, b) => (a.seq >= b.seq ? a : b))
-      if (isQuoteStale(latest, fp)) return `${latest.docNumber} is stale — regenerate to send updates`
-      return `${latest.docNumber} matches current lines`
-    }
-    if (itinerary.status === 'APPROVED' || itinerary.status === 'INVOICED' || itinerary.status === 'VOUCHERED' || itinerary.status === 'CONFIRMED') {
-      if (!invoice) return 'Invoice not generated yet'
-      if (isInvoiceStale(invoice, fp)) return `${invoice.invoiceNumber} is stale — update before sending`
-      return `${invoice.invoiceNumber} matches current lines`
-    }
-    return null
-  }, [itinerary, services, quotes, invoice])
-
   const lines = useMemo(() => {
     if (services.length > 0) return linesFromServices(services, guests)
     if (quoteGroups.length > 0) return linesFromQuoteGroups(quoteGroups)
@@ -301,10 +280,6 @@ export function SummaryPage() {
   )
   const showSidePanel = view === 'summary'
   const holdRollup = useMemo(() => holdsSummaryOf(lines), [lines])
-  const voucherOutstanding = useMemo(
-    () => voucherOutstandingSummary(itinerary?.voucherMeta),
-    [itinerary?.voucherMeta],
-  )
   const isSubQuote = itinerary ? depthOf(itinerary.reference) === 2 : false
   const parentRef = itinerary ? parentReference(itinerary.reference) : ''
   const grandRef = parentRef ? parentReference(parentRef) : ''
@@ -356,12 +331,6 @@ export function SummaryPage() {
     { label: 'Nights', value: nightsCount ? `${nightsCount} night${nightsCount === 1 ? '' : 's'}` : '—' },
     { label: 'Hold Status', value: holdRollup.summary },
   ]
-
-  const nextHint = isTerminalStatus(itinerary.status)
-    ? 'This itinerary is in a terminal state.'
-    : gatedLifecycle.length
-      ? 'Choose the next step.'
-      : 'No manual transitions available.'
 
   function applyTransition(t: LifecycleTransition & { gate?: { ok: boolean; reason?: string } }) {
     if (t.gate && !t.gate.ok) {
@@ -459,18 +428,6 @@ export function SummaryPage() {
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              <span
-                className="inline-flex h-[26px] items-center gap-1.5 whitespace-nowrap rounded-full px-3 text-[12.5px] font-bold"
-                style={{ background: holdRollup.bg, color: holdRollup.fg }}
-              >
-                <span className="size-[7px] rounded-full" style={{ background: holdRollup.fg }} />
-                {holdRollup.chip}
-              </span>
-              {voucherOutstanding.issued ? (
-                <span className="inline-flex h-[26px] items-center whitespace-nowrap rounded-full bg-[#FEF3C7] px-3 text-[12.5px] font-bold text-[#B45309]">
-                  {voucherOutstanding.label}
-                </span>
-              ) : null}
               <StatusChip status={itinerary.status} />
               {isStructureLocked(itinerary.status) ? (
                 <span className="inline-flex h-[26px] items-center gap-1.5 whitespace-nowrap rounded-full bg-[#FEF3C7] px-3 text-[12.5px] font-bold text-[#B45309]">
@@ -918,8 +875,8 @@ export function SummaryPage() {
         ) : null}
       </div>
 
-      <div className="flex shrink-0 items-center justify-between gap-4 border-t border-[#E5E7EB] bg-white px-6 py-3">
-        <div className="flex min-w-0 items-center gap-3 text-[13px] text-[#525252]">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-[#E5E7EB] bg-white px-6 py-3">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" onClick={() => navigate(`/build/${id}`)}>
             <ChevronLeft />
             Back to editing
@@ -950,19 +907,8 @@ export function SummaryPage() {
               View invoice PDF
             </Button>
           ) : null}
-          <StatusChip status={itinerary.status} />
-          {isStructureLocked(itinerary.status) ? (
-            <span className="inline-flex h-6 items-center gap-1.5 rounded-[7px] bg-[#FEF3C7] px-2.5 text-[11.5px] font-semibold text-[#B45309]">
-              <Lock className="size-3" />
-              Structure locked
-            </span>
-          ) : null}
-          <span className="min-w-0 truncate">
-            {nextHint}
-            {docHint ? <span className="text-[#A1A1A1]"> · {docHint}</span> : null}
-          </span>
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
+        <div className="flex shrink-0 flex-nowrap items-center justify-end gap-2">
           {gatedLifecycle.length === 0 ? (
             <span className="text-[13px] italic text-[#A1A1A1]">No further actions in this state.</span>
           ) : (

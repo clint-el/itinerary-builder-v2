@@ -13,6 +13,11 @@ import {
   type SummaryPriceGroup,
   SUMMARY_TYPE_META,
 } from '@/features/summary/summaryModel'
+import {
+  paymentTermsForSupplier,
+  primaryPaymentTermBalanceDays,
+  primaryPaymentTermPercent,
+} from '@/shared/lib/supplierPaymentTerms'
 import type {
   AddedService,
   Guest,
@@ -450,6 +455,17 @@ export function fmtLedgerTravelWindow(from: string, to: string) {
   return 'All travel dates'
 }
 
+function supplierTravelWindow(lines: SummaryLine[], supplier: string): { from: string; to: string } {
+  let from = ''
+  let to = ''
+  for (const line of lines) {
+    if (line.supplier !== supplier || !line.date) continue
+    if (!from || line.date < from) from = line.date
+    if (!to || line.date > to) to = line.date
+  }
+  return { from, to: to || from }
+}
+
 export function buildLedgerPaymentTerms(lines: SummaryLine[]): {
   rows: LedgerPaymentTermRow[]
   appliedDeposit: string
@@ -463,12 +479,20 @@ export function buildLedgerPaymentTerms(lines: SummaryLine[]): {
     if (seen.has(key)) continue
     seen.add(key)
     const rule = depositRuleFor(line.supplier)
+    const { from, to } = supplierTravelWindow(lines, line.supplier)
+    const termRows = paymentTermsForSupplier(line.supplier, from, to, {
+      pct: rule.pct,
+      days: rule.days,
+    })
+    const primary = termRows[0]
+    const pct = primaryPaymentTermPercent(line.supplier, from, to, rule.pct)
+    const days = primaryPaymentTermBalanceDays(line.supplier, from, to, rule.days)
     rows.push({
       supplier: line.supplier,
-      term: rule.label.includes('·') ? rule.label.split('·')[0].trim() : 'General',
-      travelDates: 'All travel dates',
-      deposit: `${rule.pct}%`,
-      balanceDue: rule.days ? `${rule.days} days before` : 'On confirmation',
+      term: primary?.name ?? 'General',
+      travelDates: primary?.travelDates ?? fmtLedgerTravelWindow(from, to),
+      deposit: primary?.deposit ?? `${pct}%`,
+      balanceDue: primary?.balanceDue ?? (days ? `${days} days before arrival` : 'On confirmation'),
       taxCode: line.type === 'accommodation' ? 'Standard' : '—',
     })
   }

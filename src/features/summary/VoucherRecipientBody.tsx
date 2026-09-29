@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { cn } from '@/shared/lib/utils'
 import { VoucherAnswerForm } from './VoucherAnswerForm'
 import type { VoucherCard } from './summaryModel'
+import { VoucherPaymentTermsTable } from './VoucherPaymentTermsTable'
 
 /**
  * Exactly what the supplier's confirmation page (and the preview) renders — cost-only, one
@@ -114,7 +115,7 @@ export function VoucherRecipientBody({
       <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#E5E7EB] bg-[#FAFAFB] px-4 py-3">
         <div>
           <div className="text-[11px] font-bold uppercase tracking-[0.3px] text-[#A1A1A1]">Payment terms</div>
-          <div className="mt-0.5 text-[12.5px] text-[#525252]">{card.depositRule}</div>
+          <VoucherPaymentTermsTable rows={card.paymentTermRows} />
         </div>
         <div className="text-right">
           <div className="text-[11px] font-bold uppercase tracking-[0.3px] text-[#A1A1A1]">Deposit</div>

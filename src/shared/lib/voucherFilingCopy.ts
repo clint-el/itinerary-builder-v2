@@ -1,3 +1,10 @@
+export type VoucherFilingPaymentTermRow = {
+  name: string
+  travelDates: string
+  deposit: string
+  balanceDue: string
+}
+
 /** Plain-text filing copy sent as a PDF attachment with the voucher email. */
 export type VoucherFilingCopy = {
   supplier: string
@@ -13,6 +20,7 @@ export type VoucherFilingCopy = {
   serviceLines: { date: string; service: string; detail: string; pax: string; value: string }[]
   deposit: string
   depositRule: string
+  paymentTermRows: VoucherFilingPaymentTermRow[]
 }
 
 export function voucherFilingFilename(voucherRef: string): string {
@@ -32,6 +40,7 @@ export function buildVoucherFilingCopyFromCard(
     total: string
     deposit: string
     depositRule: string
+    paymentTermRows: VoucherFilingPaymentTermRow[]
     note?: string
     guestRoster: { name: string; role: string; dietaryText: string; additionalText: string }[]
     rows: { date: string; service: string; detail: string; pax: string; value: string }[]
@@ -63,5 +72,6 @@ export function buildVoucherFilingCopyFromCard(
     })),
     deposit: card.deposit,
     depositRule: card.depositRule,
+    paymentTermRows: card.paymentTermRows,
   }
 }

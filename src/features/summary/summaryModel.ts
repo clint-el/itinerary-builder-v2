@@ -29,6 +29,12 @@ import {
   transportDays,
   usedGuestIds,
 } from '@/features/builder/builderUtils'
+import {
+  paymentTermsForSupplier,
+  primaryPaymentTermBalanceDays,
+  primaryPaymentTermPercent,
+  type SupplierPaymentTermRow,
+} from '@/shared/lib/supplierPaymentTerms'
 
 export type SummaryServiceType = 'accommodation' | 'flight' | 'transportation' | 'activity' | 'extra' | 'other'
 
@@ -1649,7 +1655,9 @@ export type VoucherCard = {
   headers: SummaryHeaderCell[]
   rows: VoucherRow[]
   deposit: string
+  /** @deprecated Use paymentTermRows — kept for filing PDF one-liner fallback. */
   depositRule: string
+  paymentTermRows: SupplierPaymentTermRow[]
   depositDue: string
   issued: boolean
   /** Current non-superseded token, for building the demo "open supplier link" URL. */
@@ -1869,23 +1877,6 @@ export function isPayableVoucherLine(l: SummaryLine): boolean {
   return costEffOf(l) > 0
 }
 
-export type VoucherOutstandingSummary = { issued: number; awaiting: number; label: string }
-
-export function voucherOutstandingSummary(
-  voucherMeta: Record<string, VoucherMeta> = {},
-): VoucherOutstandingSummary {
-  const entries = Object.values(voucherMeta).filter((m) => m.issued)
-  const awaiting = entries.filter((m) => !m.submittedAt).length
-  const issued = entries.length
-  const label =
-    issued === 0
-      ? 'No vouchers issued'
-      : awaiting
-        ? `${awaiting} of ${issued} voucher${issued === 1 ? '' : 's'} awaiting supplier`
-        : `${issued} voucher${issued === 1 ? '' : 's'} answered`
-  return { issued, awaiting, label }
-}
-
 function voucherRoomRowsForEntity(
   items: SummaryLine[],
   services: AddedService[],
@@ -1976,6 +1967,15 @@ export function buildVouchers(
     const rule = depositRuleFor(legalName)
     const first = sorted.find((l) => l.date)?.date || ''
     const last = [...sorted].reverse().find((l) => l.date)?.date || first
+    const travelFrom = first
+    const travelTo = last || first
+    const paymentTermRows = paymentTermsForSupplier(legalName, travelFrom, travelTo, {
+      pct: rule.pct,
+      days: rule.days,
+    })
+    const depositPct = primaryPaymentTermPercent(legalName, travelFrom, travelTo, rule.pct)
+    const balanceDays = primaryPaymentTermBalanceDays(legalName, travelFrom, travelTo, rule.days)
+    const termForDue: DepositRule = { ...rule, pct: depositPct, days: balanceDays }
     const meta = voucherMeta[entityId]
     const isIssued = !!meta?.issued
     const voucherStatus = supplierVouchers[entityId] || null
@@ -2128,9 +2128,10 @@ export function buildVouchers(
         ...(show ? [{ label: mode === 'sell' ? 'Sell' : 'Cost', align: 'r' as Align }] : []),
       ],
       rows,
-      deposit: wholeUsd(Math.round(cost * (rule.pct / 100))),
-      depositRule: rule.label,
-      depositDue: fmtDepositDue(first, rule),
+      deposit: wholeUsd(Math.round(cost * (depositPct / 100))),
+      depositRule: paymentTermRows.map((r) => `${r.deposit} · ${r.balanceDue}`).join(' · '),
+      paymentTermRows,
+      depositDue: fmtDepositDue(first, termForDue),
       issued: isIssued,
       activeToken: meta?.tokens.slice().reverse().find((t) => !t.supersededAt)?.token,
       voucherStatus,
@@ -2172,19 +2173,16 @@ export function buildVouchers(
         'The supplier is paid the adjusted cost — agree it with them before they invoice.',
       emailLine: meta?.issuedAt
         ? `Request sent ${fmtPayDate(meta.issuedAt.slice(0, 10))} to ${meta.issuedTo.join(', ') || supplierEmailFor(entityId)}` +
-          (meta.resendCount ? `  ·  resent ${meta.resendCount}×` : '') +
-          '  ·  confirmation link included'
+          (meta.resendCount ? `  ·  resent ${meta.resendCount}×` : '')
         : '',
       sendHistory,
       answerHistory,
       pendingRequestLatest,
       responsePill,
       responseHint:
-        responseState === 'Awaiting supplier'
-          ? 'Supplier ticks the lines they can hold and submits from the link'
-          : responseState === 'Not issued'
-            ? ''
-            : 'Per-line outcome recorded against the itinerary',
+        responseState === 'Not issued' || responseState === 'Awaiting supplier'
+          ? ''
+          : 'Per-line outcome recorded against the itinerary',
       responseSummary: meta?.submittedAt
         ? `${heldCount} service line${heldCount === 1 ? '' : 's'} on hold  ·  ` +
           `${rejected.length ? `${rejected.length} rejected` : 'nothing rejected'}  ·  ` +

@@ -74,7 +74,19 @@ export async function buildVoucherFilingPdfBase64(copy: VoucherFilingCopy): Prom
     }
   }
   y -= 4
-  draw(`Deposit: ${copy.deposit} · ${copy.depositRule}`)
+  draw(`Deposit amount: ${copy.deposit}`, { bold: true })
+  draw('Payment terms', { bold: true })
+  const termRows = copy.paymentTermRows?.length
+    ? copy.paymentTermRows
+    : [{ name: '—', travelDates: '—', deposit: copy.depositRule, balanceDue: '' }]
+  for (const row of termRows) {
+    for (const line of wrap(
+      `${row.name} · ${row.travelDates} · ${row.deposit} · ${row.balanceDue}`.replace(/ · $/, ''),
+      95,
+    )) {
+      draw(line)
+    }
+  }
 
   const bytes = await doc.save()
   return Buffer.from(bytes).toString('base64')

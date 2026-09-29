@@ -26,6 +26,7 @@ import {
 import { VoucherRecipientBody } from './VoucherRecipientBody'
 import { VoucherIssueDialog } from './VoucherIssueDialog'
 import type { VoucherCard, VoucherValueMode } from './summaryModel'
+import { VoucherPaymentTermsTable } from './VoucherPaymentTermsTable'
 
 type SubmitInput = {
   lines: VoucherLineInput[]
@@ -260,27 +261,6 @@ export function VouchersView({
             </div>
           </header>
 
-          {v.emailLine ? (
-            <div className="border-b border-[#DCFCE7] bg-[#F6FEF9] px-5 py-2.5">
-              <div className="flex items-center gap-2 text-[11.5px] font-semibold text-[#15803D]">
-                <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-                {v.emailLine}
-              </div>
-              {v.sendHistory.length ? (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {v.sendHistory.slice(-3).map((s, i) => (
-                    <span
-                      key={i}
-                      className="inline-flex items-center rounded-full bg-white px-2 py-0.5 text-[10.5px] font-medium text-[#15803D] ring-1 ring-[#BBF7D0]"
-                    >
-                      {s.via} · {s.recipient} · {s.deliveryStatus}
-                    </span>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-
           {v.pendingRequestLatest ? (
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#FDE68A] bg-[#FFFDF5] px-5 py-2.5">
               <span className="text-[11.5px] font-semibold text-[#B45309]">
@@ -301,27 +281,6 @@ export function VouchersView({
                   className="h-7 rounded-[7px] border border-[#B45309] bg-white px-[11px] text-[11.5px] font-bold text-[#B45309]"
                 >
                   Resend latest
-                </button>
-              ) : null}
-            </div>
-          ) : null}
-
-          {v.changedSinceIssued ? (
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#FDE68A] bg-[#FFFDF5] px-5 py-2.5">
-              <span className="flex items-center gap-2 text-[11.5px] font-semibold text-[#B45309]">
-                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                Guest requirements changed since this voucher was issued — {v.supplier} has the older copy.
-              </span>
-              {raised && canIssue ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIssueCard(v)
-                    setIssueStep('review')
-                  }}
-                  className="h-7 rounded-[7px] border border-[#B45309] bg-white px-[11px] text-[11.5px] font-bold text-[#B45309]"
-                >
-                  Re-issue updated voucher
                 </button>
               ) : null}
             </div>
@@ -501,7 +460,9 @@ export function VouchersView({
                 >
                   {v.responsePill.label}
                 </span>
-                <span className="text-[11.5px] text-[#94A3B8]">{v.responseHint}</span>
+                {v.responseHint ? (
+                  <span className="text-[11.5px] text-[#94A3B8]">{v.responseHint}</span>
+                ) : null}
               </div>
               {v.responseSummary ? (
                 <div className="mt-2.5">
@@ -565,9 +526,9 @@ export function VouchersView({
           ) : null}
 
           <footer className="flex flex-wrap items-center justify-between gap-4 border-t border-[#EDEFF2] bg-[#FAFAFB] px-5 py-3.5">
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <div className={SECTION_LABEL}>Payment terms</div>
-              <div className="mt-1 text-[12.5px] font-medium text-[#525252]">{v.depositRule}</div>
+              <VoucherPaymentTermsTable rows={v.paymentTermRows} />
             </div>
             <div className="shrink-0 text-right">
               <div className={SECTION_LABEL}>Deposit</div>
