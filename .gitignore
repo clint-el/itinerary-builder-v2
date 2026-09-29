@@ -13,6 +13,7 @@ dist
 .env.*
 !.env.example
 public/sol-voucher-mail.json
+.data/
 dist-ssr
 *.local
 .pnpm-store

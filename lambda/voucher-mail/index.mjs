@@ -1,17 +1,61 @@
 /**
- * AWS Lambda (Function URL) handler for voucher mail on Amplify/static hosting.
- * Deploy with RESEND_API_KEY, APP_ORIGIN, VOUCHER_FROM, optional ALLOWED_ORIGIN.
- * Set Amplify build env VOUCHER_MAIL_API_URL to this function's URL.
+ * AWS Lambda — voucher mail + shared voucher sessions (DynamoDB).
+ * Env: RESEND_API_KEY, APP_ORIGIN, VOUCHER_FROM, ALLOWED_ORIGIN, VOUCHER_SESSIONS_TABLE
  */
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
+import { DynamoDBDocumentClient, GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb'
 import { Resend } from 'resend'
+
+const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}))
+const TABLE = process.env.VOUCHER_SESSIONS_TABLE?.trim()
 
 function corsHeaders(origin) {
   const allowed = process.env.ALLOWED_ORIGIN?.trim() || origin || '*'
   return {
     'Access-Control-Allow-Origin': allowed,
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, PUT, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
   }
+}
+
+function jsonResponse(statusCode, origin, body) {
+  return {
+    statusCode,
+    headers: { ...corsHeaders(origin), 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }
+}
+
+function sessionKey(itineraryId, entityId) {
+  return `${itineraryId}#${entityId}`
+}
+
+async function putSession(itineraryId, entityId, meta) {
+  if (!TABLE) return
+  const updatedAt = new Date().toISOString()
+  await ddb.send(
+    new PutCommand({
+      TableName: TABLE,
+      Item: {
+        pk: sessionKey(itineraryId, entityId),
+        itineraryId,
+        entityId,
+        meta,
+        updatedAt,
+      },
+    }),
+  )
+}
+
+async function getSession(itineraryId, entityId) {
+  if (!TABLE) return null
+  const out = await ddb.send(
+    new GetCommand({
+      TableName: TABLE,
+      Key: { pk: sessionKey(itineraryId, entityId) },
+    }),
+  )
+  return out.Item ?? null
 }
 
 function absoluteUrl(relativeOrAbsolute, appOrigin) {
@@ -42,25 +86,51 @@ ${input.note ? `<p><strong>Note from your planner:</strong> ${input.note}</p>` :
 </body></html>`
 
   const text = [greeting, '', lead, '', confirmUrl, '', `Filing copy: ${pdfUrl}`].join('\n')
-  return { html, text, confirmUrl }
+  return { html, text }
 }
 
-export async function handler(event) {
-  const method = event.requestContext?.http?.method || event.httpMethod || 'GET'
-  const origin = event.headers?.origin || event.headers?.Origin
+async function handleSessionGet(event, origin) {
+  const qs = event.queryStringParameters || {}
+  const itineraryId = qs.itineraryId?.trim()
+  const entityId = qs.entityId?.trim()
+  const token = qs.token?.trim()
 
-  if (method === 'OPTIONS') {
-    return { statusCode: 204, headers: corsHeaders(origin), body: '' }
+  if (!itineraryId || !entityId || !token) {
+    return jsonResponse(400, origin, { error: 'itineraryId, entityId, and token are required' })
   }
 
-  if (method !== 'POST') {
-    return {
-      statusCode: 405,
-      headers: { ...corsHeaders(origin), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'Method not allowed' }),
-    }
+  const stored = await getSession(itineraryId, entityId)
+  if (!stored?.meta) {
+    return jsonResponse(404, origin, { error: 'No voucher session found' })
   }
 
+  const tokens = stored.meta.tokens ?? []
+  if (!tokens.some((t) => t.token === token)) {
+    return jsonResponse(404, origin, { error: 'Token not found in session' })
+  }
+
+  return jsonResponse(200, origin, { meta: stored.meta, updatedAt: stored.updatedAt })
+}
+
+async function handleSessionPut(event, origin) {
+  let body
+  try {
+    body = JSON.parse(event.body || '{}')
+  } catch {
+    return jsonResponse(400, origin, { error: 'Invalid JSON' })
+  }
+
+  const itineraryId = body.itineraryId?.trim()
+  const entityId = body.entityId?.trim()
+  if (!itineraryId || !entityId || !body.meta) {
+    return jsonResponse(400, origin, { error: 'itineraryId, entityId, and meta are required' })
+  }
+
+  await putSession(itineraryId, entityId, body.meta)
+  return jsonResponse(200, origin, { ok: true })
+}
+
+async function handleMail(event, origin) {
   const env = {
     resendApiKey: process.env.RESEND_API_KEY,
     appOrigin: process.env.APP_ORIGIN,
@@ -68,42 +138,26 @@ export async function handler(event) {
   }
 
   if (!env.resendApiKey || !env.appOrigin) {
-    return {
-      statusCode: 503,
-      headers: { ...corsHeaders(origin), 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        error: 'RESEND_API_KEY and APP_ORIGIN must be set on the function',
-        deliveryStatus: 'failed',
-      }),
-    }
+    return jsonResponse(503, origin, {
+      error: 'RESEND_API_KEY and APP_ORIGIN must be set on the function',
+      deliveryStatus: 'failed',
+    })
   }
 
   let payload
   try {
     payload = JSON.parse(event.body || '{}')
   } catch {
-    return {
-      statusCode: 400,
-      headers: { ...corsHeaders(origin), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'Invalid JSON', deliveryStatus: 'failed' }),
-    }
+    return jsonResponse(400, origin, { error: 'Invalid JSON', deliveryStatus: 'failed' })
   }
 
   const to = (payload.to || []).filter(Boolean)
   if (!to.length || !payload.subject?.trim() || !payload.linkUrl?.trim() || !payload.pdfUrl?.trim()) {
-    return {
-      statusCode: 400,
-      headers: { ...corsHeaders(origin), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'Missing required fields', deliveryStatus: 'failed' }),
-    }
+    return jsonResponse(400, origin, { error: 'Missing required fields', deliveryStatus: 'failed' })
   }
 
   const variant = payload.variant === 'resend' ? 'resend' : 'issue'
-  const { html, text } = buildEmail({
-    ...payload,
-    variant,
-    appOrigin: env.appOrigin,
-  })
+  const { html, text } = buildEmail({ ...payload, variant, appOrigin: env.appOrigin })
 
   const resend = new Resend(env.resendApiKey)
   const sentAt = new Date().toISOString()
@@ -120,31 +174,41 @@ export async function handler(event) {
     })
 
     if (result.error) {
-      return {
-        statusCode: 502,
-        headers: { ...corsHeaders(origin), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ deliveryStatus: 'failed', error: result.error.message, sentAt }),
-      }
+      return jsonResponse(502, origin, { deliveryStatus: 'failed', error: result.error.message, sentAt })
     }
 
-    return {
-      statusCode: 200,
-      headers: { ...corsHeaders(origin), 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        messageId: result.data?.id || `resend-${Date.now()}`,
-        deliveryStatus: 'sent',
-        sentAt,
-      }),
-    }
+    return jsonResponse(200, origin, {
+      messageId: result.data?.id || `resend-${Date.now()}`,
+      deliveryStatus: 'sent',
+      sentAt,
+    })
   } catch (err) {
-    return {
-      statusCode: 502,
-      headers: { ...corsHeaders(origin), 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        deliveryStatus: 'failed',
-        error: err instanceof Error ? err.message : 'Send failed',
-        sentAt,
-      }),
-    }
+    return jsonResponse(502, origin, {
+      deliveryStatus: 'failed',
+      error: err instanceof Error ? err.message : 'Send failed',
+      sentAt,
+    })
   }
+}
+
+export async function handler(event) {
+  const method = event.requestContext?.http?.method || event.httpMethod || 'GET'
+  const origin = event.headers?.origin || event.headers?.Origin
+  const path = event.rawPath || event.requestContext?.http?.path || '/'
+
+  if (method === 'OPTIONS') {
+    return { statusCode: 204, headers: corsHeaders(origin), body: '' }
+  }
+
+  if (method === 'GET' && path === '/voucher-session') {
+    return handleSessionGet(event, origin)
+  }
+  if (method === 'PUT' && path === '/voucher-session') {
+    return handleSessionPut(event, origin)
+  }
+  if (method === 'POST' && (path === '/' || path === '/voucher-mail')) {
+    return handleMail(event, origin)
+  }
+
+  return jsonResponse(405, origin, { error: 'Method not allowed' })
 }

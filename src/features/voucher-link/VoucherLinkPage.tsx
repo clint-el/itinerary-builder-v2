@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useStore } from '@/app/store'
 import { Button } from '@/components/ui/button'
@@ -6,19 +6,29 @@ import { VoucherRecipientBody } from '@/features/summary/VoucherRecipientBody'
 import { buildVouchers, linesFromServices, linesFromQuoteGroups } from '@/features/summary/summaryModel'
 import { evaluateVoucherToken, type VoucherLineInput } from '@/shared/lib/lifecycleRules'
 import { partyGuests } from '@/shared/lib/helpers'
+import { fetchVoucherSessionRemote } from '@/shared/lib/voucherSessionRemote'
 
 export function VoucherLinkPage() {
   const { id = '', supplier: entityParam = '' } = useParams()
   const [search] = useSearchParams()
   const token = search.get('t')
   const entityId = decodeURIComponent(entityParam)
-  const { itineraries, getServices, getQuoteGroups, getGuestDetails, submitVoucherAnswers, requestLatestVoucher } =
-    useStore()
+  const {
+    itineraries,
+    getServices,
+    getQuoteGroups,
+    getGuestDetails,
+    submitVoucherAnswers,
+    requestLatestVoucher,
+    upsertItinerary,
+  } = useStore()
   const itinerary = itineraries.find((it) => it.id === id)
   const [submitted, setSubmitted] = useState(false)
   const [submitNotice, setSubmitNotice] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [notified, setNotified] = useState(false)
+  const [sessionReady, setSessionReady] = useState(false)
+  const hydrateKeyRef = useRef<string | null>(null)
 
   const services = getServices(id)
   const quoteGroups = getQuoteGroups(id)
@@ -49,8 +59,46 @@ export function VoucherLinkPage() {
     [itinerary, lines, services, guests, guestDetails],
   )
   const card = cards.find((c) => c.entityId === entityId)
-  const meta = itinerary?.voucherMeta?.[entityId]
-  const tokenState = evaluateVoucherToken(meta, token, new Date().toISOString())
+  useEffect(() => {
+    const hydrateKey = `${id}:${entityId}:${token ?? ''}`
+    if (hydrateKeyRef.current === hydrateKey) return
+    hydrateKeyRef.current = hydrateKey
+
+    let cancelled = false
+    async function hydrateRemoteSession() {
+      const current = itineraries.find((it) => it.id === id)
+      if (!current || !token) {
+        setSessionReady(true)
+        return
+      }
+      const now = new Date().toISOString()
+      if (evaluateVoucherToken(current.voucherMeta?.[entityId], token, now).state !== 'invalid') {
+        setSessionReady(true)
+        return
+      }
+      const remoteMeta = await fetchVoucherSessionRemote(id, entityId, token)
+      if (cancelled) return
+      if (remoteMeta) {
+        upsertItinerary({
+          ...current,
+          voucherMeta: { ...(current.voucherMeta || {}), [entityId]: remoteMeta },
+          updatedAt: new Date().toISOString(),
+        })
+      }
+      setSessionReady(true)
+    }
+    setSessionReady(false)
+    void hydrateRemoteSession()
+    return () => {
+      cancelled = true
+    }
+  }, [id, entityId, token, itineraries, upsertItinerary])
+
+  if (!sessionReady) {
+    return (
+      <ShellMessage title="Loading confirmation…" body="Checking your secure link." />
+    )
+  }
 
   if (!itinerary || !card) {
     return <ShellMessage title="Link not found" body="This confirmation link doesn't match anything we recognise." />
@@ -60,27 +108,48 @@ export function VoucherLinkPage() {
     return <ShellMessage title="Thank you — your reply is recorded" body={submitNotice} />
   }
 
-  if (tokenState.state === 'invalid') {
-    return <ShellMessage title="Link not valid" body="This link can't be used. Contact your Cheli & Peacock planner for a fresh one." />
+  const resolvedTokenState = evaluateVoucherToken(
+    itinerary.voucherMeta?.[entityId],
+    token,
+    new Date().toISOString(),
+  )
+
+  if (!token) {
+    return (
+      <ShellMessage
+        title="Link not valid"
+        body="This URL is missing the security token. Open the full link from your email, or ask your planner to resend."
+      />
+    )
   }
-  if (tokenState.state === 'expired') {
+
+  if (resolvedTokenState.state === 'invalid') {
+    return (
+      <ShellMessage
+        title="Link not valid"
+        body="This link can't be used — it may be from an older send before shared confirmation was enabled, or the token doesn't match. Ask your Cheli & Peacock planner to issue or resend the voucher, then use the newest email."
+      />
+    )
+  }
+  if (resolvedTokenState.state === 'expired') {
     return (
       <ShellMessage title="This link has expired" body="Confirmation links are valid for a limited time. Contact your planner and ask them to resend from the itinerary.">
         <p className="mt-3 text-[12.5px] text-[#737373]">Resend is initiated by your planner — not from this page.</p>
       </ShellMessage>
     )
   }
-  if (tokenState.state === 'used') {
+  if (resolvedTokenState.state === 'used') {
+    const resolvedMeta = itinerary.voucherMeta?.[entityId]
     return (
       <ShellMessage
         title="Already answered"
-        body={`This voucher was already answered${meta?.submittedByEmail ? ` by ${meta.submittedByEmail}` : ''}${
-          meta?.submittedAt ? ` on ${new Date(meta.submittedAt).toLocaleString()}` : ''
+        body={`This voucher was already answered${resolvedMeta?.submittedByEmail ? ` by ${resolvedMeta.submittedByEmail}` : ''}${
+          resolvedMeta?.submittedAt ? ` on ${new Date(resolvedMeta.submittedAt).toLocaleString()}` : ''
         }.`}
       />
     )
   }
-  if (tokenState.state === 'superseded') {
+  if (resolvedTokenState.state === 'superseded') {
     return (
       <ShellMessage title="This version has been replaced" body="Your planner has sent an updated confirmation request. This older version can no longer be actioned.">
         {notified ? (
@@ -89,7 +158,7 @@ export function VoucherLinkPage() {
           <Button
             className="mt-3"
             onClick={() => {
-              requestLatestVoucher(id, entityId, { token: token || undefined, recipientEmail: tokenState.recipientEmail })
+              requestLatestVoucher(id, entityId, { token: token || undefined, recipientEmail: resolvedTokenState.recipientEmail })
               setNotified(true)
             }}
           >

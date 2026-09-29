@@ -41,8 +41,32 @@ fi
 : "${VOUCHER_FROM:?VOUCHER_FROM required in .env}"
 : "${APP_ORIGIN:?APP_ORIGIN required in .env}"
 
+SESSIONS_TABLE="${VOUCHER_SESSIONS_TABLE:-sol-voucher-sessions}"
+if ! aws dynamodb describe-table --table-name "$SESSIONS_TABLE" --region "$REGION" >/dev/null 2>&1; then
+  echo "Creating DynamoDB table $SESSIONS_TABLE..."
+  aws dynamodb create-table --table-name "$SESSIONS_TABLE" --region "$REGION" \
+    --attribute-definitions AttributeName=pk,AttributeType=S \
+    --key-schema AttributeName=pk,KeyType=HASH \
+    --billing-mode PAY_PER_REQUEST >/dev/null
+  aws dynamodb wait table-exists --table-name "$SESSIONS_TABLE" --region "$REGION"
+fi
+
+TABLE_ARN=$(aws dynamodb describe-table --table-name "$SESSIONS_TABLE" --region "$REGION" --query 'Table.TableArn' --output text)
+POLICY_NAME=sol-voucher-sessions-ddb
+aws iam put-role-policy --role-name "$ROLE_NAME" --policy-name "$POLICY_NAME" --policy-document "$(cat <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Action": ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem"],
+    "Resource": "$TABLE_ARN"
+  }]
+}
+EOF
+)" >/dev/null
+
 export APP_ORIGIN VOUCHER_FROM RESEND_API_KEY
-ENV_JSON=$(node -e "console.log(JSON.stringify({Variables:{RESEND_API_KEY:process.env.RESEND_API_KEY,APP_ORIGIN:process.env.APP_ORIGIN,VOUCHER_FROM:process.env.VOUCHER_FROM,ALLOWED_ORIGIN:process.env.APP_ORIGIN}}))")
+ENV_JSON=$(SESSIONS_TABLE="$SESSIONS_TABLE" node -e 'console.log(JSON.stringify({Variables:{RESEND_API_KEY:process.env.RESEND_API_KEY,APP_ORIGIN:process.env.APP_ORIGIN,VOUCHER_FROM:process.env.VOUCHER_FROM,ALLOWED_ORIGIN:process.env.APP_ORIGIN,VOUCHER_SESSIONS_TABLE:process.env.SESSIONS_TABLE}}))')
 
 if aws lambda get-function --function-name "$FN" --region "$REGION" >/dev/null 2>&1; then
   echo "Updating Lambda $FN..."
@@ -93,6 +117,20 @@ if [[ -z "$MAIL_API_URL" ]] || ! curl -sf -o /dev/null -m 5 -X OPTIONS "$MAIL_AP
     --statement-id "apigw-${API_ID}" --action lambda:InvokeFunction \
     --principal apigateway.amazonaws.com \
     --source-arn "arn:aws:execute-api:${REGION}:352374931426:${API_ID}/*/*" >/dev/null 2>&1 || true
+  MAIL_API_URL="$(aws apigatewayv2 get-api --api-id "$API_ID" --region "$REGION" --query 'ApiEndpoint' --output text)/"
+fi
+
+# Ensure session routes exist on the HTTP API (same integration as POST /).
+API_ID="${VOUCHER_HTTP_API_ID:-djdzynb5k0}"
+if aws apigatewayv2 get-api --api-id "$API_ID" --region "$REGION" >/dev/null 2>&1; then
+  INTEGRATION_ID=$(aws apigatewayv2 get-integrations --api-id "$API_ID" --region "$REGION" --query 'Items[0].IntegrationId' --output text)
+  for ROUTE in 'GET /voucher-session' 'PUT /voucher-session' 'OPTIONS /voucher-session'; do
+    if ! aws apigatewayv2 get-routes --api-id "$API_ID" --region "$REGION" --query "Items[?RouteKey=='$ROUTE'].RouteKey" --output text | grep -q .; then
+      aws apigatewayv2 create-route --api-id "$API_ID" --region "$REGION" --route-key "$ROUTE" --target "integrations/$INTEGRATION_ID" >/dev/null
+    fi
+  done
+  aws apigatewayv2 update-api --api-id "$API_ID" --region "$REGION" \
+    --cors-configuration "{\"AllowOrigins\":[\"$APP_ORIGIN\",\"http://localhost:5173\"],\"AllowMethods\":[\"GET\",\"PUT\",\"POST\",\"OPTIONS\"],\"AllowHeaders\":[\"content-type\"],\"MaxAge\":86400}" >/dev/null
   MAIL_API_URL="$(aws apigatewayv2 get-api --api-id "$API_ID" --region "$REGION" --query 'ApiEndpoint' --output text)/"
 fi
 

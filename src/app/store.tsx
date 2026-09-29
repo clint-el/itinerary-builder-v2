@@ -45,6 +45,7 @@ import {
   stripEntityLineAnswers,
 } from '@/shared/lib/voucherStoreHelpers'
 import { sendVoucherEmail, voucherFromAddress } from '@/shared/lib/voucherMail'
+import { persistVoucherSessionRemote } from '@/shared/lib/voucherSessionRemote'
 import { migrateItineraryVoucherKeys } from '@/shared/lib/voucherMigration'
 import {
   guestsServedByEntity,
@@ -955,6 +956,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         lifecycleLog,
         updatedAt: now,
       })
+      void persistVoucherSessionRemote(itineraryId, entityId, nextMeta)
       bump()
       return { ok: true }
     },
@@ -1039,6 +1041,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         lifecycleLog,
         updatedAt: now,
       })
+      void persistVoucherSessionRemote(itineraryId, entityId, nextMeta)
       bump()
       return { ok: true }
     },
@@ -1197,6 +1200,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         lifecycleLog,
         updatedAt: now,
       })
+      void persistVoucherSessionRemote(itineraryId, entityId, nextMeta)
       bump()
       return { ok: true, depositGuardCount: result.depositGuardLineIds.length }
     },
