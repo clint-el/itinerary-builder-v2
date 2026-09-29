@@ -183,7 +183,7 @@ export function VoucherAnswerForm({
         <div className="flex items-center justify-between gap-3">
           <span className="text-[11.5px] text-[#A1A1A1]">
             {missingReason
-              ? 'Every unticked line needs a free-text reason before you can submit.'
+              ? 'Please provide reason for each rejected service line.'
               : missingName
                 ? 'Enter your first and last name before submitting.'
                 : `${heldCount + rejectedRows.length} of ${card.rows.length} lines answered`}
