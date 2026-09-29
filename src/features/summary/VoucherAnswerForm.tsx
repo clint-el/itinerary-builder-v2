@@ -135,7 +135,7 @@ export function VoucherAnswerForm({
                   <textarea
                     value={reasonValue}
                     onChange={(e) => setReasons((cur) => ({ ...cur, [row.lineId]: e.target.value }))}
-                    placeholder="Required — say why this line can't be held"
+                    placeholder="Please state reason for service rejection"
                     rows={2}
                     className="min-h-[52px] resize-y rounded-md border border-[#E5E7EB] bg-white px-2 py-1.5 text-[12.5px] text-[#171717] outline-none"
                   />
