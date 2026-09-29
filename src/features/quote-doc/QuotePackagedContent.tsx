@@ -416,7 +416,7 @@ export function QuotePackagedContent({
                 <span className="text-right">Amount</span>
               </div>
               <div className="grid grid-cols-[minmax(0,1fr)_200px_110px] gap-x-3 border-b border-[#F5F5F5] py-2 text-[11.5px]">
-                <span className="font-semibold">Deposit on confirmation</span>
+                <span className="font-semibold">Deposit</span>
                 <span className="text-[11px] text-[#6E6E6E]">On confirmation · {depositPctLabel} of total</span>
                 <span className="text-right font-medium">{depositTotalLabel}</span>
               </div>
