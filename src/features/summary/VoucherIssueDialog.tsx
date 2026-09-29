@@ -20,6 +20,7 @@ export function VoucherIssueDialog({
   onOpenPreview,
   onOpenGuests,
   noteDraft,
+  sending = false,
 }: {
   open: boolean
   card: VoucherCard | null
@@ -27,6 +28,7 @@ export function VoucherIssueDialog({
   onClose: () => void
   onContinue: () => void
   onSend: (recipientEmails: string[], note: string, supplierBookingRef: string) => void
+  sending?: boolean
   onOpenPreview: () => void
   onOpenGuests: () => void
   noteDraft?: string
@@ -130,7 +132,7 @@ export function VoucherIssueDialog({
           ) : null}
 
           <p className="text-[11px] text-[#A1A1A1]">
-            From {`vouchers@chelipeacock.com`} · CC issuing planner · Reply-To issuing planner
+            From {`vouchers@elewanaportal.com`} · CC issuing planner · Reply-To issuing planner
           </p>
         </div>
 
@@ -146,9 +148,9 @@ export function VoucherIssueDialog({
                 bookingRef.trim(),
               )
             }
-            disabled={!emails.trim()}
+            disabled={!emails.trim() || sending}
           >
-            {isReissue ? 'Re-issue and send' : 'Send confirmation request'}
+            {sending ? 'Sending…' : isReissue ? 'Re-issue and send' : 'Send confirmation request'}
           </Button>
         </DialogFooter>
       </DialogContent>

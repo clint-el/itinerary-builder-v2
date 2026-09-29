@@ -75,8 +75,8 @@ export function VouchersView({
   issueVoucher: (
     entityId: string,
     opts: { recipientEmails: string[]; note?: string; supplierBookingRef?: string },
-  ) => GateResult
-  resendVoucher: (entityId: string) => GateResult
+  ) => Promise<GateResult>
+  resendVoucher: (entityId: string) => Promise<GateResult>
   submitVoucherAnswers: (entityId: string, input: SubmitInput) => GateResult & { depositGuardCount?: number }
   clearVoucherReply: (entityId: string) => GateResult
   onOpenGuests: () => void
@@ -88,6 +88,7 @@ export function VouchersView({
   const [recordCard, setRecordCard] = useState<VoucherCard | null>(null)
   const [supplierNoteDrafts, setSupplierNoteDrafts] = useState<Record<string, string>>({})
   const [notice, setNotice] = useState<string | null>(null)
+  const [sending, setSending] = useState(false)
 
   function supplierNoteFor(card: VoucherCard) {
     return supplierNoteDrafts[card.entityId] ?? card.note ?? ''
@@ -290,7 +291,15 @@ export function VouchersView({
               {raised && canIssue ? (
                 <button
                   type="button"
-                  onClick={() => flashResult(resendVoucher(v.entityId), () => `Resent to ${v.issuedTo[0] || v.supplierEmail}`)}
+                  onClick={() => {
+                    void (async () => {
+                      setSending(true)
+                      const result = await resendVoucher(v.entityId)
+                      setSending(false)
+                      flashResult(result, () => `Resent to ${v.issuedTo[0] || v.supplierEmail}`)
+                    })()
+                  }}
+                  disabled={sending}
                   className="h-7 rounded-[7px] border border-[#B45309] bg-white px-[11px] text-[11.5px] font-bold text-[#B45309]"
                 >
                   Resend latest
@@ -595,6 +604,7 @@ export function VouchersView({
         open={!!issueCard}
         card={issueCard}
         step={issueStep}
+        sending={sending}
         noteDraft={issueCard ? supplierNoteFor(issueCard) : undefined}
         onClose={() => {
           setIssueCard(null)
@@ -607,10 +617,16 @@ export function VouchersView({
         }}
         onSend={(recipientEmails, note, supplierBookingRef) => {
           if (!issueCard) return
-          const result = issueVoucher(issueCard.entityId, { recipientEmails, note, supplierBookingRef })
-          setIssueCard(null)
-          setIssueStep('review')
-          flashResult(result, () => `Voucher emailed to ${recipientEmails.join(', ')}`)
+          void (async () => {
+            setSending(true)
+            const result = await issueVoucher(issueCard.entityId, { recipientEmails, note, supplierBookingRef })
+            setSending(false)
+            if (result.ok) {
+              setIssueCard(null)
+              setIssueStep('review')
+            }
+            flashResult(result, () => `Voucher emailed to ${recipientEmails.join(', ')}`)
+          })()
         }}
       />
 

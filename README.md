@@ -14,6 +14,20 @@ npm run dev
 
 Open the URL Vite prints (usually http://localhost:5173).
 
+### Voucher email (Resend, local dev only)
+
+Copy [`.env.example`](.env.example) to `.env` and set:
+
+| Variable | Purpose |
+|----------|---------|
+| `RESEND_API_KEY` | Resend API key (server-side only — never `VITE_`) |
+| `APP_ORIGIN` | Base URL for confirmation links in email (e.g. Amplify deploy URL) |
+| `VOUCHER_FROM` | Verified sender on Resend (e.g. `vouchers@elewanaportal.com`) |
+
+With `pnpm dev`, issuing or resending a voucher calls `POST /api/voucher-mail` on the Vite dev server, which sends via Resend. Production static builds still use the in-browser stub unless you add a backend.
+
+Optional: `VITE_VOUCHER_MAIL=stub` forces the stub in dev; `VITE_VOUCHER_MAIL=resend` forces the API path.
+
 ## Scripts
 
 | Command | Purpose |

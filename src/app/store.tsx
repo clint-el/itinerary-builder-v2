@@ -182,8 +182,8 @@ interface StoreContextValue {
       supplierBookingRef?: string
       kind?: 'standard' | 'cancellation_only'
     },
-  ) => GateResult
-  resendSupplierVoucher: (itineraryId: string, entityId: string) => GateResult
+  ) => Promise<GateResult>
+  resendSupplierVoucher: (itineraryId: string, entityId: string) => Promise<GateResult>
   requestLatestVoucher: (
     itineraryId: string,
     entityId: string,
@@ -824,7 +824,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   )
 
   const issueSupplierVoucher = useCallback(
-    (
+    async (
       itineraryId: string,
       entityKey: string,
       opts: {
@@ -833,7 +833,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         supplierBookingRef?: string
         kind?: 'standard' | 'cancellation_only'
       },
-    ): GateResult => {
+    ): Promise<GateResult> => {
       if (!roleAllowsVoucherAction(demoRole, 'issue')) {
         return { ok: false, ruleId: 'role-denied', reason: `Role ${demoRole} cannot issue vouchers` }
       }
@@ -869,32 +869,49 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const seq = existing?.voucherSeq ?? nextVoucherSeq(current)
       const voucherRef = existing?.voucherRef ?? `${current.reference || current.id} / V${String(seq).padStart(2, '0')}`
       const plannerEmail = `${current.safariPlanner.replace(/\s+/g, '.').toLowerCase()}@chelipeacock.com`
+      const supplierName = getPayableEntity(entityId).legalName
+      const issueVariant = existing?.issued ? ('reissue' as const) : ('issue' as const)
 
-      const sendRecords = tokens.map((token) => {
-        const mail = sendVoucherEmail({
-          from: voucherFromAddress(),
-          cc: [plannerEmail],
-          replyTo: plannerEmail,
-          to: [token.recipientEmail],
-          subject: `Confirmation request — ${getPayableEntity(entityId).legalName} — ${voucherRef}`,
-          body: `Please confirm the attached services for ${voucherRef}.`,
-          linkUrl: `/voucher-link/${itineraryId}/${encodeURIComponent(entityId)}?t=${token.token}`,
-          pdfUrl: `/voucher-doc/${itineraryId}/${encodeURIComponent(entityId)}`,
-        })
+      const sendRecords = await Promise.all(
+        tokens.map(async (token) => {
+          const mail = await sendVoucherEmail({
+            from: voucherFromAddress(),
+            cc: [plannerEmail],
+            replyTo: plannerEmail,
+            to: [token.recipientEmail],
+            subject: `Confirmation request — ${supplierName} — ${voucherRef}`,
+            body: `Please confirm the services for ${voucherRef}${current.title ? ` (${current.title})` : ''}.`,
+            linkUrl: `/voucher-link/${itineraryId}/${encodeURIComponent(entityId)}?t=${token.token}`,
+            pdfUrl: `/voucher-doc/${itineraryId}/${encodeURIComponent(entityId)}`,
+            note: opts.note,
+            supplierName,
+            variant: 'issue',
+          })
+          return {
+            id: `vs-${Date.now()}-${token.token.slice(0, 4)}`,
+            recipient: token.recipientEmail,
+            sentAt: mail.sentAt,
+            deliveryStatus: mail.deliveryStatus,
+            token: token.token,
+            expiresAt: token.expiresAt,
+            via: issueVariant,
+            from: voucherFromAddress(),
+            cc: [plannerEmail],
+            replyTo: plannerEmail,
+            messageId: mail.messageId,
+          }
+        }),
+      )
+
+      const sentCount = sendRecords.filter((r) => r.deliveryStatus === 'sent').length
+      if (sentCount === 0) {
+        const reason = sendRecords.map((r) => r.recipient).join(', ')
         return {
-          id: `vs-${Date.now()}-${token.token.slice(0, 4)}`,
-          recipient: token.recipientEmail,
-          sentAt: mail.sentAt,
-          deliveryStatus: mail.deliveryStatus,
-          token: token.token,
-          expiresAt: token.expiresAt,
-          via: (existing?.issued ? 'reissue' : 'issue') as 'issue' | 'resend' | 'reissue',
-          from: voucherFromAddress(),
-          cc: [plannerEmail],
-          replyTo: plannerEmail,
-          messageId: mail.messageId,
+          ok: false,
+          ruleId: 'mail-failed',
+          reason: `Email could not be sent to ${reason}. Check Resend configuration and try again.`,
         }
-      })
+      }
 
       const nextMeta: VoucherMeta = {
         issued: true,
@@ -945,7 +962,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   )
 
   const resendSupplierVoucher = useCallback(
-    (itineraryId: string, entityKey: string): GateResult => {
+    async (itineraryId: string, entityKey: string): Promise<GateResult> => {
       if (!roleAllowsVoucherAction(demoRole, 'resend')) {
         return { ok: false, ruleId: 'role-denied', reason: `Role ${demoRole} cannot resend vouchers` }
       }
@@ -966,7 +983,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         expiresAt: voucherTokenExpiry(now, current.travelDateFrom),
         version: meta.version,
       }
-      const mail = sendVoucherEmail({
+      const supplierName = getPayableEntity(entityId).legalName
+      const mail = await sendVoucherEmail({
         from: voucherFromAddress(),
         cc: [meta.issuingPlannerEmail || 'planner@chelipeacock.com'],
         replyTo: meta.issuingPlannerEmail || 'planner@chelipeacock.com',
@@ -975,7 +993,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         body: 'Your confirmation link has been refreshed.',
         linkUrl: `/voucher-link/${itineraryId}/${encodeURIComponent(entityId)}?t=${token.token}`,
         pdfUrl: `/voucher-doc/${itineraryId}/${encodeURIComponent(entityId)}`,
+        note: meta.note,
+        supplierName,
+        variant: 'resend',
       })
+      if (mail.deliveryStatus === 'failed') {
+        return {
+          ok: false,
+          ruleId: 'mail-failed',
+          reason: mail.error || `Email could not be sent to ${recipient}.`,
+        }
+      }
       const sendRecord = {
         id: `vs-${Date.now()}`,
         recipient,
