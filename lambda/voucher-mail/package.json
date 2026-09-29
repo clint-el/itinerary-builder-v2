@@ -5,6 +5,7 @@
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.888.0",
     "@aws-sdk/lib-dynamodb": "^3.888.0",
+    "pdf-lib": "^1.17.1",
     "resend": "^6.30.0"
   }
 }

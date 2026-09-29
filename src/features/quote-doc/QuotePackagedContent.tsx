@@ -8,6 +8,7 @@ import {
   bookedByContact,
   guestDetailLines,
   paxComposition,
+  paxPricePerGuest,
   type LedgerCancellationRow,
   type LedgerOptionRow,
 } from '@/features/quote-doc/quoteLedgerModel'
@@ -30,6 +31,7 @@ import {
   quotationCoverKindLabel,
 } from '@/features/quote-doc/documentOptionsModel'
 import { lifecycleStageLabel } from '@/features/invoice-doc/invoiceSnapshotModel'
+import { rateBasisTag } from '@/features/quote-doc/quoteRateBasisModel'
 import {
   GeneralCancellationPolicySection,
   GeneralPaymentTermsSection,
@@ -116,7 +118,6 @@ export function QuotePackagedContent({
     depositTotal,
     depositBalance,
     depositPctOfSell,
-    priceMode,
     paymentPosition,
   } = renderModel
   const categoryGrid = categoryTotals
@@ -124,7 +125,6 @@ export function QuotePackagedContent({
   const depositPctLabel = `${depositPctOfSell}%`
   const depositTotalLabel = fmtLedgerUsd(depositTotal)
   const depositBalanceLabel = fmtLedgerUsd(depositBalance)
-  const perPerson = totalGuests > 0 ? sellTotal / totalGuests : 0
   const pos = paymentPosition
   const quoteText = renderModel.quoteText
   const coverTotalLabel = documentKind === 'invoice' ? 'Booking total' : 'Safari total'
@@ -154,7 +154,7 @@ export function QuotePackagedContent({
                   ? invoiceCoverKindLabel(travelCounsellors)
                   : quotationCoverKindLabel(travelCounsellors, true)}
               </div>
-              <div className="mt-0.5 font-['IBM_Plex_Mono'] text-lg font-medium text-white">{refLabel}</div>
+              <div className="mt-0.5 text-lg font-medium text-white">{refLabel}</div>
             </div>
           </div>
           <h1 className="m-0 text-[38px] font-semibold leading-[1.1] tracking-[-0.8px] text-white">
@@ -252,7 +252,7 @@ export function QuotePackagedContent({
                 {totalGuests || '—'} guest{totalGuests === 1 ? '' : 's'}
               </div>
             </div>
-            <div className="font-['IBM_Plex_Mono'] text-[32px] font-semibold tracking-[-0.5px]">
+            <div className="text-[32px] font-semibold tracking-[-0.5px]">
               {fmtLedgerUsd(sellTotal)}
             </div>
           </div>
@@ -270,7 +270,7 @@ export function QuotePackagedContent({
         )}
         style={{ width: PAGE_W, minHeight: PAGE_H }}
       >
-        <PackagedHeader title="Schedule of services" refLabel={refLabel} />
+        <PackagedHeader title="Safari services" refLabel={refLabel} />
         <div className="flex flex-1 flex-col px-14 pb-8 pt-[30px]">
           <div className="flex items-baseline justify-end gap-4">
             <span className="text-[10px] font-semibold uppercase tracking-[1.4px] text-[#931115]">
@@ -356,7 +356,7 @@ export function QuotePackagedContent({
                   )}
                 >
                   <div className="text-[9px] font-semibold uppercase tracking-[1.2px] text-[#8A8A8A]">{cat.name}</div>
-                  <div className="mt-1 font-['IBM_Plex_Mono'] text-[15px] font-medium">{fmtLedgerAmount(cat.amount)}</div>
+                  <div className="mt-1 text-[15px] font-medium">{fmtLedgerAmount(cat.amount)}</div>
                 </div>
               ))}
             </div>
@@ -373,13 +373,12 @@ export function QuotePackagedContent({
                 {documentKind === 'invoice' ? 'Booking total' : 'Safari total'}
               </div>
               <div className="mt-1 text-[11px] text-[#B5B5B5]">
-                {totalGuests} guest{totalGuests === 1 ? '' : 's'}
-                {documentKind === 'quote' && priceMode === 'pp' && totalGuests
-                  ? ` · ${fmtLedgerUsd(perPerson)} per person`
-                  : ''}
+                {documentKind === 'quote'
+                  ? `${rateBasisTag(renderModel.rateBasis)} · ${totalGuests} guest${totalGuests === 1 ? '' : 's'}`
+                  : `${totalGuests} guest${totalGuests === 1 ? '' : 's'}`}
               </div>
             </div>
-            <div className="font-['IBM_Plex_Mono'] text-[34px] font-semibold tracking-[-0.8px]">
+            <div className="text-[34px] font-semibold tracking-[-0.8px]">
               {fmtLedgerAmount(sellTotal)}
             </div>
           </div>
@@ -417,8 +416,8 @@ export function QuotePackagedContent({
                 <span className="text-right">Amount</span>
               </div>
               <div className="grid grid-cols-[minmax(0,1fr)_200px_110px] gap-x-3 border-b border-[#F5F5F5] py-2 text-[11.5px]">
-                <span className="font-semibold">Deposit on acceptance</span>
-                <span className="text-[11px] text-[#6E6E6E]">Supplier terms · {depositPctLabel} of total</span>
+                <span className="font-semibold">Deposit on confirmation</span>
+                <span className="text-[11px] text-[#6E6E6E]">On confirmation · {depositPctLabel} of total</span>
                 <span className="text-right font-medium">{depositTotalLabel}</span>
               </div>
               <div className="grid grid-cols-[minmax(0,1fr)_200px_110px] gap-x-3 border-b border-[#F5F5F5] py-2 text-[11.5px]">
@@ -429,20 +428,13 @@ export function QuotePackagedContent({
             </div>
           ) : null}
 
-          {documentKind === 'quote' ? (
-            <p className="mt-6 text-[11px] leading-relaxed text-[#8A8A8A]">
-              Unit rate types differ across the itinerary — per person per day, per person per unit, per unit — so the
-              per-person figure is an average across the party rather than a rate charged to any one guest.
-            </p>
-          ) : null}
-
           <div className={documentKind === 'invoice' ? 'mt-7' : 'mt-6'}>
             <SectionLabel>Guest price split</SectionLabel>
             <div className="mt-2 grid grid-cols-4 gap-3">
               <PaxSplitCell label="Total adults" value={String(paxPriceSplit.totalAdults)} />
               <PaxSplitCell label="Total children" value={String(paxPriceSplit.totalChildren)} />
-              <PaxSplitCell label="Price per adult" value={fmtLedgerUsd(paxPriceSplit.totalAdultPrice)} />
-              <PaxSplitCell label="Price per child" value={fmtLedgerUsd(paxPriceSplit.totalChildPrice)} />
+              <PaxSplitCell label="Price per adult" value={fmtLedgerUsd(paxPricePerGuest(paxPriceSplit).perAdult)} />
+              <PaxSplitCell label="Price per child" value={fmtLedgerUsd(paxPricePerGuest(paxPriceSplit).perChild)} />
             </div>
           </div>
 
@@ -482,7 +474,7 @@ export function QuotePackagedContent({
           <QuoteTextSupplement quoteText={quoteText} />
           {optionRows.length ? (
             <div className="mt-[26px]">
-              <SectionLabel>Supplier Service options</SectionLabel>
+              <SectionLabel>Supplier inclusions &amp; exclusions</SectionLabel>
               <div className="mt-2 border border-[#101010]">
                 <div className="grid grid-cols-[108px_88px_88px_1fr_1fr] gap-3 border-b border-[#EFEFEF] px-4 py-[7px] text-[8.5px] font-semibold uppercase tracking-[0.9px] text-[#8A8A8A]">
                   <span>Supplier</span>
@@ -564,7 +556,7 @@ function PackagedHeader({ title, refLabel }: { title: string; refLabel: string }
   return (
     <div className="flex h-[42px] shrink-0 items-center justify-between px-14" style={{ background: MAROON }}>
       <span className="text-[9.5px] font-semibold uppercase tracking-[2px] text-[#E9CFCF]">{title}</span>
-      <span className="font-['IBM_Plex_Mono'] text-[11px] text-[#DFB9B9]">{refLabel}</span>
+      <span className="font-semibold text-[11px] text-[#DFB9B9]">{refLabel}</span>
     </div>
   )
 }
@@ -613,7 +605,7 @@ function MetaRow({
       <span
         className={cn(
           'text-[12.5px]',
-          mono && "font-['IBM_Plex_Mono'] text-[13px] font-medium",
+          mono && 'text-[13px] font-medium',
           accent && 'font-semibold text-[#931115]',
           bold && 'font-semibold',
         )}
@@ -641,7 +633,7 @@ function PageFooter({ left, right, bordered }: { left: string; right: string; bo
       )}
     >
       <span>{left}</span>
-      <span className="font-['IBM_Plex_Mono']">{right}</span>
+      <span className="font-semibold">{right}</span>
     </div>
   )
 }

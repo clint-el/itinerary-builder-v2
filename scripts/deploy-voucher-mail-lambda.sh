@@ -16,7 +16,7 @@ aws sts get-caller-identity
 echo "Packaging Lambda..."
 (cd "$ROOT/lambda/voucher-mail" && npm install --omit=dev --silent)
 rm -f /tmp/sol-voucher-mail.zip
-(cd "$ROOT/lambda/voucher-mail" && zip -r /tmp/sol-voucher-mail.zip index.mjs node_modules -q)
+(cd "$ROOT/lambda/voucher-mail" && zip -r /tmp/sol-voucher-mail.zip index.mjs voucherFilingPdf.mjs node_modules -q)
 
 if ! aws iam get-role --role-name "$ROLE_NAME" >/dev/null 2>&1; then
   echo "Creating IAM role $ROLE_NAME..."

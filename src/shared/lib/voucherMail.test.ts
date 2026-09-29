@@ -48,8 +48,7 @@ describe('voucherMail', () => {
       to: ['supplier@example.com'],
       subject: 'Confirmation request — Elewana — CPS5678 / V01',
       body: 'Please confirm.',
-      linkUrl: '/voucher-link/id/pe?t=token',
-      pdfUrl: '/voucher-doc/id/pe',
+      linkUrl: '/voucher-link/id/pe',
     })
 
     expect(result.deliveryStatus).toBe('sent')
@@ -80,8 +79,7 @@ describe('voucherMail', () => {
       to: ['supplier@example.com'],
       subject: 'Confirmation request (resent) — CPS5678 / V01',
       body: 'Refresh.',
-      linkUrl: '/voucher-link/id/pe?t=token',
-      pdfUrl: '/voucher-doc/id/pe',
+      linkUrl: '/voucher-link/id/pe',
       variant: 'resend',
     })
 
@@ -100,7 +98,6 @@ describe('voucherMail', () => {
       subject: 'Test',
       body: 'Body',
       linkUrl: '/l',
-      pdfUrl: '/p',
     })
 
     expect(result.deliveryStatus).toBe('sent')

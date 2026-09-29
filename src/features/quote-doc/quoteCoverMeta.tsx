@@ -127,7 +127,7 @@ export function BookingAgentSection({ block }: { block: BookingAgentBlock }) {
   return (
     <div>
       <div className="border-b border-[#101010] pb-1.5 text-[9px] font-semibold uppercase tracking-[1.2px] text-[#8A8A8A]">
-        Booking agent
+        Booking agency
       </div>
       <div className="mt-2 text-[13px] font-semibold text-[#101010]">{block.name}</div>
       {block.addressLines.length ? (
@@ -162,7 +162,7 @@ export function MetaRow({
       <span
         className={cn(
           'text-[12.5px]',
-          mono && "font-['IBM_Plex_Mono'] text-[13px] font-medium",
+          mono && 'text-[13px] font-medium',
           accent && 'font-semibold text-[#931115]',
           bold && 'font-semibold',
         )}

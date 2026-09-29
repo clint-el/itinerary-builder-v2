@@ -20,7 +20,6 @@ import {
   cancelLine,
   confirmLine,
   evaluateTransition,
-  evaluateVoucherToken,
   isStructureLocked,
   itineraryCommercialFp,
   lineStatusOf,
@@ -49,11 +48,14 @@ import { sendVoucherEmail, voucherFromAddress } from '@/shared/lib/voucherMail'
 import { persistVoucherSessionRemote } from '@/shared/lib/voucherSessionRemote'
 import { migrateItineraryVoucherKeys } from '@/shared/lib/voucherMigration'
 import {
+  buildVouchers,
   guestsServedByEntity,
   linesFromServices,
   supplierEmailFor,
   voucherIssueSignature,
 } from '@/features/summary/summaryModel'
+import { buildVoucherConfirmEmailBody } from '@/shared/lib/voucherEmailBody'
+import { buildVoucherFilingCopyFromCard } from '@/shared/lib/voucherFilingCopy'
 import { fmtLedgerUsd } from '@/features/quote-doc/quoteLedgerModel'
 import {
   buildInvoiceSnapshot,
@@ -101,7 +103,6 @@ import type {
   SplitForm,
   DocumentSendRecord,
   VoucherMeta,
-  VoucherToken,
 } from '@/shared/lib/types'
 
 const ROLE_KEY = 'sol-demo-role'
@@ -217,10 +218,6 @@ interface StoreContextValue {
 }
 
 const StoreContext = createContext<StoreContextValue | null>(null)
-
-function randomVoucherToken(): string {
-  return Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6)
-}
 
 function resolveEntityId(key: string): string {
   if (key.startsWith('pe-')) return key
@@ -850,13 +847,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!recipients.length) {
         return { ok: false, ruleId: 'no-recipient', reason: 'At least one recipient email is required' }
       }
-      const tokens: VoucherToken[] = recipients.map((email) => ({
-        token: randomVoucherToken(),
-        recipientEmail: email,
-        createdAt: now,
-        expiresAt: voucherTokenExpiry(now, current.travelDateFrom),
-        version,
-      }))
+      const supplierLink = `/voucher-link/${itineraryId}/${encodeURIComponent(entityId)}`
       const lineIds = lines.map((l) => l.lineId!).filter(Boolean)
       let nextAnswers = stripEntityLineAnswers(current.voucherLineAnswers || {}, lineIds)
       let nextServices = revertEntitySupplierStatus(services, entityId, lineIds)
@@ -865,47 +856,71 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const plannerEmail = `${current.safariPlanner.replace(/\s+/g, '.').toLowerCase()}@chelipeacock.com`
       const supplierName = getPayableEntity(entityId).legalName
       const issueVariant = existing?.issued ? ('reissue' as const) : ('issue' as const)
-
-      const sendRecords = await Promise.all(
-        tokens.map(async (token) => {
-          const mail = await sendVoucherEmail({
-            from: voucherFromAddress(),
-            cc: [plannerEmail],
-            replyTo: plannerEmail,
-            to: [token.recipientEmail],
-            subject: `Confirmation request — ${supplierName} — ${voucherRef}`,
-            body: `Please confirm the services for ${voucherRef}${current.title ? ` (${current.title})` : ''}.`,
-            linkUrl: `/voucher-link/${itineraryId}/${encodeURIComponent(entityId)}?t=${token.token}`,
-            pdfUrl: `/voucher-doc/${itineraryId}/${encodeURIComponent(entityId)}`,
-            note: opts.note,
-            supplierName,
-            variant: 'issue',
-          })
-          return {
-            id: `vs-${Date.now()}-${token.token.slice(0, 4)}`,
-            recipient: token.recipientEmail,
-            sentAt: mail.sentAt,
-            deliveryStatus: mail.deliveryStatus,
-            token: token.token,
-            expiresAt: token.expiresAt,
-            via: issueVariant,
-            from: voucherFromAddress(),
-            cc: [plannerEmail],
-            replyTo: plannerEmail,
-            messageId: mail.messageId,
-          }
-        }),
+      const allLines = linesFromServices(services, guests)
+      const voucherCards = buildVouchers(
+        allLines,
+        'cost',
+        current.reference || current.id,
+        services,
+        guests,
+        guestDetails,
+        current.agency || '',
+        current.supplierVouchers || {},
+        current.voucherLineAnswers || {},
+        current.voucherMeta || {},
       )
+      const voucherCard = voucherCards.find((c) => c.entityId === entityId)
+      const serviceDates = lines.map((l) => l.date).filter(Boolean).sort()
+      const serviceDateFrom = serviceDates[0] || current.travelDateFrom || ''
+      const serviceDateTo = serviceDates[serviceDates.length - 1] || current.travelDateTo || serviceDateFrom
+      const emailBody = buildVoucherConfirmEmailBody({
+        voucherRef,
+        serviceDateFrom,
+        serviceDateTo,
+        tripTitle: current.title,
+      })
+      const filingCopy = voucherCard
+        ? buildVoucherFilingCopyFromCard(
+            { ...voucherCard, note: opts.note ?? voucherCard.note },
+            current.reference || current.id,
+          )
+        : undefined
 
-      const sentCount = sendRecords.filter((r) => r.deliveryStatus === 'sent').length
-      if (sentCount === 0) {
-        const reason = sendRecords.map((r) => r.recipient).join(', ')
+      const mail = await sendVoucherEmail({
+        from: voucherFromAddress(),
+        cc: [plannerEmail],
+        replyTo: plannerEmail,
+        to: recipients,
+        subject: `Confirmation request — ${supplierName} — ${voucherRef}`,
+        body: emailBody,
+        linkUrl: supplierLink,
+        note: opts.note,
+        supplierName,
+        variant: 'issue',
+        filingCopy,
+      })
+
+      if (mail.deliveryStatus !== 'sent') {
         return {
           ok: false,
           ruleId: 'mail-failed',
-          reason: `Email could not be sent to ${reason}. Check Resend configuration and try again.`,
+          reason: mail.error || `Email could not be sent to ${recipients.join(', ')}. Check Resend configuration and try again.`,
         }
       }
+
+      const sendRecords = recipients.map((recipientEmail, index) => ({
+        id: `vs-${Date.now()}-${index}`,
+        recipient: recipientEmail,
+        sentAt: mail.sentAt,
+        deliveryStatus: mail.deliveryStatus,
+        token: 'open-link',
+        expiresAt: voucherTokenExpiry(now, current.travelDateFrom),
+        via: issueVariant,
+        from: voucherFromAddress(),
+        cc: [plannerEmail],
+        replyTo: plannerEmail,
+        messageId: mail.messageId,
+      }))
 
       const nextMeta: VoucherMeta = {
         issued: true,
@@ -916,7 +931,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         kind: opts.kind || existing?.kind || 'standard',
         requirementsSignature: reqSig,
         contentSignature: reqSig,
-        tokens: [...(existing?.tokens || []).map((t) => ({ ...t, supersededAt: t.supersededAt || now })), ...tokens],
+        tokens: (existing?.tokens || []).map((t) => ({ ...t, supersededAt: t.supersededAt || now })),
         resendCount: existing?.resendCount || 0,
         version,
         note: opts.note ?? existing?.note,
@@ -970,42 +985,68 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (meta.lastResendAt && new Date(now).getTime() - new Date(meta.lastResendAt).getTime() < 3600000) {
         return { ok: false, ruleId: 'resend-rate-limited', reason: 'Resend is capped at once per hour per voucher' }
       }
-      const recipient = meta.issuedTo[0] || supplierEmailFor(entityId)
-      const token: VoucherToken = {
-        token: randomVoucherToken(),
-        recipientEmail: recipient,
-        createdAt: now,
-        expiresAt: voucherTokenExpiry(now, current.travelDateFrom),
-        version: meta.version,
-      }
+      const recipients = (meta.issuedTo.length ? meta.issuedTo : [supplierEmailFor(entityId)]).filter(Boolean)
+      const supplierLink = `/voucher-link/${itineraryId}/${encodeURIComponent(entityId)}`
       const supplierName = getPayableEntity(entityId).legalName
+      const services = getServicesStorage(itineraryId)
+      const guestDetails = getGuestDetailsStorage(itineraryId)
+      const guests = partyGuests(current, guestDetails)
+      const entityLines = linesFromServices(services, guests).filter((l) => {
+        const eid = l.payableEntityId || payableEntityFromSupplierName(l.supplier).id
+        return eid === entityId
+      })
+      const serviceDates = entityLines.map((l) => l.date).filter(Boolean).sort()
+      const serviceDateFrom = serviceDates[0] || current.travelDateFrom || ''
+      const serviceDateTo = serviceDates[serviceDates.length - 1] || current.travelDateTo || serviceDateFrom
+      const emailBody = buildVoucherConfirmEmailBody({
+        voucherRef: meta.voucherRef || entityId,
+        serviceDateFrom,
+        serviceDateTo,
+        tripTitle: current.title,
+      })
+      const voucherCards = buildVouchers(
+        linesFromServices(services, guests),
+        'cost',
+        current.reference || current.id,
+        services,
+        guests,
+        guestDetails,
+        current.agency || '',
+        current.supplierVouchers || {},
+        current.voucherLineAnswers || {},
+        current.voucherMeta || {},
+      )
+      const voucherCard = voucherCards.find((c) => c.entityId === entityId)
+      const filingCopy = voucherCard
+        ? buildVoucherFilingCopyFromCard(voucherCard, current.reference || current.id)
+        : undefined
       const mail = await sendVoucherEmail({
         from: voucherFromAddress(),
         cc: [meta.issuingPlannerEmail || 'planner@chelipeacock.com'],
         replyTo: meta.issuingPlannerEmail || 'planner@chelipeacock.com',
-        to: [recipient],
+        to: recipients,
         subject: `Confirmation request (resent) — ${meta.voucherRef || entityId}`,
-        body: 'Your confirmation link has been refreshed.',
-        linkUrl: `/voucher-link/${itineraryId}/${encodeURIComponent(entityId)}?t=${token.token}`,
-        pdfUrl: `/voucher-doc/${itineraryId}/${encodeURIComponent(entityId)}`,
+        body: emailBody,
+        linkUrl: supplierLink,
         note: meta.note,
         supplierName,
         variant: 'resend',
+        filingCopy,
       })
       if (mail.deliveryStatus === 'failed') {
         return {
           ok: false,
           ruleId: 'mail-failed',
-          reason: mail.error || `Email could not be sent to ${recipient}.`,
+          reason: mail.error || `Email could not be sent to ${recipients.join(', ')}.`,
         }
       }
       const sendRecord = {
         id: `vs-${Date.now()}`,
-        recipient,
+        recipient: recipients.join(', '),
         sentAt: mail.sentAt,
         deliveryStatus: mail.deliveryStatus,
-        token: token.token,
-        expiresAt: token.expiresAt,
+        token: 'open-link',
+        expiresAt: voucherTokenExpiry(now, current.travelDateFrom),
         via: 'resend' as const,
         from: voucherFromAddress(),
         cc: [meta.issuingPlannerEmail || 'planner@chelipeacock.com'],
@@ -1014,7 +1055,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       const nextMeta: VoucherMeta = {
         ...meta,
-        tokens: [...meta.tokens.map((t) => ({ ...t, supersededAt: t.supersededAt || now })), token],
         resendCount: meta.resendCount + 1,
         lastResendAt: now,
         sendHistory: appendSendRecord(meta, sendRecord),
@@ -1026,7 +1066,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         category: 'voucher-send',
         entityId,
         label: 'Voucher resent',
-        detail: recipient,
+        detail: recipients.join(', '),
       })
       upsertItineraryStorage({
         ...current,
@@ -1095,11 +1135,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       let recipientEmail: string | undefined
       if (input.via === 'link') {
-        const tokenState = evaluateVoucherToken(meta, input.token, new Date().toISOString())
-        if (tokenState.state !== 'ok') {
-          return { ok: false, ruleId: `token-${tokenState.state}`, reason: 'This confirmation link is no longer valid' }
+        if (!input.courtesyName?.trim()) {
+          return { ok: false, ruleId: 'name-required', reason: 'First and last name are required' }
         }
-        recipientEmail = tokenState.recipientEmail
+        recipientEmail = meta.issuedTo[0]
       } else if (input.via === 'staff') {
         if (!roleAllowsVoucherAction(demoRole, 'recordOnBehalf')) {
           return { ok: false, ruleId: 'role-denied', reason: `Role ${demoRole} cannot record a supplier reply` }
@@ -1135,13 +1174,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
 
       setServicesStorage(itineraryId, result.services)
-      const nextTokens =
-        input.via === 'link' && input.token
-          ? meta.tokens.map((t) =>
-              t.token === input.token ? { ...t, usedAt: now } : meta.submittedAt ? { ...t, usedAt: t.usedAt || now } : t,
-            )
-          : meta.tokens
-
       const heldCount = input.lines.filter((l) => input.ticks[l.lineId] !== false).length
       const rejectedReasons = input.lines
         .filter((l) => input.ticks[l.lineId] === false)
@@ -1163,7 +1195,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       const nextMeta: VoucherMeta = {
         ...meta,
-        tokens: nextTokens,
         submittedAt: now,
         submittedVia: input.via,
         submittedByEmail: recipientEmail,

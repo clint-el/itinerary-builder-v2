@@ -26,22 +26,14 @@ function readJsonBody(req: IncomingMessage): Promise<unknown> {
 export async function handleVoucherSessionGet(_req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
   const itineraryId = url.searchParams.get('itineraryId')?.trim()
   const entityId = url.searchParams.get('entityId')?.trim()
-  const token = url.searchParams.get('token')?.trim()
-
-  if (!itineraryId || !entityId || !token) {
-    sendJson(res, 400, { error: 'itineraryId, entityId, and token are required' })
+  if (!itineraryId || !entityId) {
+    sendJson(res, 400, { error: 'itineraryId and entityId are required' })
     return
   }
 
   const stored = getVoucherSession(itineraryId, entityId)
   if (!stored?.meta) {
     sendJson(res, 404, { error: 'No voucher session found' })
-    return
-  }
-
-  const tokens = (stored.meta as { tokens?: { token: string }[] }).tokens ?? []
-  if (!tokens.some((t) => t.token === token)) {
-    sendJson(res, 404, { error: 'Token not found in session' })
     return
   }
 

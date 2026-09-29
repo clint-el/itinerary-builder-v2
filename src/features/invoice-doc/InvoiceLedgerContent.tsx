@@ -6,6 +6,7 @@ import {
   fmtLedgerUsd,
   bookedByContact,
   guestDetailLines,
+  paxPricePerGuest,
   type LedgerCancellationRow,
   type LedgerOptionRow,
 } from '@/features/quote-doc/quoteLedgerModel'
@@ -120,7 +121,7 @@ export function InvoiceLedgerContent({
               <div className="text-[9.5px] font-semibold uppercase tracking-[1.6px] text-[#C79393]">
                 {invoiceCoverKindLabel(travelCounsellors)}
               </div>
-              <div className="mt-0.5 font-['IBM_Plex_Mono'] text-lg font-medium text-white">{refLabel}</div>
+              <div className="mt-0.5 font-semibold text-lg font-medium text-white">{refLabel}</div>
             </div>
           </div>
           <h1 className="m-0 text-[38px] font-semibold leading-[1.1] tracking-[-0.8px] text-white">
@@ -172,7 +173,7 @@ export function InvoiceLedgerContent({
                 All prices in USD net · {totalGuests || '—'} guest{totalGuests === 1 ? '' : 's'}
               </div>
             </div>
-            <div className="font-['IBM_Plex_Mono'] text-[32px] font-semibold tracking-[-0.5px]">
+            <div className="text-[32px] font-semibold tracking-[-0.5px]">
               {fmtLedgerUsd(sellTotal)}
             </div>
           </div>
@@ -187,7 +188,7 @@ export function InvoiceLedgerContent({
         className="inv-page flex shrink-0 flex-col overflow-hidden bg-white shadow-[0_12px_32px_rgba(0,0,0,0.35)]"
         style={{ width: PAGE_W, minHeight: PAGE_H }}
       >
-        <LedgerHeader title="Schedule of services" refLabel={refLabel} />
+        <LedgerHeader title="Safari services" refLabel={refLabel} />
         <div className="flex flex-1 flex-col px-14 pb-8 pt-[30px]">
           <div className="flex items-baseline justify-end gap-4">
             <span className="text-[10px] font-semibold uppercase tracking-[1.4px] text-[#931115]">
@@ -271,7 +272,12 @@ export function InvoiceLedgerContent({
                         <span className="text-center text-[#6E6E6E]">{row.pax}</span>
                         <span className="text-center text-[#6E6E6E]">{row.qty}</span>
                         <span className="text-center text-[#6E6E6E]">{row.duration}</span>
-                        <span className="text-right text-[#6E6E6E]">{fmtLedgerAmount(row.unitPrice)}</span>
+                        <span className="text-right text-[#6E6E6E]">
+                          <span className="block">{fmtLedgerAmount(row.unitPrice)}</span>
+                          <span className="block text-[8px] font-normal normal-case tracking-normal text-[#A3A3A3]">
+                            {row.unitPriceBasis}
+                          </span>
+                        </span>
                         <span className="text-right font-medium text-[#3D3D3D]">{fmtLedgerAmount(row.amount)}</span>
                       </div>
                     ))}
@@ -322,7 +328,7 @@ export function InvoiceLedgerContent({
                 All prices in USD net · {totalGuests} guest{totalGuests === 1 ? '' : 's'}
               </div>
             </div>
-            <div className="font-['IBM_Plex_Mono'] text-[34px] font-semibold tracking-[-0.8px]">
+            <div className="text-[34px] font-semibold tracking-[-0.8px]">
               {fmtLedgerAmount(sellTotal)}
             </div>
           </div>
@@ -354,8 +360,8 @@ export function InvoiceLedgerContent({
             <div className="mt-2 grid grid-cols-4 gap-3">
               <PaxSplitCell label="Total adults" value={String(paxPriceSplit.totalAdults)} />
               <PaxSplitCell label="Total children" value={String(paxPriceSplit.totalChildren)} />
-              <PaxSplitCell label="Price per adult" value={fmtLedgerUsd(paxPriceSplit.totalAdultPrice)} />
-              <PaxSplitCell label="Price per child" value={fmtLedgerUsd(paxPriceSplit.totalChildPrice)} />
+              <PaxSplitCell label="Price per adult" value={fmtLedgerUsd(paxPricePerGuest(paxPriceSplit).perAdult)} />
+              <PaxSplitCell label="Price per child" value={fmtLedgerUsd(paxPricePerGuest(paxPriceSplit).perChild)} />
             </div>
           </div>
 
@@ -386,7 +392,7 @@ export function InvoiceLedgerContent({
 
           {optionRows.length ? (
             <div className="mt-[26px]">
-              <SectionLabel>Supplier Service options</SectionLabel>
+              <SectionLabel>Supplier inclusions &amp; exclusions</SectionLabel>
               <div className="mt-2 border border-[#101010]">
                 <div className="grid grid-cols-[108px_88px_88px_1fr_1fr] gap-3 border-b border-[#EFEFEF] px-4 py-[7px] text-[8.5px] font-semibold uppercase tracking-[0.9px] text-[#8A8A8A]">
                   <span>Supplier</span>
@@ -466,7 +472,7 @@ function LedgerHeader({ title, refLabel }: { title: string; refLabel: string }) 
   return (
     <div className="flex h-[42px] shrink-0 items-center justify-between px-14" style={{ background: MAROON }}>
       <span className="text-[9.5px] font-semibold uppercase tracking-[2px] text-[#E9CFCF]">{title}</span>
-      <span className="font-['IBM_Plex_Mono'] text-[11px] text-[#DFB9B9]">{refLabel}</span>
+      <span className="font-semibold text-[11px] text-[#DFB9B9]">{refLabel}</span>
     </div>
   )
 }
@@ -509,7 +515,7 @@ function MetaRow({
       <span
         className={cn(
           'text-[12.5px]',
-          mono && "font-['IBM_Plex_Mono'] text-[13px] font-medium",
+          mono && 'text-[13px] font-medium',
           accent && 'font-semibold text-[#931115]',
           bold && 'font-semibold',
         )}

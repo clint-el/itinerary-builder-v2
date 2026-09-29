@@ -11,8 +11,8 @@ export interface VoucherMailApiBody {
   subject?: string
   body?: string
   linkUrl?: string
-  pdfUrl?: string
   note?: string
+  filingCopy?: Record<string, unknown>
   supplierName?: string
   variant?: VoucherMailVariant
 }

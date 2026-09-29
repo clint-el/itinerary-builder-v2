@@ -502,53 +502,56 @@ export function GuestDetailsSheet({ open, onClose, itinerary, inline = false }: 
             <span className="text-[11px] font-bold uppercase tracking-wide text-[#A1A1A1]">
               Dietary &amp; special requirements
             </span>
-            <label className="flex w-fit items-center gap-1.5 text-[12.5px] font-medium text-[#525252]">
-              <input
-                type="checkbox"
-                checked={form.dietaryNone}
+            <label className="flex flex-col gap-1.5">
+              <span className="text-[12.5px] font-semibold text-[#171717]">Dietary requirements</span>
+              <label className="flex w-fit items-center gap-1.5 text-[12.5px] font-medium text-[#525252]">
+                <input
+                  type="checkbox"
+                  checked={form.dietaryNone}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      dietaryNone: e.target.checked,
+                      dietary: e.target.checked ? '' : form.dietary,
+                    })
+                  }
+                />
+                No dietary requirements
+              </label>
+              <textarea
+                value={form.dietary}
                 onChange={(e) =>
                   setForm({
                     ...form,
-                    dietaryNone: e.target.checked,
-                    dietary: e.target.checked ? '' : form.dietary,
+                    dietary: e.target.value,
+                    dietaryNone: false,
                   })
                 }
+                disabled={form.dietaryNone}
+                placeholder={
+                  form.dietaryNone ? 'None — untick above to record a requirement' : 'Allergies, preferences, etc.'
+                }
+                className={cn(
+                  'min-h-[84px] resize-y rounded-lg border border-[#E5E7EB] bg-white px-3 py-2.5 text-sm leading-relaxed text-[#171717] outline-none',
+                  form.dietaryNone && 'opacity-50',
+                )}
               />
-              No requirements
             </label>
-            <textarea
-              value={form.dietary}
-              onChange={(e) =>
-                setForm({
-                  ...form,
-                  dietary: e.target.value,
-                  dietaryNone: false,
-                })
-              }
-              disabled={form.dietaryNone}
-              placeholder={form.dietaryNone ? 'None — untick above to record a requirement' : 'No requirements'}
-              className={cn(
-                'min-h-[84px] resize-y rounded-lg border border-[#E5E7EB] bg-white px-3 py-2.5 text-sm leading-relaxed text-[#171717] outline-none',
-                form.dietaryNone && 'opacity-50',
-              )}
-            />
+            <label className="mt-2 flex flex-col gap-1.5">
+              <span className="text-[12.5px] font-semibold text-[#171717]">Additional requirements</span>
+              <textarea
+                value={form.note}
+                onChange={(e) => {
+                  setForm({ ...form, note: e.target.value })
+                  setBreachAck(false)
+                }}
+                placeholder="Mobility, rooming, medical notes for suppliers, etc."
+                className="min-h-[84px] resize-y rounded-lg border border-[#E5E7EB] bg-white px-3 py-2.5 text-sm leading-relaxed text-[#171717] outline-none"
+              />
+            </label>
             <span className="text-[11.5px] text-[#A1A1A1]">
-              Captured once here and reused on every voucher for this guest across all suppliers.
+              Captured once per guest and printed on supplier vouchers for every property they visit.
             </span>
-          </section>
-
-          <section className="flex flex-col gap-2">
-            <span className="text-[11px] font-bold uppercase tracking-wide text-[#A1A1A1]">Internal note</span>
-            <textarea
-              value={form.note}
-              onChange={(e) => {
-                setForm({ ...form, note: e.target.value })
-                setBreachAck(false)
-              }}
-              placeholder="Type here"
-              className="min-h-[64px] resize-y rounded-lg border border-[#E5E7EB] bg-white px-3 py-2.5 text-sm leading-relaxed text-[#171717] outline-none"
-            />
-            <span className="text-[11.5px] text-[#A1A1A1]">Planner-only — not printed on supplier vouchers.</span>
           </section>
 
           {!form.id ? (

@@ -103,7 +103,7 @@ export function VoucherIssueDialog({
               placeholder="reservations@supplier.com, cc@supplier.com"
               className="h-9 rounded-lg border border-[#E5E7EB] bg-white px-3 text-sm text-[#171717] outline-none"
             />
-            <span className="text-[11px] text-[#A1A1A1]">Comma-separated — one token per recipient (PR-F22).</span>
+            <span className="text-[11px] text-[#A1A1A1]">Comma-separated — all addresses receive the same email and PDF attachment.</span>
           </label>
 
           <label className="flex flex-col gap-1.5">

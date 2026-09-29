@@ -75,14 +75,17 @@ export function VoucherRecipientBody({
               <span className="min-w-0 shrink-0 text-[12.5px] font-semibold text-[#171717]">
                 {g.name} <span className="font-normal text-[#A1A1A1]">· {g.role}</span>
               </span>
-              <span
+              <div
                 className={cn(
-                  'min-w-0 flex-1 truncate text-right text-[12.5px]',
+                  'min-w-0 flex-1 text-right text-[12.5px] leading-snug',
                   g.status === 'not_captured' ? 'italic text-[#A1A1A1]' : 'text-[#525252]',
                 )}
               >
-                {g.text}
-              </span>
+                <div>{g.dietaryText}</div>
+                {g.additionalText ? (
+                  <div className="mt-0.5 text-[11.5px] text-[#737373]">Additional: {g.additionalText}</div>
+                ) : null}
+              </div>
             </div>
           ))}
         </div>

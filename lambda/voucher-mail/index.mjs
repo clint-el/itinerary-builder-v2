@@ -5,6 +5,7 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
 import { DynamoDBDocumentClient, GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb'
 import { Resend } from 'resend'
+import { buildVoucherFilingPdfBase64, voucherFilingFilename } from './voucherFilingPdf.mjs'
 
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}))
 const TABLE = process.env.VOUCHER_SESSIONS_TABLE?.trim()
@@ -67,13 +68,15 @@ function absoluteUrl(relativeOrAbsolute, appOrigin) {
 
 function buildEmail(input) {
   const confirmUrl = absoluteUrl(input.linkUrl, input.appOrigin)
-  const pdfUrl = absoluteUrl(input.pdfUrl, input.appOrigin)
   const supplier = input.supplierName?.trim() || 'partner'
   const greeting = `Dear ${supplier} reservations team,`
   const lead =
     input.variant === 'resend'
-      ? 'Your confirmation link has been refreshed. Please use the button below — earlier links may no longer work.'
+      ? `${input.body?.trim() || 'Please confirm the services listed in our portal.'} Your confirmation link is below.`
       : input.body?.trim() || 'Please confirm the services listed in our portal.'
+  const attachmentLine = input.pdfAttachmentFilename
+    ? `<p style="font-size:12px;">Filing copy PDF attached: <strong>${input.pdfAttachmentFilename}</strong></p>`
+    : ''
 
   const html = `<!DOCTYPE html><html><body style="font-family:Helvetica,Arial,sans-serif;color:#171717;">
 <p style="font-size:18px;font-weight:700;color:#931115;">Cheli &amp; Peacock</p>
@@ -82,10 +85,20 @@ function buildEmail(input) {
 <p><a href="${confirmUrl}" style="display:inline-block;background:#931115;color:#fff;padding:12px 22px;text-decoration:none;border-radius:8px;">Confirm services</a></p>
 <p style="font-size:12px;"><a href="${confirmUrl}">${confirmUrl}</a></p>
 ${input.note ? `<p><strong>Note from your planner:</strong> ${input.note}</p>` : ''}
-<p style="font-size:12px;"><a href="${pdfUrl}">View filing copy (PDF)</a></p>
+${attachmentLine}
 </body></html>`
 
-  const text = [greeting, '', lead, '', confirmUrl, '', `Filing copy: ${pdfUrl}`].join('\n')
+  const text = [
+    greeting,
+    '',
+    lead,
+    '',
+    confirmUrl,
+    '',
+    input.pdfAttachmentFilename ? `Filing copy PDF attached: ${input.pdfAttachmentFilename}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n')
   return { html, text }
 }
 
@@ -93,20 +106,13 @@ async function handleSessionGet(event, origin) {
   const qs = event.queryStringParameters || {}
   const itineraryId = qs.itineraryId?.trim()
   const entityId = qs.entityId?.trim()
-  const token = qs.token?.trim()
-
-  if (!itineraryId || !entityId || !token) {
-    return jsonResponse(400, origin, { error: 'itineraryId, entityId, and token are required' })
+  if (!itineraryId || !entityId) {
+    return jsonResponse(400, origin, { error: 'itineraryId and entityId are required' })
   }
 
   const stored = await getSession(itineraryId, entityId)
   if (!stored?.meta) {
     return jsonResponse(404, origin, { error: 'No voucher session found' })
-  }
-
-  const tokens = stored.meta.tokens ?? []
-  if (!tokens.some((t) => t.token === token)) {
-    return jsonResponse(404, origin, { error: 'Token not found in session' })
   }
 
   return jsonResponse(200, origin, { meta: stored.meta, updatedAt: stored.updatedAt })
@@ -152,12 +158,25 @@ async function handleMail(event, origin) {
   }
 
   const to = (payload.to || []).filter(Boolean)
-  if (!to.length || !payload.subject?.trim() || !payload.linkUrl?.trim() || !payload.pdfUrl?.trim()) {
+  if (!to.length || !payload.subject?.trim() || !payload.linkUrl?.trim()) {
     return jsonResponse(400, origin, { error: 'Missing required fields', deliveryStatus: 'failed' })
   }
 
   const variant = payload.variant === 'resend' ? 'resend' : 'issue'
-  const { html, text } = buildEmail({ ...payload, variant, appOrigin: env.appOrigin })
+  let pdfAttachmentFilename
+  let attachments
+  if (payload.filingCopy) {
+    pdfAttachmentFilename = voucherFilingFilename(payload.filingCopy.voucherRef || 'voucher')
+    const content = await buildVoucherFilingPdfBase64(payload.filingCopy)
+    attachments = [{ filename: pdfAttachmentFilename, content }]
+  }
+
+  const { html, text } = buildEmail({
+    ...payload,
+    variant,
+    appOrigin: env.appOrigin,
+    pdfAttachmentFilename,
+  })
 
   const resend = new Resend(env.resendApiKey)
   const sentAt = new Date().toISOString()
@@ -171,6 +190,7 @@ async function handleMail(event, origin) {
       subject: payload.subject.trim(),
       html,
       text,
+      attachments,
     })
 
     if (result.error) {

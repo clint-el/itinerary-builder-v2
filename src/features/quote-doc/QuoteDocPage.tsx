@@ -24,6 +24,7 @@ import {
   paxComposition,
   bookedByContact,
   bookingAgentBlock,
+  paxPricePerGuest,
   quoteValidUntil,
 } from '@/features/quote-doc/quoteLedgerModel'
 import { BookedByMetaRow, BookingAgentSection, GuestDetailsSection } from '@/features/quote-doc/quoteCoverMeta'
@@ -330,7 +331,6 @@ export function QuoteDocPage() {
     (renderModel.generatedAt ?? new Date().toISOString()).slice(0, 10),
   )
   const balanceDue = balanceDueDate(itinerary.travelDateFrom || '')
-  const perPerson = totalGuests ? sellTotal / totalGuests : 0
   const depositTotalLabel = activeQuote
     ? fmtLedgerAmount(renderModel.depositTotal)
     : deposits.depositTotal
@@ -740,7 +740,7 @@ export function QuoteDocPage() {
                     <div className="text-[9.5px] font-semibold uppercase tracking-[1.6px] text-[#C79393]">
                       {quotationCoverKindLabel(isTravelCounsellors, false)}
                     </div>
-                    <div className="mt-0.5 font-['IBM_Plex_Mono'] text-lg font-medium text-white">{refLabel}</div>
+                    <div className="mt-0.5 text-lg font-medium text-white">{refLabel}</div>
                   </div>
                 </div>
                 <h1 className="m-0 text-[38px] font-semibold leading-[1.1] tracking-[-0.8px] text-white">
@@ -796,7 +796,7 @@ export function QuoteDocPage() {
                       {rateTag} · {totalGuests || '—'} guest{totalGuests === 1 ? '' : 's'}
                     </div>
                   </div>
-                  <div className="font-['IBM_Plex_Mono'] text-[32px] font-semibold tracking-[-0.5px]">
+                  <div className="text-[32px] font-semibold tracking-[-0.5px]">
                     {fmtLedgerUsd(sellTotal)}
                   </div>
                 </div>
@@ -815,7 +815,7 @@ export function QuoteDocPage() {
               className="qd-page flex shrink-0 flex-col overflow-hidden bg-white shadow-[0_12px_32px_rgba(0,0,0,0.35)]"
               style={{ width: PAGE_W, minHeight: PAGE_H }}
             >
-              <LedgerHeader title="Schedule of services" refLabel={refLabel} />
+              <LedgerHeader title="Safari services" refLabel={refLabel} />
               <div className="flex flex-1 flex-col px-14 pb-8 pt-[30px]">
                 <div className="flex items-baseline justify-end gap-4">
                   <span className="text-[10px] font-semibold uppercase tracking-[1.4px] text-[#931115]">
@@ -861,7 +861,12 @@ export function QuoteDocPage() {
                           <span className="text-center text-[#6E6E6E]">{row.pax}</span>
                           <span className="text-center text-[#6E6E6E]">{row.qty}</span>
                           <span className="text-center text-[#6E6E6E]">{row.duration}</span>
-                          <span className="text-right text-[#6E6E6E]">{fmtLedgerAmount(row.unitPrice)}</span>
+                          <span className="text-right text-[#6E6E6E]">
+                            <span className="block">{fmtLedgerAmount(row.unitPrice)}</span>
+                            <span className="block text-[8px] font-normal normal-case tracking-normal text-[#A3A3A3]">
+                              {row.unitPriceBasis}
+                            </span>
+                          </span>
                           <span className="text-right font-medium text-[#3D3D3D]">{fmtLedgerAmount(row.amount)}</span>
                         </div>
                       ))}
@@ -899,7 +904,7 @@ export function QuoteDocPage() {
                       )}
                     >
                       <div className="text-[9px] font-semibold uppercase tracking-[1.2px] text-[#8A8A8A]">{cat.name}</div>
-                      <div className="mt-1 font-['IBM_Plex_Mono'] text-[15px] font-medium">{fmtLedgerAmount(cat.amount)}</div>
+                      <div className="mt-1 text-[15px] font-medium">{fmtLedgerAmount(cat.amount)}</div>
                     </div>
                   ))}
                 </div>
@@ -921,10 +926,9 @@ export function QuoteDocPage() {
                     <div className="text-[9.5px] font-semibold uppercase tracking-[1.6px] text-[#B5B5B5]">Safari total</div>
                     <div className="mt-1 text-[11px] text-[#B5B5B5]">
                       {rateTag} · {totalGuests} guest{totalGuests === 1 ? '' : 's'}
-                      {priceMode === 'pp' && totalGuests ? ` · ${fmtLedgerUsd(perPerson)} per person` : ''}
                     </div>
                   </div>
-                  <div className="font-['IBM_Plex_Mono'] text-[34px] font-semibold tracking-[-0.8px]">
+                  <div className="text-[34px] font-semibold tracking-[-0.8px]">
                     {fmtLedgerAmount(sellTotal)}
                   </div>
                 </div>
@@ -937,9 +941,9 @@ export function QuoteDocPage() {
                     <span className="text-right">Amount</span>
                   </div>
                   <div className="grid grid-cols-[minmax(0,1fr)_200px_110px] gap-x-3 border-b border-[#F5F5F5] py-2 text-[11.5px]">
-                    <span className="font-semibold">Deposit on acceptance</span>
+                    <span className="font-semibold">Deposit on confirmation</span>
                     <span className="text-[11px] text-[#6E6E6E]">
-                      Supplier terms · {depositPctLabel} of total
+                      On confirmation · {depositPctLabel} of total
                     </span>
                     <span className="text-right font-medium">{depositTotalLabel}</span>
                   </div>
@@ -950,18 +954,19 @@ export function QuoteDocPage() {
                   </div>
                 </div>
 
-                <p className="mt-6 text-[11px] leading-relaxed text-[#8A8A8A]">
-                  Unit rate types differ across the itinerary — per person per day, per person per unit, per unit — so
-                  the per-person figure is an average across the party rather than a rate charged to any one guest.
-                </p>
-
                 <div className="mt-6">
                   <SectionLabel>Guest price split</SectionLabel>
                   <div className="mt-2 grid grid-cols-4 gap-3">
                     <PaxSplitCell label="Total adults" value={String(renderModel.paxPriceSplit.totalAdults)} />
                     <PaxSplitCell label="Total children" value={String(renderModel.paxPriceSplit.totalChildren)} />
-                    <PaxSplitCell label="Price per adult" value={fmtLedgerUsd(renderModel.paxPriceSplit.totalAdultPrice)} />
-                    <PaxSplitCell label="Price per child" value={fmtLedgerUsd(renderModel.paxPriceSplit.totalChildPrice)} />
+                    <PaxSplitCell
+                      label="Price per adult"
+                      value={fmtLedgerUsd(paxPricePerGuest(renderModel.paxPriceSplit).perAdult)}
+                    />
+                    <PaxSplitCell
+                      label="Price per child"
+                      value={fmtLedgerUsd(paxPricePerGuest(renderModel.paxPriceSplit).perChild)}
+                    />
                   </div>
                 </div>
 
@@ -993,7 +998,7 @@ export function QuoteDocPage() {
 
                 {optionRows.length ? (
                   <div className="mt-[26px]">
-                    <SectionLabel>Supplier Service options</SectionLabel>
+                    <SectionLabel>Supplier inclusions &amp; exclusions</SectionLabel>
                     <div className="mt-2 border border-[#101010]">
                       <div className="grid grid-cols-[108px_88px_88px_1fr_1fr] gap-3 border-b border-[#EFEFEF] px-4 py-[7px] text-[8.5px] font-semibold uppercase tracking-[0.9px] text-[#8A8A8A]">
                         <span>Supplier</span>
@@ -1103,7 +1108,7 @@ function LedgerHeader({ title, refLabel }: { title: string; refLabel: string }) 
       style={{ background: MAROON }}
     >
       <span className="text-[9.5px] font-semibold uppercase tracking-[2px] text-[#E9CFCF]">{title}</span>
-      <span className="font-['IBM_Plex_Mono'] text-[11px] text-[#DFB9B9]">{refLabel}</span>
+      <span className="font-semibold text-[11px] text-[#DFB9B9]">{refLabel}</span>
     </div>
   )
 }
@@ -1152,7 +1157,7 @@ function MetaRow({
       <span
         className={cn(
           'text-[12.5px]',
-          mono && "font-['IBM_Plex_Mono'] text-[13px] font-medium",
+          mono && 'text-[13px] font-medium',
           accent && 'font-semibold text-[#931115]',
           bold && 'font-semibold',
         )}
@@ -1180,7 +1185,7 @@ function PageFooter({ left, right, bordered }: { left: string; right: string; bo
       )}
     >
       <span>{left}</span>
-      <span className="font-['IBM_Plex_Mono']">{right}</span>
+      <span className="font-semibold">{right}</span>
     </div>
   )
 }
@@ -1199,7 +1204,7 @@ function DottedTotalRow({
       <span className="text-xs text-[#3D3D3D]">{label}</span>
       <span className="flex-1 translate-y-[-3px] border-b border-dotted border-[#C9C9C9]" />
       <span
-        className="font-['IBM_Plex_Mono'] text-[12.5px] font-medium"
+        className="text-[12.5px] font-medium"
         style={{ color: accent || '#101010' }}
       >
         {amount}
@@ -1212,7 +1217,7 @@ function PaxSplitCell({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-[#E5E7EB] px-3 py-2.5">
       <div className="text-[9px] font-semibold uppercase tracking-wide text-[#8A8A8A]">{label}</div>
-      <div className="mt-0.5 font-['IBM_Plex_Mono'] text-[13px] font-semibold">{value}</div>
+      <div className="mt-0.5 text-[13px] font-semibold">{value}</div>
     </div>
   )
 }

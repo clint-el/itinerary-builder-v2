@@ -33,7 +33,7 @@ export function PerSupplierPaymentTermsTable({
 }) {
   return (
     <>
-      <TermsSectionLabel>Per-supplier payment terms</TermsSectionLabel>
+      <TermsSectionLabel>Supplier payment terms</TermsSectionLabel>
       <div className="mt-2 border border-[#101010]">
         <div className="grid grid-cols-[1fr_100px_100px] gap-2 border-b border-[#EFEFEF] px-4 py-[7px] text-[8.5px] font-semibold uppercase tracking-[0.9px] text-[#8A8A8A]">
           <span>Supplier</span>
@@ -86,7 +86,7 @@ export function SupplierCancellationPolicyCard({ row }: { row: LedgerCancellatio
       </div>
 
       <div className="mt-3">
-        <FieldLabel>Refundable</FieldLabel>
+        <FieldLabel>Deposit is refundable</FieldLabel>
         <p className="mt-1">
           <span
             className={cn(

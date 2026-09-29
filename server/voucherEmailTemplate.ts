@@ -3,11 +3,12 @@ export type VoucherMailVariant = 'issue' | 'resend'
 export interface VoucherEmailTemplateInput {
   body: string
   linkUrl: string
-  pdfUrl: string
   note?: string
   supplierName?: string
   variant: VoucherMailVariant
   appOrigin: string
+  /** When set, the filing copy is attached — no PDF download link in the body. */
+  pdfAttachmentFilename?: string
 }
 
 function absoluteUrl(relativeOrAbsolute: string, appOrigin: string): string {
@@ -19,8 +20,12 @@ function absoluteUrl(relativeOrAbsolute: string, appOrigin: string): string {
 
 export function buildVoucherEmailContent(input: VoucherEmailTemplateInput): { html: string; text: string } {
   const confirmUrl = absoluteUrl(input.linkUrl, input.appOrigin)
-  const pdfUrl = absoluteUrl(input.pdfUrl, input.appOrigin)
   const supplier = input.supplierName?.trim() || 'partner'
+  const attachmentNote = input.pdfAttachmentFilename
+    ? `<tr><td style="font-size:12px;line-height:1.5;color:#737373;padding-top:16px;">
+        Filing copy PDF attached: <strong>${escapeHtml(input.pdfAttachmentFilename)}</strong>
+      </td></tr>`
+    : ''
   const greeting = `Dear ${supplier} reservations team,`
 
   const lead =
@@ -53,9 +58,7 @@ export function buildVoucherEmailContent(input: VoucherEmailTemplateInput): { ht
           Or open this link:<br /><a href="${escapeAttr(confirmUrl)}" style="color:#931115;">${escapeHtml(confirmUrl)}</a>
         </td></tr>
         ${noteBlock}
-        <tr><td style="font-size:12px;line-height:1.5;color:#737373;padding-top:20px;">
-          <a href="${escapeAttr(pdfUrl)}" style="color:#931115;">View filing copy (PDF)</a>
-        </td></tr>
+        ${attachmentNote}
         <tr><td style="font-size:12px;line-height:1.5;color:#A1A1A1;padding-top:24px;border-top:1px solid #F1F1F3;margin-top:8px;">
           Questions? Reply to this email — your planner is copied. Confirmation links expire after a limited time.
         </td></tr>
@@ -76,7 +79,7 @@ export function buildVoucherEmailContent(input: VoucherEmailTemplateInput): { ht
     confirmUrl,
     '',
     input.note?.trim() ? `Note from your planner:\n${input.note.trim()}\n` : '',
-    `Filing copy: ${pdfUrl}`,
+    input.pdfAttachmentFilename ? `Filing copy PDF attached: ${input.pdfAttachmentFilename}\n` : '',
     '',
     'Questions? Reply to this email — your planner is copied.',
   ]

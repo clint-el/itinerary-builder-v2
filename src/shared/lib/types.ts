@@ -457,6 +457,7 @@ export interface QuoteDocument {
       qty: string
       duration: string
       unitPrice: number
+      unitPriceBasis: string
       amount: number
     }[]
   }[]

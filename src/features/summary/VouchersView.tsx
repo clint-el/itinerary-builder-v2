@@ -229,9 +229,7 @@ export function VouchersView({
                 {v.issued ? (
                   <GhostLink
                     icon={ExternalLink}
-                    to={`/voucher-link/${itineraryId}/${encodeURIComponent(v.entityId)}${
-                      v.activeToken ? `?t=${encodeURIComponent(v.activeToken)}` : ''
-                    }`}
+                    to={`/voucher-link/${itineraryId}/${encodeURIComponent(v.entityId)}`}
                     newTab
                   >
                     Open supplier link

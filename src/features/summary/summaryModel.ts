@@ -1612,7 +1612,17 @@ export type VoucherResponseState =
   | 'Supplier submitted'
   | 'Recorded by planner'
 
-export type VoucherGuestRow = { name: string; role: string; status: DietaryStatus; text: string }
+export type VoucherGuestRow = {
+  name: string
+  role: string
+  status: DietaryStatus
+  /** Dietary requirements line on the voucher. */
+  dietaryText: string
+  /** Additional requirements (from guest profile). */
+  additionalText: string
+  /** @deprecated Use dietaryText — kept for callers that still read `text`. */
+  text: string
+}
 
 export type VoucherRoomRow = { room: string; who: string; meta: string }
 
@@ -1717,7 +1727,22 @@ function voucherDetail(l: SummaryLine) {
     if (l.kind === 'disposal') {
       return [l.veh ? `${l.veh} vehicle` : null, l.days ? `${l.days} days` : null].filter(Boolean).join('  ·  ')
     }
-    return l.vType || ''
+    const end = lineEndDate(l)
+    const dateSpan =
+      l.date && end && end !== l.date
+        ? `Arrive ${fmtShortDate(l.date)} · Depart ${fmtShortDate(end)}`
+        : l.date
+          ? `Date ${fmtShortDate(l.date)}`
+          : null
+    return [dateSpan, l.vType, l.pickup && l.dropoff ? `${l.pickup} → ${l.dropoff}` : l.pickup || l.dropoff]
+      .filter(Boolean)
+      .join('  ·  ')
+  }
+  if (l.type === 'activity' || l.type === 'other') {
+    const end = lineEndDate(l)
+    if (l.date && end && end !== l.date) {
+      return [`Arrive ${fmtShortDate(l.date)} · Depart ${fmtShortDate(end)}`, l.qty || l.alloc].filter(Boolean).join('  ·  ')
+    }
   }
   return l.qty || l.alloc || ''
 }
@@ -1798,11 +1823,15 @@ export function buildVoucherGuestRoster(
   const rows: VoucherGuestRow[] = served.map((g) => {
     const gd = guestDetails[g.id - 1]
     const status = dietaryStatusOf(gd)
+    const dietaryText = dietaryPrintText(status, gd?.dietary)
+    const additionalText = gd?.note?.trim() || ''
     return {
       name: g.name,
       role: g.type === 'youth' ? 'Child' : g.type[0].toUpperCase() + g.type.slice(1),
       status,
-      text: dietaryPrintText(status, gd?.dietary),
+      dietaryText,
+      additionalText,
+      text: [dietaryText, additionalText ? `Additional: ${additionalText}` : ''].filter(Boolean).join(' · '),
     }
   })
   return { rows, recordedCount: rows.filter((r) => r.status === 'recorded').length, total: rows.length }
@@ -1815,7 +1844,7 @@ export function voucherGuestSignature(served: Guest[], guestDetails: GuestDetail
     .map((g) => {
       const gd = guestDetails[g.id - 1]
       const status = dietaryStatusOf(gd)
-      return `${g.id}:${status}:${status === 'recorded' ? gd?.dietary || '' : ''}`
+      return `${g.id}:${status}:${status === 'recorded' ? gd?.dietary || '' : ''}:${gd?.note?.trim() || ''}`
     })
     .join('|')
 }

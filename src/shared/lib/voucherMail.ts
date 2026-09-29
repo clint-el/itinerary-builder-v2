@@ -6,6 +6,8 @@ export type VoucherDeliveryStatus = 'queued' | 'sent' | 'failed'
 
 export type VoucherMailVariant = 'issue' | 'resend'
 
+import type { VoucherFilingCopy } from './voucherFilingCopy'
+
 export interface VoucherEmailPayload {
   from: string
   cc: string[]
@@ -14,10 +16,10 @@ export interface VoucherEmailPayload {
   subject: string
   body: string
   linkUrl: string
-  pdfUrl: string
   note?: string
   supplierName?: string
   variant?: VoucherMailVariant
+  filingCopy?: VoucherFilingCopy
 }
 
 export interface VoucherEmailResult {
@@ -70,8 +72,8 @@ export async function sendVoucherEmail(payload: VoucherEmailPayload): Promise<Vo
         subject: payload.subject,
         body: payload.body,
         linkUrl: payload.linkUrl,
-        pdfUrl: payload.pdfUrl,
         note: payload.note,
+        filingCopy: payload.filingCopy,
         supplierName: payload.supplierName,
         variant: payload.variant ?? (payload.subject.includes('(resent)') ? 'resend' : 'issue'),
       }),

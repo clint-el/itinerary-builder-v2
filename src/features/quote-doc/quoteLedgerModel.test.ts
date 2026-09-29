@@ -7,6 +7,7 @@ import {
   documentCoverTitle,
   guestDetailLines,
   invoiceRecipientProfile,
+  paxPricePerGuest,
   paxPriceSplit,
 } from '@/features/quote-doc/quoteLedgerModel'
 import type { SummaryLine } from '@/features/summary/summaryModel'
@@ -35,6 +36,7 @@ describe('buildLedgerScheduleGroups — Duration and Unit Price columns (BR-Q12/
     expect(row.duration).toBe('2')
     expect(row.amount).toBe(500)
     expect(row.unitPrice).toBe(250) // 500 / 2 nights
+    expect(row.unitPriceBasis).toBe('Per person per night')
   })
 
   it('single-instance services (e.g. transfers) show duration 1 rather than inventing a concept', () => {
@@ -68,6 +70,8 @@ describe('paxPriceSplit (BR-Q36/BR-I58)', () => {
     expect(split.totalChildren).toBe(1)
     expect(split.totalAdultPrice).toBe(800)
     expect(split.totalChildPrice).toBe(200)
+    expect(paxPricePerGuest(split).perAdult).toBe(400)
+    expect(paxPricePerGuest(split).perChild).toBe(200)
   })
 
   it('allocates lines with no per-line Ad/Ch split proportionally to the overall guest mix', () => {

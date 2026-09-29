@@ -24,7 +24,7 @@ export function PaxSplitCell({ label, value }: { label: string; value: string })
   return (
     <div className="rounded-lg border border-[#E5E7EB] px-3 py-2.5">
       <div className="text-[9px] font-semibold uppercase tracking-wide text-[#8A8A8A]">{label}</div>
-      <div className="mt-0.5 font-['IBM_Plex_Mono'] text-[13px] font-semibold">{value}</div>
+      <div className="mt-0.5 text-[13px] font-semibold">{value}</div>
     </div>
   )
 }
@@ -63,7 +63,7 @@ export function PaymentPosRow({
   return (
     <div className={cn('flex items-center justify-between gap-4 rounded-lg border px-4 py-3', styles.row)}>
       <div className="text-[9px] font-semibold uppercase tracking-[1px] text-[#8A8A8A]">{label}</div>
-      <div className={cn("font-['IBM_Plex_Mono'] text-[15px] font-semibold", styles.value)}>{value}</div>
+      <div className={cn('text-[15px] font-semibold', styles.value)}>{value}</div>
     </div>
   )
 }

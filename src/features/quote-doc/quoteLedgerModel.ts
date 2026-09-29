@@ -37,6 +37,8 @@ export type LedgerScheduleRow = {
   /** BR-Q12/BR-I06: rate per unit — `amount` stays the line total so nothing downstream
    *  that already consumes `amount` (subtotals, category grids) needs to change. */
   unitPrice: number
+  /** Human-readable basis for the unit price (e.g. per room per night). */
+  unitPriceBasis: string
 }
 
 export type LedgerScheduleGroup = {
@@ -172,6 +174,23 @@ function ledgerDuration(l: SummaryLine): string {
 /** BR-Q12/BR-I06 — rate per unit. Qty here is the same unit-count basis as `ledgerQty` for
  *  transport/other lines, but for accommodation and disposal transport we divide by the
  *  duration (nights/days) instead, since Qty for those is nights, not a separate unit count. */
+function ledgerUnitPriceBasis(l: SummaryLine): string {
+  const perPerson = l.chargePer === 'person'
+  switch (l.type) {
+    case 'accommodation':
+      return perPerson ? 'Per person per night' : 'Per room per night'
+    case 'transportation':
+      if (l.kind === 'disposal') {
+        return perPerson ? 'Per person per day' : 'Per vehicle per day'
+      }
+      return perPerson ? 'Per person per transfer' : 'Per vehicle per transfer'
+    case 'flight':
+      return 'Per person per flight'
+    default:
+      return perPerson ? 'Per person' : 'Per unit'
+  }
+}
+
 function ledgerUnitPrice(l: SummaryLine, amount: number): number {
   const divisor =
     l.type === 'accommodation'
@@ -220,10 +239,21 @@ export function buildLedgerScheduleGroups(lines: SummaryLine[]): LedgerScheduleG
           qty: ledgerQty(l),
           duration: ledgerDuration(l),
           unitPrice: ledgerUnitPrice(l, amount),
+          unitPriceBasis: ledgerUnitPriceBasis(l),
           amount,
         }
       }),
   }))
+}
+
+/** Per-guest figures for the guest price split block (totals ÷ headcount). */
+export function paxPricePerGuest(split: PaxPriceSplit): { perAdult: number; perChild: number } {
+  return {
+    perAdult:
+      split.totalAdults > 0 ? Math.round((split.totalAdultPrice / split.totalAdults) * 100) / 100 : 0,
+    perChild:
+      split.totalChildren > 0 ? Math.round((split.totalChildPrice / split.totalChildren) * 100) / 100 : 0,
+  }
 }
 
 export function paxComposition(adults: number, children: number, infants: number) {
@@ -502,7 +532,7 @@ export function buildLedgerCancellationRows(
       supplier: line.supplier,
       description,
       policy: policyDisplayName(policy),
-      refundableLabel: policy.refundable ? 'Refundable' : 'Non-refundable',
+      refundableLabel: policy.refundable ? 'Yes' : 'No',
       refundableTone: policy.refundable ? 'blue' : 'red',
       travelDates: fmtLedgerTravelWindow(
         policy.travelDateFrom || travelFrom,

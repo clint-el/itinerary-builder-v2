@@ -1,4 +1,7 @@
 import { Resend } from 'resend'
+import type { VoucherFilingCopy } from '../src/shared/lib/voucherFilingCopy.js'
+import { voucherFilingFilename } from '../src/shared/lib/voucherFilingCopy.js'
+import { buildVoucherFilingPdfBase64 } from './voucherFilingPdf.js'
 import { buildVoucherEmailContent, type VoucherMailVariant } from './voucherEmailTemplate.js'
 import type { VoucherMailApiBody, VoucherMailEnv } from './voucherMailHandler.js'
 
@@ -23,19 +26,28 @@ export async function sendVoucherMail(
   if (!to.length) {
     return { status: 400, body: { error: 'At least one recipient (to) is required', deliveryStatus: 'failed' } }
   }
-  if (!payload.subject?.trim() || !payload.linkUrl?.trim() || !payload.pdfUrl?.trim()) {
-    return { status: 400, body: { error: 'subject, linkUrl, and pdfUrl are required', deliveryStatus: 'failed' } }
+  if (!payload.subject?.trim() || !payload.linkUrl?.trim()) {
+    return { status: 400, body: { error: 'subject and linkUrl are required', deliveryStatus: 'failed' } }
   }
 
   const variant: VoucherMailVariant = payload.variant === 'resend' ? 'resend' : 'issue'
+  let pdfAttachmentFilename: string | undefined
+  let attachments: { filename: string; content: string }[] | undefined
+  if (payload.filingCopy) {
+    const copy = payload.filingCopy as VoucherFilingCopy
+    pdfAttachmentFilename = voucherFilingFilename(copy.voucherRef)
+    const content = await buildVoucherFilingPdfBase64(copy)
+    attachments = [{ filename: pdfAttachmentFilename, content }]
+  }
+
   const { html, text } = buildVoucherEmailContent({
     body: payload.body || '',
     linkUrl: payload.linkUrl,
-    pdfUrl: payload.pdfUrl,
     note: payload.note,
     supplierName: payload.supplierName,
     variant,
     appOrigin: env.appOrigin,
+    pdfAttachmentFilename,
   })
 
   const resend = new Resend(env.resendApiKey)
@@ -52,6 +64,7 @@ export async function sendVoucherMail(
       subject: payload.subject.trim(),
       html,
       text,
+      attachments,
     })
 
     if (result.error) {
