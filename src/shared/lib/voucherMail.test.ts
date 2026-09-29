@@ -1,14 +1,24 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { resetVoucherMailConfigCacheForTests } from './voucherMailConfig'
 import { sendVoucherEmail, voucherFromAddress } from './voucherMail'
+
+function mockPublicConfig(mode: string, apiUrl: string) {
+  return {
+    ok: true,
+    json: async () => ({ mode, apiUrl }),
+  }
+}
 
 describe('voucherMail', () => {
   beforeEach(() => {
-    vi.stubEnv('VITE_VOUCHER_MAIL', 'resend')
+    resetVoucherMailConfigCacheForTests()
+    vi.stubEnv('VITE_VOUCHER_MAIL', '')
   })
 
   afterEach(() => {
     vi.unstubAllEnvs()
     vi.restoreAllMocks()
+    resetVoucherMailConfigCacheForTests()
   })
 
   it('voucherFromAddress uses elewanaportal sender', () => {
@@ -18,14 +28,17 @@ describe('voucherMail', () => {
   it('returns sent when API succeeds', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          messageId: 'msg-abc',
-          deliveryStatus: 'sent',
-          sentAt: '2026-01-01T00:00:00.000Z',
+      vi
+        .fn()
+        .mockResolvedValueOnce(mockPublicConfig('resend', '/api/voucher-mail'))
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            messageId: 'msg-abc',
+            deliveryStatus: 'sent',
+            sentAt: '2026-01-01T00:00:00.000Z',
+          }),
         }),
-      }),
     )
 
     const result = await sendVoucherEmail({
@@ -50,11 +63,14 @@ describe('voucherMail', () => {
   it('returns failed when API errors', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue({
-        ok: false,
-        status: 502,
-        json: async () => ({ error: 'Resend rejected', sentAt: '2026-01-01T00:00:00.000Z' }),
-      }),
+      vi
+        .fn()
+        .mockResolvedValueOnce(mockPublicConfig('resend', '/api/voucher-mail'))
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 502,
+          json: async () => ({ error: 'Resend rejected', sentAt: '2026-01-01T00:00:00.000Z' }),
+        }),
     )
 
     const result = await sendVoucherEmail({
@@ -73,10 +89,8 @@ describe('voucherMail', () => {
     expect(result.error).toContain('Resend rejected')
   })
 
-  it('uses stub when VITE_VOUCHER_MAIL=stub', async () => {
-    vi.stubEnv('VITE_VOUCHER_MAIL', 'stub')
-    const fetchMock = vi.fn()
-    vi.stubGlobal('fetch', fetchMock)
+  it('uses stub when public config mode is stub', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(mockPublicConfig('stub', '/api/voucher-mail')))
 
     const result = await sendVoucherEmail({
       from: voucherFromAddress(),
@@ -90,6 +104,6 @@ describe('voucherMail', () => {
     })
 
     expect(result.deliveryStatus).toBe('sent')
-    expect(fetchMock).not.toHaveBeenCalled()
+    expect(fetch).toHaveBeenCalledTimes(1)
   })
 })

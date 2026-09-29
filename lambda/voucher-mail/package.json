@@ -1,0 +1,8 @@
+{
+  "name": "sol-voucher-mail-lambda",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "resend": "^6.30.0"
+  }
+}

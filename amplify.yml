@@ -12,6 +12,10 @@ frontend:
         - pnpm install --frozen-lockfile
     build:
       commands:
+        # Map Amplify env vars (non-VITE_ names work here) into build-time public config + Vite.
+        - export VITE_VOUCHER_MAIL="${VOUCHER_MAIL:-${VITE_VOUCHER_MAIL:-}}"
+        - export VITE_VOUCHER_MAIL_API="${VOUCHER_MAIL_API_URL:-${VITE_VOUCHER_MAIL_API:-}}"
+        - node scripts/generate-voucher-public-config.mjs
         - pnpm run build
   artifacts:
     baseDirectory: dist

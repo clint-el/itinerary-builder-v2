@@ -1,4 +1,6 @@
-/** Outbound voucher mail — Resend via dev API (PR-F21/22/26). */
+/** Outbound voucher mail — Resend via dev API or Amplify Lambda URL (PR-F21/22/26). */
+
+import { shouldUseResendApi, voucherMailApiUrl } from './voucherMailConfig'
 
 export type VoucherDeliveryStatus = 'queued' | 'sent' | 'failed'
 
@@ -32,13 +34,6 @@ export function voucherFromAddress(): string {
   return FROM_ADDRESS
 }
 
-function useResendApi(): boolean {
-  const mode = import.meta.env.VITE_VOUCHER_MAIL as string | undefined
-  if (mode === 'stub') return false
-  if (mode === 'resend') return true
-  return import.meta.env.DEV
-}
-
 function stubSend(payload: VoucherEmailPayload): VoucherEmailResult {
   const sentAt = new Date().toISOString()
   console.info('[voucher-mail stub]', {
@@ -57,13 +52,15 @@ function stubSend(payload: VoucherEmailPayload): VoucherEmailResult {
 }
 
 export async function sendVoucherEmail(payload: VoucherEmailPayload): Promise<VoucherEmailResult> {
-  if (!useResendApi()) {
+  if (!(await shouldUseResendApi())) {
     return stubSend(payload)
   }
 
   const sentAt = new Date().toISOString()
+  const apiUrl = await voucherMailApiUrl()
+
   try {
-    const res = await fetch('/api/voucher-mail', {
+    const res = await fetch(apiUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

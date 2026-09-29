@@ -24,9 +24,19 @@ Copy [`.env.example`](.env.example) to `.env` and set:
 | `APP_ORIGIN` | Base URL for confirmation links in email (e.g. Amplify deploy URL) |
 | `VOUCHER_FROM` | Verified sender on Resend (e.g. `vouchers@elewanaportal.com`) |
 
-With `pnpm dev`, issuing or resending a voucher calls `POST /api/voucher-mail` on the Vite dev server, which sends via Resend. Production static builds still use the in-browser stub unless you add a backend.
+With `pnpm dev`, issuing or resending a voucher calls `POST /api/voucher-mail` on the Vite dev server, which sends via Resend.
 
-Optional: `VITE_VOUCHER_MAIL=stub` forces the stub in dev; `VITE_VOUCHER_MAIL=resend` forces the API path.
+**Amplify (static hosting):** the app does not read `RESEND_API_KEY` in the browser. At build time, `scripts/generate-voucher-public-config.mjs` writes `public/sol-voucher-mail.json` so production knows whether to call the mail API. Set in **Amplify Console → Environment variables**:
+
+| Variable | Purpose |
+|----------|---------|
+| `VOUCHER_MAIL` | `resend` to enable real sends (or rely on `RESEND_API_KEY` at build to auto-set resend in the script) |
+| `VOUCHER_MAIL_API_URL` | Full URL of the mail API (Lambda Function URL — see [`lambda/voucher-mail/index.mjs`](lambda/voucher-mail/index.mjs)) |
+| `RESEND_API_KEY`, `APP_ORIGIN`, `VOUCHER_FROM` | On the **Lambda** environment, not the static build (unless only used to flip `resend` mode at build) |
+
+Deploy [`lambda/voucher-mail`](lambda/voucher-mail) as an AWS Lambda with Function URL, CORS enabled, secrets on the function. Point `VOUCHER_MAIL_API_URL` at that URL and redeploy the Amplify branch.
+
+Optional: `VITE_VOUCHER_MAIL=stub` forces the stub; `VITE_VOUCHER_MAIL=resend` mirrors `VOUCHER_MAIL`.
 
 ## Scripts
 
