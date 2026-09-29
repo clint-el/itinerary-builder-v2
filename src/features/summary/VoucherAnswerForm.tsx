@@ -159,7 +159,7 @@ export function VoucherAnswerForm({
       {!readOnly && courtesyNameField ? (
         <div className="grid grid-cols-2 gap-3">
           <label className="flex flex-col gap-1.5">
-            <span className="text-[13px] font-semibold text-[#171717]">Your first name</span>
+            <span className="text-[13px] font-semibold text-[#171717]">First name</span>
             <input
               value={firstName}
               onChange={(e) => setFirstName(e.target.value)}
@@ -168,7 +168,7 @@ export function VoucherAnswerForm({
             />
           </label>
           <label className="flex flex-col gap-1.5">
-            <span className="text-[13px] font-semibold text-[#171717]">Your last name</span>
+            <span className="text-[13px] font-semibold text-[#171717]">Last name</span>
             <input
               value={lastName}
               onChange={(e) => setLastName(e.target.value)}
