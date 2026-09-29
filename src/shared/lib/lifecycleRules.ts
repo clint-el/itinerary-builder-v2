@@ -490,9 +490,7 @@ export type VoucherLineInput = {
 /**
  * Applies one atomic per-line tick submit for a supplier's voucher (BR-30/31/32). Ticked lines
  * go on hold; unticked lines are recorded rejected and left exactly where they are on the
- * itinerary — never deleted (RU-08). A line with a deposit already paid can't be rejected by a
- * submit (BR-43): the tick still "fails" toward reject, but the line is left for the planner
- * to resolve directly rather than either held or rejected. The whole-voucher roll-up is derived,
+ * itinerary — never deleted (RU-08). The whole-voucher roll-up is derived,
  * never chosen directly: Confirmed only when every line is held, Rejected only when every line
  * is rejected, Partial otherwise (RU-18).
  */
@@ -520,13 +518,7 @@ export function applyVoucherLineSubmit(
       const parentHeld = ticks[line.parentLineId] !== false
       if (wantsHold && !parentHeld) wantsHold = false
     }
-    let outcome: VoucherLineOutcome
-    if (!wantsHold && line.depositPaid) {
-      outcome = 'deposit_held_back'
-      depositGuardLineIds.push(line.lineId)
-    } else {
-      outcome = wantsHold ? 'held' : 'rejected'
-    }
+    const outcome: VoucherLineOutcome = wantsHold ? 'held' : 'rejected'
     nextAnswers[line.lineId] = {
       outcome,
       reason: outcome === 'rejected' ? reasons[line.lineId] : undefined,
@@ -552,7 +544,7 @@ export function applyVoucherLineSubmit(
     let supplierStatus: SupplierStatus = service.supplierStatus ?? 'Waiting'
     if (hasRejected) supplierStatus = 'Rejected'
     else if (allHeld) supplierStatus = 'Booked'
-    else supplierStatus = 'Waiting' // deposit_held_back only — needs the planner, not a reject
+    else supplierStatus = 'Waiting'
     return { ...service, supplierStatus }
   })
 

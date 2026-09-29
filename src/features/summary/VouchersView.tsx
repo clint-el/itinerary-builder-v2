@@ -516,12 +516,6 @@ export function VouchersView({
                       </div>
                     ))}
                   </div>
-                  {v.depositGuardCount ? (
-                    <div className="mt-1.5 text-[12px] font-semibold text-[#B45309]">
-                      {v.depositGuardCount} line{v.depositGuardCount === 1 ? '' : 's'} held back — deposit already
-                      paid
-                    </div>
-                  ) : null}
                   <div className="mb-2.5 mt-2 text-[11.5px] text-[#A1A1A1]">
                     Hold status only — the itinerary&apos;s own status is unchanged by a supplier response.
                   </div>
@@ -587,7 +581,7 @@ export function VouchersView({
       ))}
 
       <Dialog open={!!previewCard} onOpenChange={(v) => !v && setPreviewCard(null)}>
-        <DialogContent className="max-h-[85vh] max-w-[760px] overflow-y-auto">
+        <DialogContent className="max-h-[85vh] max-w-[960px] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Preview — nothing has been sent</DialogTitle>
             <DialogDescription>
@@ -629,7 +623,7 @@ export function VouchersView({
       />
 
       <Dialog open={!!recordCard} onOpenChange={(v) => !v && setRecordCard(null)}>
-        <DialogContent className="max-h-[85vh] max-w-[760px] overflow-y-auto">
+        <DialogContent className="max-h-[85vh] max-w-[960px] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Record the supplier&apos;s reply — {recordCard?.supplier}</DialogTitle>
             <DialogDescription>

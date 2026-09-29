@@ -132,7 +132,7 @@ export function VoucherLinkPage() {
   if (card.kind === 'cancellation_only') {
     return (
       <div className="min-h-screen bg-[#F6F6F7] px-4 py-8">
-        <div className="mx-auto max-w-[760px] rounded-2xl border border-[#E5E7EB] bg-white p-7 shadow-sm">
+        <div className="mx-auto w-full max-w-[960px] rounded-2xl border border-[#E5E7EB] bg-white p-7 shadow-sm">
           <h1 className="text-lg font-bold text-[#171717]">Cancellation notice — {card.supplier}</h1>
           <p className="mt-2 text-[13.5px] text-[#525252]">
             Please acknowledge that you have received this cancellation for {card.ref}.
@@ -165,7 +165,7 @@ export function VoucherLinkPage() {
 
   return (
     <div className="min-h-screen bg-[#F6F6F7] px-4 py-8">
-      <div className="mx-auto max-w-[760px] rounded-2xl border border-[#E5E7EB] bg-white p-7 shadow-sm">
+      <div className="mx-auto w-full max-w-[960px] rounded-2xl border border-[#E5E7EB] bg-white p-7 shadow-sm">
         <VoucherRecipientBody
           card={card}
           bookingRef={itinerary.reference || itinerary.id}

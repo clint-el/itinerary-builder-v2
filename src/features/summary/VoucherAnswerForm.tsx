@@ -30,8 +30,6 @@ export function VoucherAnswerForm({
 
   const heldCount = card.rows.filter((r) => ticks[r.lineId] !== false).length
   const rejectedRows = card.rows.filter((r) => ticks[r.lineId] === false)
-  const guardedRows = rejectedRows.filter((r) => r.depositPaid)
-  const trueRejectedCount = rejectedRows.length - guardedRows.length
 
   const consequence = useMemo(() => {
     if (heldCount === card.rows.length) return { label: 'Confirming all services', tone: '#15803D' }
@@ -44,13 +42,13 @@ export function VoucherAnswerForm({
 
   const showReasonCol = readOnly
     ? card.rows.some((r) => r.outcome === 'rejected' && (r.reason || '').trim())
-    : rejectedRows.some((r) => !r.depositPaid)
+    : rejectedRows.length > 0
 
   const gridCols = showReasonCol
-    ? 'grid-cols-[28px_minmax(0,1fr)_84px_200px]'
-    : 'grid-cols-[28px_minmax(0,1fr)_84px]'
+    ? 'grid-cols-[28px_minmax(0,1fr)_88px_minmax(240px,1.15fr)]'
+    : 'grid-cols-[28px_minmax(0,1fr)_88px]'
 
-  const missingReason = rejectedRows.some((r) => !r.depositPaid && !(reasons[r.lineId] || '').trim())
+  const missingReason = rejectedRows.some((r) => !(reasons[r.lineId] || '').trim())
   const missingName =
     courtesyNameField && (!firstName.trim() || !lastName.trim())
   const canSubmit = !readOnly && !missingReason && !missingName
@@ -92,22 +90,20 @@ export function VoucherAnswerForm({
         </div>
         {card.rows.map((row) => {
           const held = ticks[row.lineId] !== false
-          const guarded = !held && row.depositPaid
           const parentHeld = !row.parentLineId || ticks[row.parentLineId] !== false
           const extraBlocked = Boolean(row.isExtra && row.parentLineId && !parentHeld)
           const reasonValue = reasons[row.lineId] || ''
           const showRowReason =
             showReasonCol &&
             (readOnly
-              ? row.outcome === 'rejected' && (row.reason || '').trim()
-              : !held && !guarded)
+              ? (row.outcome === 'rejected' || row.outcome === 'deposit_held_back') && (row.reason || '').trim()
+              : !held && !extraBlocked)
           return (
             <div
               key={row.lineId}
               className={cn(
                 'grid items-start gap-2 border-t border-[#F3F4F6] px-3.5 py-2.5 first:border-t-0',
                 gridCols,
-                guarded && 'bg-[#FFFBEB]',
               )}
             >
               <input
@@ -128,12 +124,6 @@ export function VoucherAnswerForm({
                 {extraBlocked ? (
                   <div className="mt-0.5 text-[11.5px] font-medium text-[#737373]">
                     Confirm the parent line first before holding this extra.
-                  </div>
-                ) : null}
-                {guarded ? (
-                  <div className="mt-0.5 text-[11.5px] font-medium text-[#B45309]">
-                    Deposit already paid — this line can&apos;t be rejected here; it&apos;s held back for your
-                    planner to resolve directly.
                   </div>
                 ) : null}
               </div>
@@ -163,12 +153,6 @@ export function VoucherAnswerForm({
           <span className="text-[13px] font-semibold" style={{ color: consequence.tone }}>
             {consequence.label}
           </span>
-          {guardedRows.length ? (
-            <span className="text-[12px] font-medium text-[#B45309]">
-              {guardedRows.length} line{guardedRows.length === 1 ? '' : 's'} held back for the planner (deposit
-              already paid)
-            </span>
-          ) : null}
         </div>
       ) : null}
 
@@ -202,7 +186,7 @@ export function VoucherAnswerForm({
               ? 'Every unticked line needs a free-text reason before you can submit.'
               : missingName
                 ? 'Enter your first and last name before submitting.'
-                : `${trueRejectedCount + heldCount + guardedRows.length} of ${card.rows.length} lines answered`}
+                : `${heldCount + rejectedRows.length} of ${card.rows.length} lines answered`}
           </span>
           <button
             type="button"

@@ -73,7 +73,7 @@ export function VoucherDocPage() {
           Print / Save as PDF
         </Button>
       </div>
-      <div className="mx-auto mt-7 max-w-[820px] rounded-2xl border border-[#E5E7EB] bg-white p-8 shadow-sm print:mt-0 print:border-0 print:shadow-none">
+      <div className="mx-auto mt-7 w-full max-w-[960px] rounded-2xl border border-[#E5E7EB] bg-white p-8 shadow-sm print:mt-0 print:border-0 print:shadow-none">
         <VoucherRecipientBody card={card} bookingRef={itinerary.reference || itinerary.id} readOnly submitLabel={undefined} />
         <p className="mt-6 border-t border-dashed border-[#E5E7EB] pt-3 text-[11px] text-[#A1A1A1]">
           Filing copy — cost only, no sell, margin or promotions. Matches the confirmation request emailed to the

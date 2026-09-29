@@ -206,7 +206,7 @@ describe('lifecycleRules', () => {
     expect(partial.supplierVouchers[TEST_ENTITY]).toBe('Partial')
   })
 
-  it('deposit guard holds a rejected line back for the planner instead of deleting or rejecting it', () => {
+  it('records rejected lines even when a deposit flag exists on the service', () => {
     const waiting = [
       svc({ id: 's1', lineStatus: 'Confirmed', supplierStatus: 'Waiting', depositPaid: true }),
     ]
@@ -218,13 +218,12 @@ describe('lifecycleRules', () => {
       TEST_ENTITY,
       lines,
       { 's1#0': false },
-      {},
+      { 's1#0': 'Fully booked' },
       '2026-01-01T00:00:00Z',
     )
-    expect(result.voucherLineAnswers['s1#0'].outcome).toBe('deposit_held_back')
-    expect(result.depositGuardLineIds).toEqual(['s1#0'])
-    // Held back for the planner — never silently rejected, never removed from the itinerary.
-    expect(supplierStatusOf(result.services[0])).toBe('Waiting')
+    expect(result.voucherLineAnswers['s1#0'].outcome).toBe('rejected')
+    expect(result.depositGuardLineIds).toEqual([])
+    expect(supplierStatusOf(result.services[0])).toBe('Rejected')
     expect(result.services).toHaveLength(1)
   })
 
