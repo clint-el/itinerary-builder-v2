@@ -32,6 +32,7 @@ import {
   roleAllowsVoucherAction,
   type GateResult,
   type VoucherLineInput,
+  voucherTokenExpiry,
 } from '@/shared/lib/lifecycleRules'
 import { getPayableEntity, payableEntityFromSupplierName } from '@/shared/lib/payableEntities'
 import {
@@ -219,14 +220,6 @@ const StoreContext = createContext<StoreContextValue | null>(null)
 
 function randomVoucherToken(): string {
   return Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6)
-}
-
-/** 30 days from send, or the trip's start date, whichever comes first (BR-57). */
-function voucherTokenExpiry(issuedAtIso: string, tripStartIso?: string): string {
-  const cap = new Date(issuedAtIso).getTime() + 30 * 86400000
-  if (!tripStartIso) return new Date(cap).toISOString()
-  const start = new Date(`${tripStartIso}T00:00:00`).getTime()
-  return new Date(Number.isFinite(start) && start > 0 ? Math.min(cap, start) : cap).toISOString()
 }
 
 function resolveEntityId(key: string): string {

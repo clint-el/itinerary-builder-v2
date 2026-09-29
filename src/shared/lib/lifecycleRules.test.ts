@@ -12,6 +12,7 @@ import {
   resetLine,
   roleAllowsTransition,
   supplierStatusOf,
+  voucherTokenExpiry,
 } from '@/shared/lib/lifecycleRules'
 import { payableEntityFromSupplierName } from '@/shared/lib/payableEntities'
 import type { AddedService, Itinerary, ItineraryStatus } from '@/shared/lib/types'
@@ -296,5 +297,17 @@ describe('lifecycleRules', () => {
     ]
     for (const s of unlocked) expect(isPricingLocked(s)).toBe(false)
     for (const s of locked) expect(isPricingLocked(s)).toBe(true)
+  })
+
+  it('voucherTokenExpiry uses 30 days when trip start is already past at issue (BR-57 demo)', () => {
+    const issuedAt = '2026-09-29T12:00:00.000Z'
+    const expiry = voucherTokenExpiry(issuedAt, '2026-08-02')
+    expect(new Date(expiry).getTime()).toBe(new Date('2026-09-29T12:00:00.000Z').getTime() + 30 * 86400000)
+  })
+
+  it('voucherTokenExpiry clamps to trip start when still in the future', () => {
+    const issuedAt = '2026-07-05T12:00:00.000Z'
+    const expiry = voucherTokenExpiry(issuedAt, '2026-08-02')
+    expect(expiry).toBe('2026-08-02T00:00:00.000Z')
   })
 })

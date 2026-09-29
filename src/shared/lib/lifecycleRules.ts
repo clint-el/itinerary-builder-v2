@@ -571,6 +571,18 @@ export function applyVoucherLineSubmit(
   }
 }
 
+/** 30 days from send, or the trip start date when still in the future — whichever is sooner (BR-57). */
+export function voucherTokenExpiry(issuedAtIso: string, tripStartIso?: string): string {
+  const issuedAt = new Date(issuedAtIso).getTime()
+  const cap = issuedAt + 30 * 86400000
+  if (!tripStartIso?.trim()) return new Date(cap).toISOString()
+  const start = new Date(`${tripStartIso.trim()}T00:00:00.000Z`).getTime()
+  if (!Number.isFinite(start)) return new Date(cap).toISOString()
+  // Demo / late-issue: if travel has already started, honour the 30-day send window instead of a past date.
+  if (start <= issuedAt) return new Date(cap).toISOString()
+  return new Date(Math.min(cap, start)).toISOString()
+}
+
 /** GET-safe read of what the supplier's own confirmation link would show (RU-11/RU-13/RU-14):
  *  opening it never decides anything, so this is pure evaluation, no writes. */
 export type VoucherTokenState = 'ok' | 'expired' | 'used' | 'superseded' | 'invalid'

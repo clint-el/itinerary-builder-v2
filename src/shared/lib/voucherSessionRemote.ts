@@ -1,5 +1,17 @@
+import { voucherTokenExpiry } from '@/shared/lib/lifecycleRules'
 import type { VoucherMeta } from '@/shared/lib/types'
 import { getVoucherMailPublicConfig, shouldUseResendApi } from './voucherMailConfig'
+
+/** Tokens issued before expiry fix may have expiresAt clamped to a past trip start. */
+export function repairVoucherMetaExpiry(meta: VoucherMeta, tripStartIso?: string): VoucherMeta {
+  return {
+    ...meta,
+    tokens: meta.tokens.map((t) => {
+      if (new Date(t.expiresAt).getTime() > new Date(t.createdAt).getTime()) return t
+      return { ...t, expiresAt: voucherTokenExpiry(t.createdAt, tripStartIso) }
+    }),
+  }
+}
 
 export function voucherSessionApiUrl(mailApiUrl: string): string {
   const trimmed = mailApiUrl.replace(/\/$/, '')
@@ -46,7 +58,8 @@ export async function fetchVoucherSessionRemote(
     const res = await fetch(url, { cache: 'no-store' })
     if (!res.ok) return null
     const data = (await res.json()) as { meta?: VoucherMeta }
-    return data.meta ?? null
+    if (!data.meta) return null
+    return data.meta
   } catch {
     return null
   }

@@ -6,7 +6,7 @@ import { VoucherRecipientBody } from '@/features/summary/VoucherRecipientBody'
 import { buildVouchers, linesFromServices, linesFromQuoteGroups } from '@/features/summary/summaryModel'
 import { evaluateVoucherToken, type VoucherLineInput } from '@/shared/lib/lifecycleRules'
 import { partyGuests } from '@/shared/lib/helpers'
-import { fetchVoucherSessionRemote } from '@/shared/lib/voucherSessionRemote'
+import { fetchVoucherSessionRemote, repairVoucherMetaExpiry } from '@/shared/lib/voucherSessionRemote'
 
 export function VoucherLinkPage() {
   const { id = '', supplier: entityParam = '' } = useParams()
@@ -79,9 +79,10 @@ export function VoucherLinkPage() {
       const remoteMeta = await fetchVoucherSessionRemote(id, entityId, token)
       if (cancelled) return
       if (remoteMeta) {
+        const repaired = repairVoucherMetaExpiry(remoteMeta, current.travelDateFrom)
         upsertItinerary({
           ...current,
-          voucherMeta: { ...(current.voucherMeta || {}), [entityId]: remoteMeta },
+          voucherMeta: { ...(current.voucherMeta || {}), [entityId]: repaired },
           updatedAt: new Date().toISOString(),
         })
       }

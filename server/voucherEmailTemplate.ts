@@ -66,7 +66,7 @@ export function buildVoucherEmailContent(input: VoucherEmailTemplateInput): { ht
 </html>`
 
   const text = [
-    'Cheli & Peacock',
+    'Cheli & Peacock Safaris',
     '',
     greeting,
     '',
