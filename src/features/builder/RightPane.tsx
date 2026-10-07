@@ -1,6 +1,11 @@
 import { useRef, useState, type ReactNode } from 'react'
-import { ChevronDown, Pencil, Search, X } from 'lucide-react'
+import { ChevronDown, GripVertical, Pencil, Search, X } from 'lucide-react'
 import { CATALOG, TAB_META } from '@/shared/lib/catalogs'
+import {
+  asActivities,
+  extraObjects,
+  serviceDateRangeLabel,
+} from '@/features/builder/builderUtils'
 import {
   canRemoveLine,
   isEngaged,
@@ -20,6 +25,51 @@ import {
 } from '@/components/ui/dialog'
 import type { AddedService, DemoRole, ServiceTab } from '@/shared/lib/types'
 import { cn, formatUsd } from '@/shared/lib/utils'
+
+function serviceSubLines(svc: AddedService): { label: string; amount: number }[] {
+  const d = (svc.draft || {}) as Record<string, unknown>
+  const lines: { label: string; amount: number }[] = []
+  for (const ex of extraObjects(d)) {
+    const qty = ex.qty || 1
+    lines.push({ label: ex.title, amount: ex.price * qty })
+  }
+  for (const a of asActivities(d)) {
+    const guests = a.guestIds?.length || 1
+    const label = a.name || 'Activity'
+    lines.push({ label, amount: (a.rate || 0) * guests })
+  }
+  return lines
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-start justify-between gap-3 py-[3px] text-[11.5px]">
+      <span className="shrink-0 text-[#A1A1A1]">{label}</span>
+      <span className="min-w-0 text-right font-semibold text-[#171717]">{value}</span>
+    </div>
+  )
+}
+
+function ServiceTotals({ svc }: { svc: AddedService }) {
+  const netLabel = svc.netLabel || formatUsd(svc.net || 0)
+  const rackLabel = svc.rackLabel || formatUsd(svc.rack || 0)
+  return (
+    <div className="space-y-[3px] border-t border-[#EFEFEF] pt-2.5">
+      <div className="flex items-center justify-between text-[11.5px]">
+        <span className="text-[#A1A1A1]">Cost / Sell</span>
+        <span className="font-bold text-[#171717]">
+          {netLabel} / {rackLabel}
+        </span>
+      </div>
+      <div className="flex items-center justify-between text-[11.5px]">
+        <span className="text-[#A1A1A1]">Margin</span>
+        <span className="font-bold" style={{ color: svc.marginColor }}>
+          {formatUsd(svc.margin)} · {svc.marginPct}%
+        </span>
+      </div>
+    </div>
+  )
+}
 
 export function RightPane({
   width,
@@ -70,6 +120,8 @@ export function RightPane({
     })
   }
 
+  const canDrag = !structureLocked && !readOnly
+
   return (
     <>
       <div
@@ -83,19 +135,19 @@ export function RightPane({
         className="flex shrink-0 flex-col overflow-hidden border-l border-[#E5E7EB] bg-white"
         style={{ width }}
       >
-        <div className="border-b px-4 py-3">
+        <div className="border-b border-[#E5E7EB] px-4 py-3">
           <Labelish>Find a supplier or service</Labelish>
           <div className="relative mt-1.5">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-[#A1A1A1]" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search suppliers…"
-              className="h-[34px] w-full rounded-md border border-[#E5E7EB] bg-[#F9FAFB] py-0 pl-8 pr-2.5 text-[13px] outline-none"
+              placeholder="Search suppliers..."
+              className="h-[34px] w-full rounded-md border border-[#E5E7EB] bg-white py-0 pl-8 pr-2.5 text-[13px] outline-none"
             />
           </div>
           {results.length > 0 ? (
-            <div className="mt-2 max-h-40 overflow-y-auto rounded-lg border">
+            <div className="mt-2 max-h-40 overflow-y-auto rounded-lg border border-[#E5E7EB]">
               {results.slice(0, 6).map((r) => {
                 const meta = TAB_META[r.tab]
                 return (
@@ -108,7 +160,7 @@ export function RightPane({
                       onPickSearch(r.tab, r)
                       setSearch('')
                     }}
-                    className="flex w-full items-center gap-2 border-b px-2.5 py-2 text-left last:border-0 hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:opacity-50"
+                    className="flex w-full items-center gap-2 border-b border-[#F3F4F6] px-2.5 py-2 text-left last:border-0 hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <span className="min-w-0">
                       <span className="block truncate text-[13px] font-semibold">{r.name}</span>
@@ -121,8 +173,8 @@ export function RightPane({
           ) : null}
         </div>
 
-        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3 px-4">
-          <div className="mb-2.5 text-[11px] font-bold uppercase tracking-[0.3px] text-[#A1A1A1]">
+        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-4 py-3">
+          <div className="mb-1 text-[11px] font-bold uppercase tracking-[0.35px] text-[#171717]">
             Added services ({services.length})
           </div>
 
@@ -133,25 +185,17 @@ export function RightPane({
           ) : (
             <>
               {services.map((svc) => {
-                const netLabel = svc.netLabel || formatUsd(svc.net || 0)
-                const rackLabel = svc.rackLabel || formatUsd(svc.rack || 0)
+                const badge = serviceListBadge(svc)
+                const subLines = serviceSubLines(svc)
+                const collapsedDateLabel = svc.tab === 'accommodation' ? 'Dates' : 'Date'
+
                 return (
                   <div
                     key={svc.id}
-                    draggable={!structureLocked && !readOnly}
-                    onDragStart={(e) => {
-                      if (structureLocked || readOnly) {
-                        e.preventDefault()
-                        return
-                      }
-                      e.dataTransfer.setData('text/plain', svc.id)
-                      dragIdRef.current = svc.id
-                      setDragId(svc.id)
-                    }}
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={(e) => {
                       e.preventDefault()
-                      if (structureLocked || readOnly) return
+                      if (!canDrag) return
                       const fromId = dragIdRef.current || dragId
                       if (!fromId || fromId === svc.id) return
                       const list = services.slice()
@@ -166,55 +210,67 @@ export function RightPane({
                       setDragId(null)
                       setReorderOpen(true)
                     }}
-                    className={
-                      structureLocked || readOnly
-                        ? 'rounded-lg border border-[#E5E7EB] bg-white p-2.5'
-                        : 'cursor-grab rounded-lg border border-[#E5E7EB] bg-white p-2.5 active:cursor-grabbing'
-                    }
+                    className="rounded-lg border border-[#E5E7EB] bg-white px-2.5 py-2.5"
                   >
-                    <div className="flex items-start gap-2">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex min-w-0 items-center gap-1.5">
-                          <div className="truncate text-[13px] font-bold text-[#171717]">
-                            {svc.title}
-                          </div>
-                          {isLineUpdated(svc) ? (
-                            <span className="shrink-0 rounded bg-[#FEF3C7] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#B45309]">
-                              Updated
-                            </span>
-                          ) : null}
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        aria-label={`Reorder ${svc.title}`}
+                        draggable={canDrag}
+                        onDragStart={(e) => {
+                          if (!canDrag) {
+                            e.preventDefault()
+                            return
+                          }
+                          e.dataTransfer.setData('text/plain', svc.id)
+                          dragIdRef.current = svc.id
+                          setDragId(svc.id)
+                        }}
+                        onDragEnd={() => {
+                          dragIdRef.current = null
+                          setDragId(null)
+                        }}
+                        className={cn(
+                          'flex size-6 shrink-0 items-center justify-center text-[#C4C4C4]',
+                          canDrag && 'cursor-grab active:cursor-grabbing',
+                        )}
+                      >
+                        <GripVertical className="size-4" />
+                      </button>
+
+                      <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
+                        <div className="min-w-0 flex-1 truncate text-[13px] font-bold text-[#171717]">
+                          {svc.title}
                         </div>
-                        <div className="mt-px truncate text-[11.5px] text-[#A1A1A1]">
-                          {svc.subtitle}
-                        </div>
-                        <div className="mt-1 flex flex-wrap gap-1">
-                          {lineStatusOf(svc) === 'Cancelled' ? (
-                            <span className="rounded bg-[#FEE2E2] px-1.5 py-0.5 text-[10px] font-semibold text-[#B91C1C]">
-                              Cancelled
-                            </span>
-                          ) : null}
-                          {(() => {
-                            const badge = serviceListBadge(svc)
-                            return badge ? (
-                              <span
-                                className={cn(
-                                  'rounded px-1.5 py-0.5 text-[10px] font-semibold',
-                                  badge.className,
-                                )}
-                              >
-                                {badge.label}
-                              </span>
-                            ) : null
-                          })()}
-                        </div>
+                        {isLineUpdated(svc) ? (
+                          <span className="shrink-0 rounded bg-[#FEF3C7] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#B45309]">
+                            Updated
+                          </span>
+                        ) : null}
+                        {lineStatusOf(svc) === 'Cancelled' ? (
+                          <span className="shrink-0 rounded-full bg-[#FEE2E2] px-2 py-0.5 text-[10px] font-semibold text-[#B91C1C]">
+                            Cancelled
+                          </span>
+                        ) : null}
+                        {badge ? (
+                          <span
+                            className={cn(
+                              'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                              badge.className,
+                            )}
+                          >
+                            {badge.label}
+                          </span>
+                        ) : null}
                       </div>
+
                       {!readOnly ? (
                         <button
                           type="button"
                           title="Edit this service"
                           aria-label={`Edit ${svc.title}`}
                           onClick={() => onEdit(svc)}
-                          className="flex size-5 shrink-0 items-center justify-center text-[#2563EB]"
+                          className="flex size-6 shrink-0 items-center justify-center text-[#2563EB]"
                         >
                           <Pencil className="size-3.5" />
                         </button>
@@ -231,12 +287,12 @@ export function RightPane({
                           setServices(next)
                           persist(next)
                         }}
-                        className="flex size-5 shrink-0 items-center justify-center text-[#A1A1A1]"
+                        className="flex size-6 shrink-0 items-center justify-center text-[#A1A1A1]"
                       >
                         <ChevronDown
                           className={cn(
                             'size-3.5 transition-transform',
-                            !svc.expanded && '-rotate-90',
+                            svc.expanded && 'rotate-180',
                           )}
                         />
                       </button>
@@ -248,7 +304,7 @@ export function RightPane({
                           title="Remove service"
                           aria-label={`Remove ${svc.title}`}
                           onClick={() => onRemoveLine(svc)}
-                          className="flex size-5 shrink-0 items-center justify-center text-[#A1A1A1]"
+                          className="flex size-6 shrink-0 items-center justify-center text-[#C4C4C4]"
                         >
                           <X className="size-3.5" />
                         </button>
@@ -256,7 +312,7 @@ export function RightPane({
                     </div>
 
                     {roleAllowsLineAction(demoRole, 'cancel') && isEngaged(svc) ? (
-                      <div className="mt-2 flex flex-wrap gap-1.5">
+                      <div className="mt-2 pl-7">
                         <button
                           type="button"
                           onClick={() => onCancelLine(svc)}
@@ -267,39 +323,43 @@ export function RightPane({
                       </div>
                     ) : null}
 
-                    <div className="mt-2 flex items-center justify-between">
-                      <span className="text-[11.5px] text-[#525252]">{svc.meta}</span>
-                      <span className="text-[13px] font-bold text-[#171717]">{svc.priceLabel}</span>
-                    </div>
-                    <div className="mt-0.5 flex items-center justify-between">
-                      <span className="text-[11px] text-[#A1A1A1]">Cost / Sell</span>
-                      <span className="text-[11.5px] font-semibold text-[#171717]">
-                        {netLabel} / {rackLabel}
-                      </span>
-                    </div>
-                    <div className="mt-0.5 flex items-center justify-between">
-                      <span className="text-[11px] text-[#A1A1A1]">Margin</span>
-                      <span
-                        className="text-[11.5px] font-semibold"
-                        style={{ color: svc.marginColor }}
-                      >
-                        {formatUsd(svc.margin)} · {svc.marginPct}%
-                      </span>
-                    </div>
-
-                    {svc.expanded && svc.details?.length ? (
-                      <div className="mt-2.5 space-y-1 border-t border-[#F1F1F3] pt-2.5">
-                        {svc.details.map((d) => (
-                          <div
-                            key={d.label}
-                            className="flex items-center justify-between text-[11.5px]"
-                          >
-                            <span className="text-[#A1A1A1]">{d.label}</span>
-                            <span className="font-semibold text-[#171717]">{d.value}</span>
+                    {svc.expanded ? (
+                      <>
+                        {svc.details?.length ? (
+                          <div className="mt-2 space-y-0 border-t border-[#EFEFEF] pt-2 pl-7">
+                            {svc.details.map((d) => (
+                              <DetailRow key={d.label} label={d.label} value={d.value} />
+                            ))}
                           </div>
-                        ))}
+                        ) : null}
+                        {subLines.length ? (
+                          <div className="mt-2 space-y-1.5 border-t border-[#EFEFEF] pt-2 pl-7">
+                            {subLines.map((line) => (
+                              <div
+                                key={line.label}
+                                className="flex items-center justify-between gap-2 text-[11.5px] font-bold text-[#171717]"
+                              >
+                                <span className="min-w-0 truncate">{line.label}</span>
+                                <span className="shrink-0 tabular-nums">{formatUsd(line.amount)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                        <div className="mt-2 pl-7">
+                          <ServiceTotals svc={svc} />
+                        </div>
+                      </>
+                    ) : (
+                      <div className="mt-2 pl-7">
+                        <div className="border-t border-[#EFEFEF] pt-2">
+                          <DetailRow
+                            label={collapsedDateLabel}
+                            value={serviceDateRangeLabel(svc)}
+                          />
+                        </div>
+                        <ServiceTotals svc={svc} />
                       </div>
-                    ) : null}
+                    )}
                   </div>
                 )
               })}
@@ -340,6 +400,6 @@ export function RightPane({
 
 function Labelish({ children }: { children: ReactNode }) {
   return (
-    <label className="mb-1.5 block text-[12.5px] font-semibold text-[#525252]">{children}</label>
+    <label className="mb-0 block text-[13px] font-bold text-[#171717]">{children}</label>
   )
 }

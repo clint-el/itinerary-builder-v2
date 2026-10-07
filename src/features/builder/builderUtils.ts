@@ -19,7 +19,7 @@ import type {
   ServiceTab,
   Vehicle,
 } from '@/shared/lib/types'
-import { formatUsd } from '@/shared/lib/utils'
+import { formatDateRange, formatUsd } from '@/shared/lib/utils'
 
 export const TYPE_META = {
   adult: { label: 'Adult', bg: '#F3F4F6', bd: '#E5E7EB', fg: '#525252' },
@@ -716,8 +716,14 @@ export function buildAddedService(
       { label: 'Location', value: String(draft.location || '—') },
       { label: 'Rooms', value: String(roomCount) },
       { label: 'Basis', value: BASIS[basisKey] || basisKey },
-      { label: 'Dates', value: `${stayStart || 'TBD'} – ${stayEnd || 'TBD'}` },
-      { label: 'Guests', value: `${accUsed.length} pax` },
+      {
+        label: 'Dates',
+        value: stayStart ? formatDateRange(stayStart, stayEnd || stayStart) : 'TBD',
+      },
+      {
+        label: 'Guests',
+        value: `${accUsed.length} guest${accUsed.length === 1 ? '' : 's'}`,
+      },
     ]
   } else if (tab === 'transportation') {
     const transExtras = extraObjects(draft)
@@ -883,6 +889,36 @@ function firstDate(...values: unknown[]) {
     if (text) return text
   }
   return ''
+}
+
+/** Human-readable stay / service window for sidebar and collapsed cards. */
+export function serviceDateRangeLabel(service: AddedService): string {
+  const d = (service.draft || {}) as Record<string, unknown>
+  if (service.tab === 'accommodation') {
+    const rooms = asRooms(d)
+    const roomStarts = rooms.map((r) => String(r.start || d.start || '').trim()).filter(Boolean).sort()
+    const roomEnds = rooms.map((r) => String(r.end || d.end || '').trim()).filter(Boolean).sort()
+    const stayStart = roomStarts[0] || String(d.start || '')
+    const stayEnd = roomEnds[roomEnds.length - 1] || String(d.end || '')
+    return stayStart ? formatDateRange(stayStart, stayEnd || stayStart) : 'Set date'
+  }
+  if (service.tab === 'transportation') {
+    const vehicles = asVehicles(d)
+    if (d.transMode === 'hire') {
+      return formatDateRange(String(d.hireStart || ''), String(d.hireEnd || d.hireStart || ''))
+    }
+    const v = vehicles[0]
+    return formatDateRange(String(v?.dateFrom || d.transDate || ''), String(v?.dateTo || v?.dateFrom || ''))
+  }
+  if (service.tab === 'flight') {
+    const flights = asFlights(d)
+    const depart = String(flights[0]?.departDate || d.departDate || '')
+    return depart ? formatDateRange(depart, depart) : 'Set date'
+  }
+  const activities = asActivities(d)
+  const start = String(d.startDate || activities[0]?.start || '')
+  const end = String(d.endDate || d.startDate || activities[0]?.start || '')
+  return start ? formatDateRange(start, end || start) : 'Set date'
 }
 
 /** The date a service starts on, used to keep the itinerary in chronological order. */
