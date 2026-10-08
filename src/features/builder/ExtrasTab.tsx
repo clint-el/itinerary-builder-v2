@@ -78,7 +78,7 @@ export function ExtrasTab({
   onRemove,
   onCustom,
   availableHint,
-  emptyAvailableMessage = 'No more extras available.',
+  emptyAvailableMessage = 'No more extras available',
   className,
 }: ExtrasTabProps) {
   const mandatoryCatalog = catalog.filter((c) => c.mandatory)

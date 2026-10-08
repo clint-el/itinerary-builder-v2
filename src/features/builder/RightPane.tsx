@@ -212,7 +212,7 @@ export function RightPane({
                     }}
                     className="rounded-lg border border-[#E5E7EB] bg-white px-2.5 py-2.5"
                   >
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-start gap-1.5">
                       <button
                         type="button"
                         aria-label={`Reorder ${svc.title}`}
@@ -231,88 +231,91 @@ export function RightPane({
                           setDragId(null)
                         }}
                         className={cn(
-                          'flex size-6 shrink-0 items-center justify-center text-[#C4C4C4]',
+                          'mt-0.5 flex size-6 shrink-0 items-center justify-center text-[#C4C4C4]',
                           canDrag && 'cursor-grab active:cursor-grabbing',
                         )}
                       >
                         <GripVertical className="size-4" />
                       </button>
 
-                      <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
-                        <div className="min-w-0 flex-1 truncate text-[13px] font-bold text-[#171717]">
-                          {svc.title}
-                        </div>
-                        {isLineUpdated(svc) ? (
-                          <span className="shrink-0 rounded bg-[#FEF3C7] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#B45309]">
-                            Updated
-                          </span>
-                        ) : null}
-                        {lineStatusOf(svc) === 'Cancelled' ? (
-                          <span className="shrink-0 rounded-full bg-[#FEE2E2] px-2 py-0.5 text-[10px] font-semibold text-[#B91C1C]">
-                            Cancelled
-                          </span>
-                        ) : null}
-                        {badge ? (
-                          <span
-                            className={cn(
-                              'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold',
-                              badge.className,
-                            )}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1">
+                          <div className="min-w-0 flex-1 truncate text-[13px] font-bold text-[#171717]">
+                            {svc.title}
+                          </div>
+                          {!readOnly ? (
+                            <button
+                              type="button"
+                              title="Edit this service"
+                              aria-label={`Edit ${svc.title}`}
+                              onClick={() => onEdit(svc)}
+                              className="flex size-6 shrink-0 items-center justify-center text-[#2563EB]"
+                            >
+                              <Pencil className="size-3.5" />
+                            </button>
+                          ) : null}
+                          <button
+                            type="button"
+                            title="Toggle details"
+                            aria-label={svc.expanded ? `Collapse ${svc.title}` : `Expand ${svc.title}`}
+                            aria-expanded={svc.expanded}
+                            onClick={() => {
+                              const next = services.map((s) =>
+                                s.id === svc.id ? { ...s, expanded: !s.expanded } : s,
+                              )
+                              setServices(next)
+                              persist(next)
+                            }}
+                            className="flex size-6 shrink-0 items-center justify-center text-[#A1A1A1]"
                           >
-                            {badge.label}
-                          </span>
-                        ) : null}
+                            <ChevronDown
+                              className={cn(
+                                'size-3.5 transition-transform',
+                                svc.expanded && 'rotate-180',
+                              )}
+                            />
+                          </button>
+                          {roleAllowsLineAction(demoRole, 'remove') &&
+                          !structureLocked &&
+                          canRemoveLine(svc).ok ? (
+                            <button
+                              type="button"
+                              title="Remove service"
+                              aria-label={`Remove ${svc.title}`}
+                              onClick={() => onRemoveLine(svc)}
+                              className="flex size-6 shrink-0 items-center justify-center text-[#C4C4C4]"
+                            >
+                              <X className="size-3.5" />
+                            </button>
+                          ) : null}
+                        </div>
+                        <div className="mt-1 flex flex-wrap items-center gap-1">
+                          {isLineUpdated(svc) ? (
+                            <span className="rounded bg-[#FEF3C7] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#B45309]">
+                              Updated
+                            </span>
+                          ) : null}
+                          {lineStatusOf(svc) === 'Cancelled' ? (
+                            <span className="rounded-full bg-[#FEE2E2] px-2 py-0.5 text-[10px] font-semibold text-[#B91C1C]">
+                              Cancelled
+                            </span>
+                          ) : null}
+                          {badge ? (
+                            <span
+                              className={cn(
+                                'rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                                badge.className,
+                              )}
+                            >
+                              {badge.label}
+                            </span>
+                          ) : null}
+                        </div>
                       </div>
-
-                      {!readOnly ? (
-                        <button
-                          type="button"
-                          title="Edit this service"
-                          aria-label={`Edit ${svc.title}`}
-                          onClick={() => onEdit(svc)}
-                          className="flex size-6 shrink-0 items-center justify-center text-[#2563EB]"
-                        >
-                          <Pencil className="size-3.5" />
-                        </button>
-                      ) : null}
-                      <button
-                        type="button"
-                        title="Toggle details"
-                        aria-label={svc.expanded ? `Collapse ${svc.title}` : `Expand ${svc.title}`}
-                        aria-expanded={svc.expanded}
-                        onClick={() => {
-                          const next = services.map((s) =>
-                            s.id === svc.id ? { ...s, expanded: !s.expanded } : s,
-                          )
-                          setServices(next)
-                          persist(next)
-                        }}
-                        className="flex size-6 shrink-0 items-center justify-center text-[#A1A1A1]"
-                      >
-                        <ChevronDown
-                          className={cn(
-                            'size-3.5 transition-transform',
-                            svc.expanded && 'rotate-180',
-                          )}
-                        />
-                      </button>
-                      {roleAllowsLineAction(demoRole, 'remove') &&
-                      !structureLocked &&
-                      canRemoveLine(svc).ok ? (
-                        <button
-                          type="button"
-                          title="Remove service"
-                          aria-label={`Remove ${svc.title}`}
-                          onClick={() => onRemoveLine(svc)}
-                          className="flex size-6 shrink-0 items-center justify-center text-[#C4C4C4]"
-                        >
-                          <X className="size-3.5" />
-                        </button>
-                      ) : null}
                     </div>
 
                     {roleAllowsLineAction(demoRole, 'cancel') && isEngaged(svc) ? (
-                      <div className="mt-2 pl-7">
+                      <div className="mt-2">
                         <button
                           type="button"
                           onClick={() => onCancelLine(svc)}
@@ -326,32 +329,36 @@ export function RightPane({
                     {svc.expanded ? (
                       <>
                         {svc.details?.length ? (
-                          <div className="mt-2 space-y-0 border-t border-[#EFEFEF] pt-2 pl-7">
+                          <div className="mt-2.5 space-y-0 border-t border-[#EFEFEF] pt-2.5">
                             {svc.details.map((d) => (
                               <DetailRow key={d.label} label={d.label} value={d.value} />
                             ))}
                           </div>
                         ) : null}
                         {subLines.length ? (
-                          <div className="mt-2 space-y-1.5 border-t border-[#EFEFEF] pt-2 pl-7">
+                          <div className="mt-2 space-y-1.5 border-t border-[#EFEFEF] pt-2.5">
                             {subLines.map((line) => (
                               <div
                                 key={line.label}
-                                className="flex items-center justify-between gap-2 text-[11.5px] font-bold text-[#171717]"
+                                className="flex items-center justify-between gap-2 text-[11.5px]"
                               >
-                                <span className="min-w-0 truncate">{line.label}</span>
-                                <span className="shrink-0 tabular-nums">{formatUsd(line.amount)}</span>
+                                <span className="min-w-0 truncate font-bold text-[#171717]">
+                                  {line.label}
+                                </span>
+                                <span className="shrink-0 tabular-nums font-semibold text-[#525252]">
+                                  {formatUsd(line.amount)}
+                                </span>
                               </div>
                             ))}
                           </div>
                         ) : null}
-                        <div className="mt-2 pl-7">
+                        <div className="mt-2">
                           <ServiceTotals svc={svc} />
                         </div>
                       </>
                     ) : (
-                      <div className="mt-2 pl-7">
-                        <div className="border-t border-[#EFEFEF] pt-2">
+                      <div className="mt-2.5">
+                        <div className="border-t border-[#EFEFEF] pt-2.5">
                           <DetailRow
                             label={collapsedDateLabel}
                             value={serviceDateRangeLabel(svc)}

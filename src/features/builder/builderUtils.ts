@@ -722,7 +722,7 @@ export function buildAddedService(
       },
       {
         label: 'Guests',
-        value: `${accUsed.length} guest${accUsed.length === 1 ? '' : 's'}`,
+        value: `${accUsed.length} guest(s)`,
       },
     ]
   } else if (tab === 'transportation') {

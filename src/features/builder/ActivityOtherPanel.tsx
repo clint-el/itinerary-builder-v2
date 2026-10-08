@@ -1,13 +1,10 @@
 import { useState } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
-import {
-  PROMOTIONS,
-  extrasForActivityService,
-  extrasForTab,
-} from '@/shared/lib/catalogs'
+import { Plus, RefreshCw, Trash2, Users } from 'lucide-react'
+import { CATALOG, extrasForActivityService, extrasForTab } from '@/shared/lib/catalogs'
 import { rackOf } from '@/shared/lib/helpers'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
+import { Card, CardContent } from '@/components/ui/card'
 import {
   Select,
   SelectContent,
@@ -16,8 +13,9 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import type { ActivityItem, CatalogItem, DemoRole, Guest, ServiceTab } from '@/shared/lib/types'
-import { cn, formatDateRange, formatUsd } from '@/shared/lib/utils'
-import { ActivityTypeModal, CustomExtraModal, GuestChip } from './BuilderModals'
+import { cn, formatUsd } from '@/shared/lib/utils'
+import { DatePickerGridInput } from '@/shared/ui/date-picker'
+import { ActivityTypeModal, CustomExtraModal } from './BuilderModals'
 import { CancellationPolicyControl } from './CancellationPolicyControl'
 import { ExtrasTab } from './ExtrasTab'
 import { LocationDropdown } from './LocationDropdown'
@@ -31,14 +29,53 @@ import {
   findGuest,
   guestChipStyle,
   usedGuestIds,
+  autoAssignByCapacity,
 } from './builderUtils'
+import {
+  EmptyStateCard,
+  FieldGroup,
+  GuestBadge,
+  ItemIndex,
+  LineNotesTab,
+  LineTabBar,
+  PaxCount,
+  SectionHeader,
+  SpecialOffersList,
+  SupplierServiceCard,
+  brandOutlineActionClassName,
+} from './panelParts'
 import {
   activityOptionsForService,
   otherOptionsForService,
   resolveServiceOption,
 } from './serviceOptions'
 
-type ActivitySideTab = 'policy' | 'extras' | 'promotions' | 'notes'
+type ActivitySideTab = 'guests' | 'policy' | 'extras' | 'promotions' | 'notes'
+
+const COPY = {
+  activity: {
+    typeLabel: 'Activity type',
+    typePlaceholder: 'Select an activity type',
+    sectionTitle: 'Activities & PAX',
+    addLabel: 'Add activity',
+    emptyWithType: 'Use Add activity to set dates for this type.',
+    emptyWithService: 'Select an activity type, then add dated items below.',
+    emptyNoService: 'Select a service, then choose an activity type.',
+    serviceNotes:
+      'Park fees and guide tips are typically excluded unless noted on the activity item.',
+  },
+  other: {
+    typeLabel: 'Other type',
+    typePlaceholder: 'Select a type',
+    sectionTitle: 'Other items & PAX',
+    addLabel: 'Add other',
+    emptyWithType: 'Use Add other to set dates for this type.',
+    emptyWithService: 'Select a type, then add dated items below.',
+    emptyNoService: 'Select a service, then choose a type.',
+    serviceNotes:
+      'Park and conservation fees are typically collected locally. Confirm the latest published tariff before travel.',
+  },
+} as const
 
 export function ActivityOtherPanel({
   tab,
@@ -57,13 +94,17 @@ export function ActivityOtherPanel({
 }) {
   const [actOpen, setActOpen] = useState(false)
   const [ceOpen, setCeOpen] = useState(false)
-  const [sideTab, setSideTab] = useState<ActivitySideTab>('extras')
+  const [sideTab, setSideTab] = useState<ActivitySideTab>('guests')
+  const copy = COPY[tab]
   const activities = asActivities(draft)
   const used = usedGuestIds(activities)
-  const itemLabel = tab === 'other' ? 'item' : 'activity'
   const isActivity = tab === 'activity'
+  const location = String(draft.location || '')
+  const supplier = String(draft.supplier || '')
   const serviceId = String(draft.serviceId || '')
+  /** Activity / other type name; the catalog service itself is keyed by `serviceId`. */
   const service = String(draft.service || '')
+  const supplierServices = CATALOG[tab].filter((c) => c.name === supplier)
   const typeCatalog = isActivity
     ? activityOptionsForService(serviceId)
     : otherOptionsForService(serviceId)
@@ -80,6 +121,10 @@ export function ActivityOtherPanel({
     patch({ activities: next })
   }
 
+  function updateActivity(id: string, changes: Partial<ActivityItem>) {
+    setActivities(activities.map((x) => (x.id === id ? { ...x, ...changes } : x)))
+  }
+
   function setServiceType(typeName: string) {
     const found = typeCatalog.find((t) => t.name === typeName)
     patch({
@@ -92,84 +137,111 @@ export function ActivityOtherPanel({
     })
   }
 
-  function addAllGuests(activityId: string) {
-    const avail = guests.filter((g) => !used.includes(g.id)).map((g) => g.id)
-    if (!avail.length) return
+  const unassigned = guests.filter((g) => !used.includes(g.id))
+
+  function autoAssign() {
+    if (!activities.length) return
+    const perSlot = Math.max(1, Math.ceil(guests.length / activities.length))
+    setActivities(autoAssignByCapacity(activities, guests, () => perSlot))
+  }
+
+  function moveGuestToActivity(gid: number, activityId: string) {
     setActivities(
-      activities.map((x) =>
-        x.id === activityId ? { ...x, guestIds: [...x.guestIds, ...avail] } : x,
-      ),
+      activities.map((x) => ({
+        ...x,
+        guestIds:
+          x.id === activityId
+            ? x.guestIds.includes(gid)
+              ? x.guestIds
+              : [...x.guestIds, gid]
+            : x.guestIds.filter((id) => id !== gid),
+      })),
     )
   }
 
-  const tabBtn = (key: ActivitySideTab, label: string, badge?: number) => (
-    <button
-      type="button"
-      onClick={() => setSideTab(key)}
-      className={cn(
-        'h-[38px] border-b-2 px-3 text-[13px] font-semibold',
-        sideTab === key ? 'border-[#931115] text-[#931115]' : 'border-transparent text-[#525252]',
-      )}
-    >
-      {label}
-      {badge != null && badge > 0 ? (
-        <span
-          className={cn(
-            'ml-1 rounded px-1.5 text-[11px] font-semibold',
-            sideTab === key ? 'bg-[#FCE7F3] text-[#DB2777]' : 'bg-[#F3F4F6] text-[#525252]',
-          )}
-        >
-          {badge}
-        </span>
-      ) : null}
-    </button>
-  )
+  function unassignGuest(gid: number) {
+    setActivities(activities.map((x) => ({ ...x, guestIds: x.guestIds.filter((id) => id !== gid) })))
+  }
+
+  function addAllGuests(activityId: string) {
+    if (!unassigned.length) return
+    updateActivity(activityId, {
+      guestIds: [
+        ...(activities.find((x) => x.id === activityId)?.guestIds ?? []),
+        ...unassigned.map((g) => g.id),
+      ],
+    })
+  }
+
+  const tabs: { key: ActivitySideTab; label: string }[] = isActivity
+    ? [
+        { key: 'guests', label: 'Guests' },
+        { key: 'extras', label: 'Extras' },
+        { key: 'promotions', label: 'Special Offer(s)' },
+        { key: 'policy', label: 'Policy' },
+        { key: 'notes', label: 'Notes' },
+      ]
+    : [
+        { key: 'guests', label: 'Guests' },
+        { key: 'policy', label: 'Policy' },
+        { key: 'notes', label: 'Notes' },
+      ]
 
   return (
-    <div className="space-y-4">
-      <section className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-4 shadow-sm">
-        <div className="mb-3">
-          <h3 className="text-[12px] font-bold uppercase tracking-wide text-[#334155]">
-            Supplier & service
-          </h3>
-          <p className="text-[11.5px] text-[#94A3B8]">Pick location, supplier and service</p>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="grid gap-1.5">
-            <Label>Location</Label>
-            <LocationDropdown
-              value={String(draft.location || '')}
-              onChange={(name) =>
-                patch({ location: name, supplier: '', service: '', serviceId: '' })
-              }
-            />
-          </div>
-          <div className="grid gap-1.5">
-            <Label>Supplier</Label>
-            <SupplierPicker
-              tab={tab}
-              value={String(draft.supplier || '')}
-              onPick={(item: CatalogItem) =>
-                patch({ supplier: item.name, service: '', serviceId: item.id })
-              }
-            />
-          </div>
-          <div className="grid gap-1.5 sm:col-span-2">
-            <div className="flex items-center gap-2">
-              <Label>Service</Label>
-              <OptionInclusions option={serviceOption} />
-            </div>
+    <div className="flex flex-col gap-5">
+      <SupplierServiceCard
+        hasLocation={Boolean(location)}
+        hasSupplier={Boolean(supplier)}
+        location={
+          <LocationDropdown
+            value={location}
+            onChange={(name) =>
+              patch({ location: name, supplier: '', service: '', serviceId: '' })
+            }
+          />
+        }
+        supplier={
+          <SupplierPicker
+            tab={tab}
+            value={supplier}
+            disabled={!location}
+            onPick={(item: CatalogItem) =>
+              patch({ supplier: item.name, service: '', serviceId: item.id })
+            }
+          />
+        }
+        service={
+          <Select
+            value={serviceId || undefined}
+            disabled={!supplier}
+            onValueChange={(value) => patch({ serviceId: value, service: '' })}
+          >
+            <SelectTrigger className="bg-background">
+              <SelectValue placeholder="Select service" />
+            </SelectTrigger>
+            <SelectContent>
+              {supplierServices.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.service}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        }
+      >
+        {serviceId ? (
+          <FieldGroup
+            label={copy.typeLabel}
+            required
+            labelAddon={<OptionInclusions option={serviceOption} />}
+          >
             <Select
               value={service || undefined}
-              disabled={!serviceId || typeCatalog.length === 0}
+              disabled={typeCatalog.length === 0}
               onValueChange={setServiceType}
             >
-              <SelectTrigger className="bg-white">
-                <SelectValue
-                  placeholder={
-                    serviceId ? 'Select a service' : 'Select a supplier first'
-                  }
-                />
+              <SelectTrigger className="bg-background">
+                <SelectValue placeholder={copy.typePlaceholder} />
               </SelectTrigger>
               <SelectContent>
                 {typeCatalog.map((t) => (
@@ -179,260 +251,257 @@ export function ActivityOtherPanel({
                 ))}
               </SelectContent>
             </Select>
-          </div>
-        </div>
-      </section>
+          </FieldGroup>
+        ) : null}
+      </SupplierServiceCard>
 
-      <section className="rounded-xl border bg-white p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-[13px] font-bold uppercase tracking-wide text-[#475569]">
-            {tab === 'other' ? 'Items & PAX' : 'Activities & PAX'}
-          </h3>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={!selectedType}
-            onClick={() => setActOpen(true)}
-          >
-            <Plus className="size-3.5" />
-            Add {itemLabel}
-          </Button>
-        </div>
-        <div className="space-y-3">
-          {activities.map((a, i) => {
-            const avail = guests.filter((g) => !used.includes(g.id))
-            const net = a.rate * a.guestIds.length
-            const someToAdd = avail.length > 0
-            const allAdded = guests.length > 0 && a.guestIds.length === guests.length
-            return (
-              <div key={a.id} className="rounded-xl border bg-[#F9FAFB] p-3">
-                <div className="mb-2 flex flex-wrap items-center gap-2">
-                  <span className="flex size-5 items-center justify-center rounded border bg-white text-[11px] font-bold">
-                    {i + 1}
-                  </span>
-                  <span className="min-w-[180px] flex-1 text-[12.5px] font-semibold text-[#171717]">
-                    {a.name || service || (isActivity ? 'Activity' : 'Item')}
-                  </span>
-                  <span className="rounded-md bg-white px-2 py-1 text-[11px] font-semibold text-[#525252] shadow-sm">
-                    {formatDateRange(
-                      a.start || String(draft.startDate || ''),
-                      a.end || String(draft.endDate || ''),
-                    )}
-                  </span>
-                  <span className="text-[12px] font-semibold text-[#525252]">
-                    {a.guestIds.length} PAX
-                  </span>
-                  <button
+      <div className="flex flex-col gap-3">
+        <LineTabBar value={sideTab} onChange={setSideTab} tabs={tabs} />
+
+        {sideTab === 'guests' ? (
+          <div className="flex flex-col gap-3">
+            <SectionHeader
+              title={copy.sectionTitle}
+              actions={
+                <>
+                  <Button
                     type="button"
-                    onClick={() => setActivities(activities.filter((x) => x.id !== a.id))}
-                    className="flex size-[26px] items-center justify-center rounded-md border bg-white text-[#931115]"
+                    size="sm"
+                    variant="outline"
+                    onClick={autoAssign}
+                    disabled={activities.length === 0 || unassigned.length === 0}
+                    className={cn('h-7 text-xs font-semibold', brandOutlineActionClassName)}
                   >
-                    <Trash2 className="size-3.5" />
-                  </button>
-                </div>
-                <div className="mb-2 flex flex-wrap items-center gap-2">
-                  {someToAdd ? (
-                    <button
-                      type="button"
-                      onClick={() => addAllGuests(a.id)}
-                      className="h-7 rounded-lg border border-[#931115] bg-white px-2.5 text-[12px] font-semibold text-[#931115]"
-                    >
-                      Add all guests
-                    </button>
-                  ) : null}
-                  {allAdded ? (
-                    <span className="inline-flex h-7 items-center rounded-lg bg-[#ECFDF5] px-2.5 text-[12px] font-semibold text-[#059669]">
-                      All guests added
-                    </span>
-                  ) : null}
-                </div>
-                <div className="mb-2 flex flex-wrap gap-1.5">
-                  {a.guestIds.map((gid) => {
-                    const g = findGuest(gid, guests)
-                    if (!g) return null
-                    const cs = guestChipStyle(g)
-                    return (
-                      <GuestChip
-                        key={gid}
-                        name={g.name}
-                        resLabel={cs.resLabel}
-                        resBg={cs.resBg}
-                        resFg={cs.resFg}
-                        bg={cs.bg}
-                        bd={cs.bd}
-                        onRemove={() =>
-                          setActivities(
-                            activities.map((x) =>
-                              x.id === a.id
-                                ? { ...x, guestIds: x.guestIds.filter((id) => id !== gid) }
-                                : x,
-                            ),
-                          )
-                        }
-                      />
-                    )
-                  })}
-                </div>
-                <Select
-                  value={undefined}
-                  onValueChange={(value) => {
-                    const gid = Number(value)
-                    if (!gid) return
-                    setActivities(
-                      activities.map((x) =>
-                        x.id === a.id ? { ...x, guestIds: [...x.guestIds, gid] } : x,
-                      ),
-                    )
-                  }}
-                >
-                  <SelectTrigger className="h-8 bg-white text-[12.5px]">
-                    <SelectValue placeholder="+ Add guest" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {avail.map((g) => (
-                      <SelectItem key={g.id} value={String(g.id)}>
-                        {g.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <div className="mt-2 flex justify-between text-[12px] font-semibold">
-                  <span>Total</span>
-                  <span>
-                    {formatUsd(net)} / {formatUsd(rackOf(net))}
-                  </span>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </section>
-
-      <div className="flex gap-1 border-b">
-        {tabBtn('extras', 'Extras', extras.length)}
-        {tabBtn('promotions', 'Special Offer(s)', PROMOTIONS.length)}
-        {tabBtn('policy', 'Policy')}
-        {tabBtn('notes', 'Notes')}
-      </div>
-
-      {sideTab === 'policy' ? (
-        <CancellationPolicyControl
-          tab={tab}
-          draft={draft}
-          patch={patch}
-          demoRole={demoRole}
-          isDraftItinerary={isDraftItinerary}
-        />
-      ) : null}
-
-      {sideTab === 'extras' ? (
-        <ExtrasTab
-          selected={extras}
-          catalog={catalogExtras}
-          extraIds={extraIds}
-          onAdd={(id) => patch({ extras: [...extraIds, id] })}
-          onRemove={(ex) => {
-            if (ex.custom) {
-              patch({ customExtras: customExtras.filter((x) => x.id !== ex.id) })
-            } else {
-              patch({ extras: extraIds.filter((id) => id !== ex.id) })
-            }
-          }}
-          onCustom={() => setCeOpen(true)}
-          availableHint={
-            isActivity
-              ? activities.length
-                ? 'Linked to selected activities'
-                : 'Add an activity to filter linked extras'
-              : undefined
-          }
-          emptyAvailableMessage={
-            isActivity
-              ? activities.length
-                ? 'No more extras for these activities.'
-                : 'Add an activity item to see linked extras (e.g. Lunch on Game Drive).'
-              : 'No more extras available.'
-          }
-        />
-      ) : null}
-
-      {sideTab === 'promotions' ? (
-            <div className="space-y-2">
-              {PROMOTIONS.map((p) => {
-                const sel = draft.promotion === p.id
-                return (
-                  <button
-                    key={p.id}
+                    <RefreshCw className="size-3.5" />
+                    Auto-assign
+                  </Button>
+                  <Button
                     type="button"
-                    onClick={() => patch({ promotion: sel ? null : p.id })}
-                    className="flex w-full items-start gap-3 rounded-xl border p-3 text-left"
-                    style={{
-                      borderColor: sel ? '#DB2777' : '#E5E7EB',
-                      background: sel ? '#FDF2F8' : '#FFFFFF',
-                    }}
+                    size="sm"
+                    variant="outline"
+                    disabled={!selectedType}
+                    onClick={() => setActOpen(true)}
                   >
-                    <span
-                      className="mt-1 flex size-4 items-center justify-center rounded-full border"
-                      style={{ borderColor: sel ? '#DB2777' : '#D4D4D4' }}
-                    >
-                      {sel ? <span className="size-2 rounded-full bg-[#DB2777]" /> : null}
-                    </span>
-                    <span>
-                      <span className="block text-[13.5px] font-semibold">{p.title}</span>
-                      <span className="text-[12px] text-[#737373]">{p.desc}</span>
-                      {p.active ? (
-                        <span className="mt-1 inline-block text-[11px] font-bold text-[#059669]">
-                          Active
-                        </span>
-                      ) : null}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-          ) : null}
-
-      {sideTab === 'notes' ? (
-        <div className="space-y-4">
-          <div>
-            <p className="mb-2 text-[14px] font-bold text-[#171717]">Service Notes</p>
-            <textarea
-              readOnly
-              rows={3}
-              className="w-full resize-none rounded-lg border border-[#E5E7EB] bg-[#FAFAFB] p-2.5 text-[13px] text-[#525252]"
-              value={
-                isActivity
-                  ? 'Park fees and guide tips are typically excluded unless noted on the activity item. Shared vehicle seatings are subject to availability.'
-                  : 'Miscellaneous line — confirm inclusions with the supplier before quoting.'
+                    <Plus className="size-4" />
+                    {selectedType ? copy.addLabel : 'Select a type first'}
+                  </Button>
+                </>
               }
             />
+
+            {activities.length === 0 ? (
+              <EmptyStateCard compact>
+                {selectedType
+                  ? copy.emptyWithType
+                  : serviceId
+                    ? copy.emptyWithService
+                    : copy.emptyNoService}
+              </EmptyStateCard>
+            ) : null}
+
+            {activities.map((a, i) => {
+              const net = a.rate * a.guestIds.length
+              const allAdded = guests.length > 0 && unassigned.length === 0
+              const endInvalid = Boolean(a.start && a.end && a.end < a.start)
+              return (
+                <Card
+                  key={a.id}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    const gid = Number(e.dataTransfer.getData('text/plain'))
+                    if (gid) moveGuestToActivity(gid, a.id)
+                  }}
+                >
+                  <CardContent className="flex flex-col gap-3 p-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <ItemIndex n={i + 1} />
+                      <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
+                        {a.name || service}
+                      </span>
+                      <PaxCount assigned={a.guestIds.length} cap={null} />
+                      <OptionInclusions option={serviceOption} />
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        aria-label={`Remove ${copy.addLabel.replace('Add ', '')}`}
+                        className="size-8 text-muted-foreground hover:text-destructive"
+                        onClick={() => setActivities(activities.filter((x) => x.id !== a.id))}
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      {isActivity ? (
+                        <FieldGroup label="Date" required>
+                          <DatePickerGridInput
+                            aria-label="Date"
+                            value={a.start || ''}
+                            onChange={(value) => updateActivity(a.id, { start: value, end: value })}
+                          />
+                        </FieldGroup>
+                      ) : (
+                        <>
+                          <FieldGroup label="Start date" required>
+                            <DatePickerGridInput
+                              aria-label="Start date"
+                              value={a.start || ''}
+                              onChange={(value) =>
+                                updateActivity(a.id, {
+                                  start: value,
+                                  ...(a.end && a.end < value ? { end: '' } : {}),
+                                })
+                              }
+                            />
+                          </FieldGroup>
+                          <FieldGroup label="End date">
+                            <DatePickerGridInput
+                              aria-label="End date"
+                              value={a.end || ''}
+                              referenceValue={a.start || undefined}
+                              hasError={endInvalid}
+                              onChange={(value) => updateActivity(a.id, { end: value })}
+                            />
+                          </FieldGroup>
+                        </>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      {a.guestIds.map((gid) => {
+                        const g = findGuest(gid, guests)
+                        if (!g) return null
+                        return (
+                          <GuestBadge
+                            key={gid}
+                            label={g.name}
+                            lead={guestChipStyle(g).lead}
+                            onRemove={() => unassignGuest(gid)}
+                          />
+                        )
+                      })}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      {allAdded ? (
+                        <Badge variant="secondary">All guests added</Badge>
+                      ) : (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={unassigned.length === 0}
+                          onClick={() => addAllGuests(a.id)}
+                        >
+                          <Users className="size-4" />
+                          Add all guests
+                        </Button>
+                      )}
+                      <Select
+                        value={undefined}
+                        disabled={unassigned.length === 0}
+                        onValueChange={(value) => {
+                          const gid = Number(value)
+                          if (gid) moveGuestToActivity(gid, a.id)
+                        }}
+                      >
+                        <SelectTrigger
+                          aria-label="Add guest"
+                          className="h-8 w-auto min-w-[8rem] bg-background text-xs"
+                        >
+                          <SelectValue placeholder="+ Add guest" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {unassigned.map((g) => (
+                            <SelectItem key={g.id} value={String(g.id)}>
+                              {g.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="flex justify-between border-t pt-2 text-xs font-semibold text-foreground">
+                      <span>Total</span>
+                      <span>
+                        {formatUsd(net)} / {formatUsd(rackOf(net))}
+                      </span>
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            })}
           </div>
-          <div>
-            <div className="mb-2 flex items-baseline gap-2">
-              <h3 className="text-[14px] font-semibold text-[#171717]">Internal notes</h3>
-              <span className="text-[12px] font-medium text-[#94A3B8]">Not shown to the client</span>
-            </div>
-            <textarea
-              rows={3}
-              value={String(draft.notes || '')}
-              onChange={(e) => patch({ notes: e.target.value })}
-              className="w-full resize-y rounded-lg border border-[#E5E7EB] bg-[#FAFAFB] px-2.5 py-2 text-[13px] text-[#171717] outline-none placeholder:text-[#A1A1AA]"
-              placeholder="Anything the ops team should know about this service…"
-            />
-          </div>
-        </div>
-      ) : null}
+        ) : null}
+
+        {sideTab === 'policy' ? (
+          <CancellationPolicyControl
+            tab={tab}
+            draft={draft}
+            patch={patch}
+            demoRole={demoRole}
+            isDraftItinerary={isDraftItinerary}
+          />
+        ) : null}
+
+        {sideTab === 'extras' ? (
+          <ExtrasTab
+            selected={extras}
+            catalog={catalogExtras}
+            extraIds={extraIds}
+            onAdd={(id) => patch({ extras: [...extraIds, id] })}
+            onRemove={(ex) => {
+              if (ex.custom) {
+                patch({ customExtras: customExtras.filter((x) => x.id !== ex.id) })
+              } else {
+                patch({ extras: extraIds.filter((id) => id !== ex.id) })
+              }
+            }}
+            onCustom={() => setCeOpen(true)}
+            availableHint={
+              activities.length
+                ? 'Linked to selected activities'
+                : 'Add an activity to filter linked extras'
+            }
+            emptyAvailableMessage={
+              !selectedType
+                ? 'Select an activity type to see its eligible extras.'
+                : activities.length
+                  ? 'No more extras available'
+                  : 'Add an activity item to see extras linked to this type.'
+            }
+          />
+        ) : null}
+
+        {sideTab === 'promotions' ? (
+          <SpecialOffersList
+            selectedId={(draft.promotion as string | null) ?? null}
+            onSelect={(id) => patch({ promotion: id })}
+          />
+        ) : null}
+
+        {sideTab === 'notes' ? (
+          <LineNotesTab
+            serviceNotes={copy.serviceNotes}
+            notes={String(draft.notes || '')}
+            onNotesChange={(value) => patch({ notes: value })}
+          />
+        ) : null}
+      </div>
 
       <ActivityTypeModal
         open={actOpen}
         onClose={() => setActOpen(false)}
         types={typeCatalog}
         lockedType={selectedType}
+        singleDate={isActivity}
         defaultStart={String(draft.startDate || '')}
         defaultEnd={String(draft.endDate || '')}
-        title={isActivity ? 'Add activity' : 'Add Other'}
-        typeLabel={isActivity ? 'Activity type' : 'Other type'}
-        submitLabel={isActivity ? 'Add activity' : 'Add Other'}
+        title={isActivity ? 'Add activity' : 'Add other'}
+        typeLabel={copy.typeLabel}
+        submitLabel={isActivity ? 'Add activity' : 'Add other'}
         onSubmit={(payload) =>
           setActivities([
             ...activities,

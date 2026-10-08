@@ -72,6 +72,14 @@ const RAIL_ICONS = {
 
 const SERVICE_TABS: ServiceTab[] = ['accommodation', 'transportation', 'flight', 'activity', 'other']
 
+const PANEL_TITLES: Record<ServiceTab, string> = {
+  accommodation: 'Accommodation configuration',
+  transportation: 'Transport configuration',
+  flight: 'Flight configuration',
+  activity: 'Activity configuration',
+  other: 'Other configuration',
+}
+
 function emptyDrafts(range?: TravelRange): Record<ServiceTab, Record<string, unknown>> {
   return {
     accommodation: defaultDraft('accommodation', range),
@@ -152,8 +160,6 @@ export function BuilderPage() {
   }, [travelRange])
 
   const draft = drafts[activeTab]
-  const tabMeta = TAB_META[activeTab]
-
   function patchDraft(patch: Record<string, unknown>) {
     setDrafts((prev) => ({
       ...prev,
@@ -319,7 +325,7 @@ export function BuilderPage() {
       <header className="flex h-14 shrink-0 items-center justify-between border-b bg-white px-5">
         <div className="flex min-w-0 items-center gap-2 text-[13px] font-semibold">
           <Link to="/" className="text-[#931115] hover:underline">
-            Itineraries
+            Back to itineraries
           </Link>
           <ChevronRight className="size-3.5 text-neutral-300" />
           <span className="font-medium text-[#A1A1A1]">{itinerary.reference}</span>
@@ -405,15 +411,9 @@ export function BuilderPage() {
 
         <div className="flex min-w-0 flex-[1.7] flex-col overflow-hidden">
           <div className="min-h-0 flex-1 overflow-y-auto p-5">
-            <div className="mb-4 flex items-center gap-2.5">
-              <span
-                className="flex size-8 items-center justify-center rounded-[9px] text-[13px] font-bold"
-                style={{ background: tabMeta.bg, color: tabMeta.fg }}
-              >
-                {tabMeta.label.charAt(0)}
-              </span>
-              <h2 className="text-[17px] font-bold">{tabMeta.label} configuration</h2>
-            </div>
+            <h2 className="mb-4 text-lg font-semibold text-foreground">
+              {PANEL_TITLES[activeTab]}
+            </h2>
 
             {activeTab === 'accommodation' ? (
               <AccommodationPanel

@@ -1,5 +1,5 @@
 import { useState, type DragEvent } from 'react'
-import { Plus, X } from 'lucide-react'
+import { GripVertical, Plus, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -20,7 +20,8 @@ import {
 } from '@/components/ui/select'
 import { HOLD_STATUS_STYLE } from './builderUtils'
 import { OptionInclusions } from './OptionInclusions'
-import { formatDay, formatUsd } from '@/shared/lib/utils'
+import { cn, formatDay, formatUsd } from '@/shared/lib/utils'
+import { leadBadgeClassName, residencyBadgeClassName } from './panelParts'
 import type { Hold } from '@/shared/lib/types'
 import { DatePickerGridInput } from '@/shared/ui/date-picker'
 
@@ -310,7 +311,9 @@ export function ActivityTypeModal({
   title = 'Add activity',
   typeLabel = 'Activity type',
   submitLabel = 'Add activity',
+  singleDate = false,
 }: {
+  singleDate?: boolean
   open: boolean
   onClose: () => void
   types: { id: string; name: string; rate: number; included: string; excluded: string }[]
@@ -385,25 +388,36 @@ export function ActivityTypeModal({
               </Select>
             </div>
           )}
-          <div className="grid grid-cols-2 gap-3">
+          {singleDate ? (
             <div className="grid gap-1.5">
-              <Label>Start</Label>
-              <DatePickerGridInput
-                value={actStart}
-                onChange={setActStart}
-                className="bg-white"
-              />
+              <Label>
+                Date<span className="text-destructive">*</span>
+              </Label>
+              <DatePickerGridInput value={actStart} onChange={setActStart} className="bg-white" />
             </div>
-            <div className="grid gap-1.5">
-              <Label>End</Label>
-              <DatePickerGridInput
-                value={actEnd}
-                onChange={setActEnd}
-                referenceValue={actStart}
-                className="bg-white"
-              />
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-1.5">
+                <Label>
+                  Start date<span className="text-destructive">*</span>
+                </Label>
+                <DatePickerGridInput
+                  value={actStart}
+                  onChange={setActStart}
+                  className="bg-white"
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label>End date</Label>
+                <DatePickerGridInput
+                  value={actEnd}
+                  onChange={setActEnd}
+                  referenceValue={actStart}
+                  className="bg-white"
+                />
+              </div>
             </div>
-          </div>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
@@ -418,7 +432,7 @@ export function ActivityTypeModal({
                 name: selected.name,
                 rate: selected.rate,
                 start: actStart,
-                end: actEnd,
+                end: singleDate ? actStart : actEnd,
               })
               setActType('')
               onClose()
@@ -503,10 +517,6 @@ export function GuestChip({
   meta,
   lead,
   resLabel,
-  resBg,
-  resFg,
-  bg,
-  bd,
   draggable,
   onDragStart,
   onRemove,
@@ -515,43 +525,55 @@ export function GuestChip({
   meta?: string
   lead?: boolean
   resLabel: string
-  resBg: string
-  resFg: string
-  bg: string
-  bd: string
+  resBg?: string
+  resFg?: string
+  bg?: string
+  bd?: string
   draggable?: boolean
   onDragStart?: (e: DragEvent) => void
   onRemove?: () => void
 }) {
   return (
-    <span
+    <div
       draggable={draggable}
       onDragStart={onDragStart}
-      className="inline-flex items-center gap-1.5 rounded-md border px-2 py-1"
-      style={{ background: bg, borderColor: bd }}
+      className={cn(
+        'relative inline-flex min-w-[9.5rem] max-w-[12rem] flex-col gap-0.5 rounded-[6px] border border-border bg-background px-2.5 py-2',
+        draggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-default',
+      )}
     >
-      <span className="flex flex-col leading-tight">
-        <span className="flex items-center gap-1.5">
-          <span className="text-[13px] font-semibold text-[#171717]">{name}</span>
-          <span
-            className="inline-flex h-[15px] items-center rounded px-1 text-[9px] font-bold"
-            style={{ background: resBg, color: resFg }}
-          >
-            {resLabel}
-          </span>
-          {lead ? (
-            <span className="inline-flex h-[15px] items-center rounded bg-[#931115] px-1 text-[9px] font-bold text-white">
-              LEAD
+      <div className={cn('flex items-start gap-1.5', onRemove && 'pr-5')}>
+        {draggable ? (
+          <GripVertical className="mt-0.5 size-3 shrink-0 text-muted-foreground" aria-hidden />
+        ) : null}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-1">
+            <span className="truncate text-[13px] font-semibold leading-tight text-foreground">
+              {name}
             </span>
+            <span className="flex shrink-0 items-center gap-1">
+              <span className={residencyBadgeClassName(resLabel)}>{resLabel}</span>
+              {lead ? <span className={leadBadgeClassName}>Lead</span> : null}
+            </span>
+          </div>
+          {meta ? (
+            <p className="text-[11px] leading-snug text-muted-foreground">{meta}</p>
           ) : null}
-        </span>
-        {meta ? <span className="text-[10.5px] text-[#A1A1A1]">{meta}</span> : null}
-      </span>
+        </div>
+      </div>
       {onRemove ? (
-        <button type="button" onClick={onRemove} className="text-[#A1A1A1] hover:text-[#931115]">
+        <button
+          type="button"
+          aria-label={`Remove ${name}`}
+          onClick={(e) => {
+            e.stopPropagation()
+            onRemove()
+          }}
+          className="absolute right-0.5 top-0.5 inline-flex size-5 items-center justify-center rounded text-muted-foreground hover:text-[#931115]"
+        >
           <X className="size-3" />
         </button>
       ) : null}
-    </span>
+    </div>
   )
 }

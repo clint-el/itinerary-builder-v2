@@ -32,6 +32,11 @@
   --sidebar-border: oklch(0.9 0.005 247);
   --sidebar-ring: oklch(0.42 0.14 25);
   --sol-brand: #931115;
+  --link: oklch(61.87% 0.207 259.23);
+  --info-bg: oklch(95.07% 0.026 235.35);
+  --text-info-bold: #0084d1;
+  --text-success: oklch(63.2% 0.186 147.37);
+  --text-warning: oklch(64.81% 0.217 37.07);
 }
 
 @theme inline {
@@ -62,6 +67,11 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sol-brand: var(--sol-brand);
+  --color-link: var(--link);
+  --color-info-bg: var(--info-bg);
+  --color-text-info-bold: var(--text-info-bold);
+  --color-text-success: var(--text-success);
+  --color-text-warning: var(--text-warning);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
